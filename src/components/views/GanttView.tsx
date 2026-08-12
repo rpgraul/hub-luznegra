@@ -64,10 +64,6 @@ export default function GanttView({
           </div>
         `
       },
-      on_click: (gTask) => {
-        const task = tasksById.get(String(gTask.id))
-        if (task) onOpenTask(task)
-      },
       on_date_change: (gTask, start, end) => {
         const task = tasksById.get(String(gTask.id))
         if (!task) return
@@ -80,9 +76,20 @@ export default function GanttView({
       },
     })
 
+    function handleDoubleClick(event: MouseEvent) {
+      const target = event.target as Element | null
+      const bar = target?.closest?.('.bar-wrapper[data-id]')
+      const id = bar?.getAttribute('data-id')
+      if (!id) return
+      const task = tasksById.get(id)
+      if (task) onOpenTask(task)
+    }
+    wrapper.addEventListener('dblclick', handleDoubleClick)
+
     return () => {
       gantt.clear()
       gantt.unselect_all()
+      wrapper.removeEventListener('dblclick', handleDoubleClick)
       wrapper.innerHTML = ''
     }
   }, [ganttTasks, tasks, onOpenTask, updateTask])
@@ -99,6 +106,16 @@ export default function GanttView({
 
   return (
     <div className="flex h-full flex-col">
+      <div className="flex items-center justify-end gap-4 border-b px-4 py-1.5 text-xs text-muted-foreground">
+        <span>
+          <i className="fa-regular fa-hand-pointer mr-1" />
+          Duplo clique na barra abre a tarefa
+        </span>
+        <span>
+          <i className="fa-solid fa-arrows-left-right mr-1" />
+          Arraste as bordas para reposicionar
+        </span>
+      </div>
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div ref={wrapperRef} />
       </div>

@@ -4,8 +4,17 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePreferences } from '@/hooks/usePreferences'
 import { listProjects } from '@/lib/api/projects'
 import TopBar from '@/components/layout/TopBar'
+import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+interface DashboardLayoutProps {
+  children?: ReactNode
+  initialTaskId?: string
+}
+
+export default function DashboardLayout({
+  children,
+  initialTaskId,
+}: DashboardLayoutProps) {
   const { user } = useAuth()
   const { preferences, setView, setProject } = usePreferences()
 
@@ -24,7 +33,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         view={preferences?.default_view ?? 'gantt'}
         onViewChange={setView}
       />
-      <main className="h-[calc(100vh-4rem)] overflow-auto">{children}</main>
+      <main className="h-[calc(100vh-4rem)] overflow-auto">
+        {children ?? <TaskWorkspace initialTaskId={initialTaskId} />}
+      </main>
     </div>
   )
 }

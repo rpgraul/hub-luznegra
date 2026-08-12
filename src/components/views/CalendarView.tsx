@@ -1,11 +1,17 @@
 import { Calendar, momentLocalizer, type View } from 'react-big-calendar'
+import withDragAndDrop, {
+  type withDragAndDropProps,
+} from 'react-big-calendar/lib/addons/dragAndDrop'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css'
 import moment from 'moment/min/moment-with-locales'
+import { toast } from 'sonner'
 import { userColor } from '@/utils/colors'
 import type { Task } from '@/types/database'
 
 moment.locale('pt-br')
 const localizer = momentLocalizer(moment)
+const DnDCalendar = withDragAndDrop<CalendarEvent>(Calendar)
 
 interface CalendarEvent {
   id: string
@@ -20,6 +26,7 @@ interface CalendarViewProps {
   tasks: Task[]
   onOpenTask: (task: Task) => void
   onSelectSlot: (start: Date) => void
+  updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
 }
 
 const MESSAGES = {
@@ -53,6 +60,7 @@ export default function CalendarView({
   tasks,
   onOpenTask,
   onSelectSlot,
+  updateTask,
 }: CalendarViewProps) {
   const events: CalendarEvent[] = tasks
     .map((task) => {
@@ -70,10 +78,38 @@ export default function CalendarView({
     })
     .filter((event): event is CalendarEvent => event !== null)
 
+  const handleEventDrop: withDragAndDropProps<CalendarEvent>['onEventDrop'] = ({
+    event,
+    start,
+    end,
+  }) => {
+    void updateTask({
+      id: event.task.id,
+      patch: {
+        start_date: moment(start).format('YYYY-MM-DD'),
+        due_date: moment(end).subtract(1, 'days').format('YYYY-MM-DD'),
+      },
+    }).catch(() => toast.error('Não foi possível salvar as datas.'))
+  }
+
+  const handleEventResize: withDragAndDropProps<CalendarEvent>['onEventResize'] = ({
+    event,
+    start,
+    end,
+  }) => {
+    void updateTask({
+      id: event.task.id,
+      patch: {
+        start_date: moment(start).format('YYYY-MM-DD'),
+        due_date: moment(end).subtract(1, 'days').format('YYYY-MM-DD'),
+      },
+    }).catch(() => toast.error('Não foi possível salvar as datas.'))
+  }
+
   return (
     <div className="h-full p-4">
       <div className="h-full overflow-hidden rounded-xl border bg-background">
-        <Calendar<CalendarEvent>
+        <DnDCalendar
           localizer={localizer}
           events={events}
           defaultView="month"
@@ -81,9 +117,12 @@ export default function CalendarView({
           messages={MESSAGES}
           culture="pt-br"
           selectable
+          resizable
           longPressThreshold={150}
           onSelectEvent={(event) => onOpenTask(event.task)}
           onSelectSlot={(slotInfo) => onSelectSlot(slotInfo.start)}
+          onEventDrop={handleEventDrop}
+          onEventResize={handleEventResize}
           eventPropGetter={(event) => ({
             style: {
               backgroundColor: event.task.assigned_to
@@ -96,11 +135,6 @@ export default function CalendarView({
               opacity: event.task.status === 'done' ? 0.5 : 1,
             },
           })}
-          dayPropGetter={(date) =>
-            moment(date).isSame(moment(), 'day')
-              ? { className: 'rbc-today' }
-              : {}
-          }
         />
       </div>
     </div>

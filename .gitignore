@@ -1,24 +1,179 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+# ============================================
+# ARQUIVOS DE PROJETO (NÃO COMMITAR)
+# ============================================
 
-node_modules
-dist
-dist-ssr
+# PRD e AGENTS (documentação interna)
+prd.md
+AGENTS.md
+*.prd.md
+*.agents.md
+docs/
+*.md
+
+# ============================================
+# DEPENDÊNCIAS
+# ============================================
+
+node_modules/
+.pnpm-store/
+.yarn/
+yarn-error.log
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# ============================================
+# BUILD / DISTRIBUIÇÃO
+# ============================================
+
+dist/
+dist-ssr/
+build/
 *.local
+*.tsbuildinfo
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# ============================================
+# VARIÁVEIS DE AMBIENTE
+# ============================================
+
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+.env.test
+
+# ============================================
+# ARQUIVOS OCULTOS (.)
+# ============================================
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# Sistema
+Thumbs.db
+desktop.ini
+
+# ============================================
+# LOGS
+# ============================================
+
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================
+# CACHE
+# ============================================
+
+.cache/
+.eslintcache
+.parcel-cache/
+.turbo/
+*.tsbuildinfo
+
+# ============================================
+# TESTES / COBERTURA
+# ============================================
+
+coverage/
+.nyc_output/
+*.lcov
+
+# ============================================
+# SUPABASE / EDGE FUNCTIONS
+# ============================================
+
+# Seeds (dados de exemplo)
+supabase/seed.sql
+supabase/.env.local
+
+# ============================================
+# OUTROS
+# ============================================
+
+# Arquivos temporários
+tmp/
+temp/
+*.tmp
+
+# Arquivos de backup
+*.bak
+*.backup
+
+# Arquivos de sistema do OS
+*.orig
+
+# ============================================
+# SKILLS / PASTAS DE CONHECIMENTO (NÃO COMMITAR)
+# ============================================
+
+.skills/
+skills/
+knowledge/
+.knowledge/
+.templates/
+templates/
+.prompts/
+prompts/
+
+# ============================================
+# ARQUIVOS DE CONFIGURAÇÃO PESSOAL
+# ============================================
+
+# Configurações locais do projeto
+.vite/
+.vercel/
+.netlify/
+
+# ============================================
+# ARQUIVOS DE TERCEIROS (NÃO GERADOS POR NÓS)
+# ============================================
+
+*.min.js
+*.min.css
+*.bundle.js
+*.chunk.js
+
+# ============================================
+# ARQUIVOS DE DADOS (NÃO SUBIR PARA O REPO)
+# ============================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+# ============================================
+# DOCKER (SE FOR USAR)
+# ============================================
+
+.docker/
+docker-compose.override.yml
+
+# ============================================
+# CYPRESS / PLAYWRIGHT
+# ============================================
+
+cypress/videos/
+cypress/screenshots/
+playwright-report/
+test-results/
+
+# ============================================
+# STORYBOOK (SE FOR USAR)
+# ============================================
+
+storybook-static/

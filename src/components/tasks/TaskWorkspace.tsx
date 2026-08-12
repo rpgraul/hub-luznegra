@@ -7,6 +7,7 @@ import GanttView from '@/components/views/GanttView'
 import CalendarView from '@/components/views/CalendarView'
 import { useAuth } from '@/hooks/useAuth'
 import { usePreferences } from '@/hooks/usePreferences'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { useTasks } from '@/hooks/useTasks'
 import type { Task } from '@/types/database'
 
@@ -26,6 +27,7 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
 
   const tasksApi = useTasks(activeProjectId)
   const { tasks } = tasksApi
+  const { memberOf } = useProjectMembers(activeProjectId)
 
   useEffect(() => {
     if (!initialTaskId || !tasks) return
@@ -97,13 +99,20 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
           />
         )}
         {view === 'lista' && (
-          <ListView tasks={tasks} onOpenTask={openTask} />
+          <ListView
+            tasks={tasks}
+            onOpenTask={openTask}
+            memberOf={memberOf}
+            moveTaskStatus={tasksApi.moveTaskStatus}
+            deleteTask={tasksApi.deleteTask}
+          />
         )}
         {view === 'calendario' && (
           <CalendarView
             tasks={tasks}
             onOpenTask={openTask}
             onSelectSlot={openNewTask}
+            updateTask={tasksApi.updateTask}
           />
         )}
       </div>
