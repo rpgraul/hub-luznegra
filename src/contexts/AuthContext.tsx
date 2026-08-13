@@ -35,7 +35,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
-      setLoading(false)
     })
 
     const {
@@ -48,9 +47,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
+
     if (!session?.user) {
       setUser(null)
-      return
+      setLoading(false)
+      return () => {
+        cancelled = true
+      }
     }
 
     supabase
@@ -58,7 +62,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select('*')
       .eq('id', session.user.id)
       .maybeSingle()
-      .then(({ data }) => setUser(data ?? null))
+      .then(({ data }) => {
+        if (cancelled) return
+        setUser(data ?? null)
+        setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [session])
 
   const signIn = useCallback(

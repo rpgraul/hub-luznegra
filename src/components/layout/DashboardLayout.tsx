@@ -29,6 +29,8 @@ export default function DashboardLayout({
     enabled: !!user,
   })
 
+  if (!user) return null
+
   function handleProjectCreated(project: Project) {
     void queryClient.invalidateQueries({ queryKey: ['projects'] })
     setProject(project.id)
