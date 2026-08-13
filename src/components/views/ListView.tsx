@@ -199,42 +199,44 @@ function TasksTable({
 
   return (
     <Table.Root aria-label="Tarefas" className="w-full">
-      <Table.Header>
-        <Table.Column className="w-10">
-          <Checkbox
-            isSelected={allSelected}
-            isIndeterminate={partialSelected}
-            onChange={(checked) => toggleAll(checked)}
-            aria-label="Selecionar todas"
-          />
-        </Table.Column>
-        <Table.Column>Título</Table.Column>
-        <Table.Column>Responsável</Table.Column>
-        <Table.Column>Status</Table.Column>
-        <Table.Column>Prioridade</Table.Column>
-        <Table.Column>Vencimento</Table.Column>
-        <Table.Column className="text-center">Subtarefas</Table.Column>
-      </Table.Header>
-      <Table.Body>
-        {rows.length === 0 && (
-          <Table.Row className="hover:bg-transparent">
-            <Table.Cell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-              {emptyMessage}
-            </Table.Cell>
-          </Table.Row>
-        )}
-        {rows.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            selected={selected.has(task.id)}
-            childrenCount={countSubtasks(task)}
-            memberOf={memberOf}
-            onToggle={(checked) => onToggle(task.id, checked)}
-            onOpen={() => onOpen(task)}
-          />
-        ))}
-      </Table.Body>
+      <Table.Content>
+        <Table.Header>
+          <Table.Column className="w-10">
+            <Checkbox
+              isSelected={allSelected}
+              isIndeterminate={partialSelected}
+              onChange={(checked) => toggleAll(checked)}
+              aria-label="Selecionar todas"
+            />
+          </Table.Column>
+          <Table.Column>Título</Table.Column>
+          <Table.Column>Responsável</Table.Column>
+          <Table.Column>Status</Table.Column>
+          <Table.Column>Prioridade</Table.Column>
+          <Table.Column>Vencimento</Table.Column>
+          <Table.Column className="text-center">Subtarefas</Table.Column>
+        </Table.Header>
+        <Table.Body>
+          {rows.length === 0 && (
+            <Table.Row className="hover:bg-transparent">
+              <Table.Cell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                {emptyMessage}
+              </Table.Cell>
+            </Table.Row>
+          )}
+          {rows.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              selected={selected.has(task.id)}
+              childrenCount={countSubtasks(task)}
+              memberOf={memberOf}
+              onToggle={(checked) => onToggle(task.id, checked)}
+              onOpen={() => onOpen(task)}
+            />
+          ))}
+        </Table.Body>
+      </Table.Content>
     </Table.Root>
   )
 }
