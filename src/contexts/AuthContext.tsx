@@ -57,22 +57,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
+    void (async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .maybeSingle()
         if (cancelled) return
         setUser(data ?? null)
         setLoading(false)
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setUser(null)
           setLoading(false)
         }
-      })
+      }
+    })()
 
     return () => {
       cancelled = true
