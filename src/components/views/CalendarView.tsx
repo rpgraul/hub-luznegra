@@ -1,7 +1,6 @@
 import { Calendar, momentLocalizer, type View } from 'react-big-calendar'
-import withDragAndDrop, {
-  type withDragAndDropProps,
-} from 'react-big-calendar/lib/addons/dragAndDrop'
+import type { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop'
+import { withDragAndDrop } from '@/lib/withDragAndDrop'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css'
 import moment from 'moment/min/moment-with-locales'
