@@ -147,6 +147,23 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.is_project_participant(UUID) TO authenticated;
 
+-- Helper (SECURITY DEFINER) para checagem de admin sem recursão de RLS: políticas
+-- de profiles/projects/tasks que consultassem profiles inline entrariam em loop.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  )
+$$;
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
 -- ============================================================
 -- RLS (restritiva por usuário, conforme PRD §3)
 -- ============================================================
@@ -160,14 +177,10 @@ ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 -- Profiles: só o próprio perfil; admin vê todos. Sem INSERT (sem self-signup:
 -- contas são criadas pelo admin via Admin API / Edge Function).
 CREATE POLICY profiles_select_own ON public.profiles
-  FOR SELECT USING (id = auth.uid() OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR SELECT USING (id = auth.uid() OR public.is_admin());
 
 CREATE POLICY profiles_update_own ON public.profiles
-  FOR UPDATE USING (id = auth.uid() OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR UPDATE USING (id = auth.uid() OR public.is_admin());
 
 -- User preferences: finas do próprio usuário (upsert no primeiro acesso).
 CREATE POLICY user_preferences_select_own ON public.user_preferences
@@ -186,19 +199,13 @@ CREATE POLICY projects_select ON public.projects
   );
 
 CREATE POLICY projects_insert ON public.projects
-  FOR INSERT WITH CHECK (owner_id = auth.uid() OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR INSERT WITH CHECK (owner_id = auth.uid() OR public.is_admin());
 
 CREATE POLICY projects_update ON public.projects
-  FOR UPDATE USING (owner_id = auth.uid() OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR UPDATE USING (owner_id = auth.uid() OR public.is_admin());
 
 CREATE POLICY projects_delete ON public.projects
-  FOR DELETE USING (owner_id = auth.uid() OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR DELETE USING (owner_id = auth.uid() OR public.is_admin());
 
 -- Tasks: visíveis/inseríveis por participantes do projeto; update também p/ o responsável.
 CREATE POLICY tasks_select ON public.tasks
@@ -215,9 +222,7 @@ CREATE POLICY tasks_update ON public.tasks
   );
 
 CREATE POLICY tasks_delete ON public.tasks
-  FOR DELETE USING (public.is_project_participant(project_id) OR EXISTS (
-    SELECT 1 FROM public.profiles adm WHERE adm.id = auth.uid() AND adm.role = 'admin'
-  ));
+  FOR DELETE USING (public.is_project_participant(project_id) OR public.is_admin());
 
 -- Task comments: ver de tarefas de projetos que participa; criar/sair do autor.
 CREATE POLICY task_comments_select ON public.task_comments
