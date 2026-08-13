@@ -76,6 +76,7 @@ export type Notification = {
   link: string | null
   read: boolean
   created_at: string
+  task_id: string | null
 }
 
 export interface Database {
