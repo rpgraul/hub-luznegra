@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Dropdown, Badge } from '@heroui/react'
+import { Button, Dropdown } from '@heroui/react'
 import {
   getNotifications,
   getUnreadCount,
@@ -21,7 +21,13 @@ function taskIdFromLink(link: string | null): string | null {
   return link.replace(/^\/task\//, '')
 }
 
-export default function NotificationBell() {
+interface NotificationBellProps {
+  tone?: 'light' | 'dark'
+}
+
+export default function NotificationBell({
+  tone = 'dark',
+}: NotificationBellProps) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -51,14 +57,30 @@ export default function NotificationBell() {
     }
   }
 
+  const iconColor =
+    tone === 'dark' ? 'text-primary-foreground/90' : 'text-muted-foreground'
+
   return (
     <Dropdown.Root>
       <Dropdown.Trigger>
-        <Button variant="ghost" isIconOnly aria-label="Notificações" className="relative">
-          <Badge color="danger" placement="top-right">
-            <i className="fa-solid fa-bell text-muted-foreground" />
-            {unread > 0 && <Badge.Label>{unread > 99 ? '99+' : unread}</Badge.Label>}
-          </Badge>
+        <Button
+          variant="ghost"
+          isIconOnly
+          aria-label="Notificações"
+          className="relative"
+        >
+          <i className={`fa-solid fa-bell text-base ${iconColor}`} />
+          {unread > 0 && (
+            <span
+              className={`absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                tone === 'dark'
+                  ? 'bg-white text-primary'
+                  : 'bg-primary text-primary-foreground'
+              }`}
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
         </Button>
       </Dropdown.Trigger>
       <Dropdown.Popover className="w-80 max-w-[calc(100vw-2rem)]">
@@ -105,7 +127,7 @@ export default function NotificationBell() {
                   </p>
                 </div>
                 {!notification.read && (
-                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-blue-500" />
+                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" />
                 )}
               </Dropdown.Item>
             )

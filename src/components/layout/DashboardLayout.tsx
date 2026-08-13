@@ -1,10 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { usePreferences } from '@/hooks/usePreferences'
 import { listProjects } from '@/lib/api/projects'
-import type { Project } from '@/types/database'
+import {
+  addViewToLayout,
+  loadLayout,
+  loadPresets,
+  removeViewFromLayout,
+  saveLayout,
+  savePresets,
+  singleViewInLayout,
+  type LayoutState,
+  type SavedPreset,
+} from '@/lib/layout'
+import type { DefaultView, Project } from '@/types/database'
 import TopBar from '@/components/layout/TopBar'
 import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 import ProjectModal from '@/components/projects/ProjectModal'
@@ -23,6 +34,17 @@ export default function DashboardLayout({
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
 
+  const [layout, setLayout] = useState<LayoutState>(() => loadLayout())
+  const [presets, setPresets] = useState<SavedPreset[]>(() => loadPresets())
+
+  useEffect(() => {
+    saveLayout(layout)
+  }, [layout])
+
+  useEffect(() => {
+    savePresets(presets)
+  }, [presets])
+
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
     queryFn: listProjects,
@@ -36,6 +58,35 @@ export default function DashboardLayout({
     setProject(project.id)
   }
 
+  function handleViewClick(view: DefaultView) {
+    setLayout(singleViewInLayout(layout, view))
+    setView(view)
+  }
+
+  function handleViewHold(view: DefaultView) {
+    const next = layout.views.includes(view)
+      ? removeViewFromLayout(layout, view)
+      : addViewToLayout(layout, view)
+    setLayout(next)
+  }
+
+  function handleApplyPreset(scheme: LayoutState) {
+    setLayout(scheme)
+    setView(scheme.views[0] ?? 'gantt')
+  }
+
+  function handleSavePreset(name: string) {
+    const id =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `p-${Date.now()}`
+    setPresets((prev) => [...prev, { id, name, scheme: layout }])
+  }
+
+  function handleDeletePreset(id: string) {
+    setPresets((prev) => prev.filter((p) => p.id !== id))
+  }
+
   return (
     <div className="min-h-screen pt-16">
       <TopBar
@@ -45,15 +96,22 @@ export default function DashboardLayout({
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
         onCreateProject={() => setProjectModalOpen(true)}
-        view={preferences?.default_view ?? 'gantt'}
-        onViewChange={setView}
+        layout={layout}
+        onViewClick={handleViewClick}
+        onViewHold={handleViewHold}
+        presets={presets}
+        onApplyPreset={handleApplyPreset}
+        onSavePreset={handleSavePreset}
+        onDeletePreset={handleDeletePreset}
       />
-      <main className="h-[calc(100vh-4rem)] overflow-auto">
+      <main className="h-[calc(100vh-4rem)] overflow-hidden">
         {children ?? (
           <TaskWorkspace
             initialTaskId={initialTaskId}
             projects={projects}
             showAllTasks={preferences?.show_all_tasks ?? false}
+            layout={layout}
+            onLayoutChange={setLayout}
           />
         )}
       </main>
