@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -117,11 +118,14 @@ export default function ProjectModal({
                   type="button"
                   onClick={() => setColor(c)}
                   aria-label={`Cor ${c}`}
-                  className={`size-7 rounded-full transition-transform ${
+                  aria-pressed={color === c}
+                  className={`flex size-7 items-center justify-center rounded-full transition-transform ${
                     color === c ? 'scale-110 ring-2 ring-ring ring-offset-2' : ''
                   }`}
                   style={{ backgroundColor: c }}
-                />
+                >
+                  {color === c && <Check className="size-4 text-white" />}
+                </button>
               ))}
             </div>
           </div>
