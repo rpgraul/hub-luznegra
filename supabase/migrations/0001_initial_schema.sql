@@ -16,17 +16,9 @@ CREATE TABLE public.profiles (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Preferências do usuário (persistência de visualização)
-CREATE TABLE public.user_preferences (
-  user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
-  default_view TEXT DEFAULT 'gantt' CHECK (default_view IN ('gantt', 'kanban', 'lista', 'calendario')),
-  active_project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 3. Projetos
+-- 2. Projetos (criado antes de user_preferences, que referencia projects)
 CREATE TABLE public.projects (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   description TEXT,
   color TEXT DEFAULT '#3B82F6',
@@ -35,9 +27,17 @@ CREATE TABLE public.projects (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3. Preferências do usuário (persistência de visualização)
+CREATE TABLE public.user_preferences (
+  user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+  default_view TEXT DEFAULT 'gantt' CHECK (default_view IN ('gantt', 'kanban', 'lista', 'calendario')),
+  active_project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 4. Tarefas (hierárquica)
 CREATE TABLE public.tasks (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   description JSONB, -- estado serializado do Lexical
   project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE,
@@ -57,7 +57,7 @@ CREATE TABLE public.tasks (
 
 -- 5. Comentários / Atividades
 CREATE TABLE public.task_comments (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id UUID REFERENCES public.tasks(id) ON DELETE CASCADE,
   author_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   content TEXT NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE public.task_comments (
 
 -- 6. Notificações (in-app)
 CREATE TABLE public.notifications (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   type TEXT CHECK (type IN ('task_assigned', 'due_date_reminder', 'mention')),
   content TEXT NOT NULL,
