@@ -67,6 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(data ?? null)
         setLoading(false)
       })
+      .catch(() => {
+        if (!cancelled) {
+          setUser(null)
+          setLoading(false)
+        }
+      })
 
     return () => {
       cancelled = true
