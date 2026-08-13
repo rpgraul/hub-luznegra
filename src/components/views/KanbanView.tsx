@@ -12,13 +12,15 @@ import TaskCard from '@/components/tasks/TaskCard'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { TASK_STATUSES } from '@/hooks/useTasks'
 import type { NewTaskInput } from '@/lib/api/tasks'
-import type { Task, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskStatus } from '@/types/database'
 
 interface KanbanViewProps {
   tasks: Task[]
-  projectId: string
+  projectId: string | null
+  projects: Project[]
   currentUserId: string
   onOpenTask: (task: Task) => void
+  onOpenNewTask: () => void
   moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
   reorderTask: (args: {
     id: string
@@ -31,8 +33,10 @@ interface KanbanViewProps {
 export default function KanbanView({
   tasks,
   projectId,
+  projects,
   currentUserId,
   onOpenTask,
+  onOpenNewTask,
   moveTaskStatus,
   reorderTask,
   createTask,
@@ -45,11 +49,12 @@ export default function KanbanView({
     done: '',
   })
 
+  const projectById = new Map(projects.map((project) => [project.id, project]))
   const topLevel = tasks.filter((task) => !task.parent_id)
 
   async function addQuick(status: TaskStatus) {
     const title = quickAdd[status].trim()
-    if (!title) return
+    if (!title || !projectId) return
     try {
       await createTask({
         title,
@@ -144,6 +149,11 @@ export default function KanbanView({
                               ).length}
                               onOpen={onOpenTask}
                               compact
+                              project={
+                                !projectId && task.project_id
+                                  ? projectById.get(task.project_id)
+                                  : null
+                              }
                             />
                           </div>
                         )}
@@ -154,31 +164,45 @@ export default function KanbanView({
                 )}
               </Droppable>
 
-              <div className="flex gap-1.5 border-t p-2">
-                <Input
-                  value={quickAdd[status]}
-                  onChange={(e) =>
-                    setQuickAdd((prev) => ({
-                      ...prev,
-                      [status]: e.target.value,
-                    }))
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void addQuick(status)
-                  }}
-                  placeholder="Nova tarefa..."
-                  className="h-8 text-sm"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  onClick={() => void addQuick(status)}
-                  aria-label={`Adicionar tarefa em ${STATUS_LABELS[status]}`}
-                >
-                  <i className="fa-solid fa-plus text-xs" />
-                </Button>
-              </div>
+              {projectId ? (
+                <div className="flex gap-1.5 border-t p-2">
+                  <Input
+                    value={quickAdd[status]}
+                    onChange={(e) =>
+                      setQuickAdd((prev) => ({
+                        ...prev,
+                        [status]: e.target.value,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void addQuick(status)
+                    }}
+                    placeholder="Nova tarefa..."
+                    className="h-8 text-sm"
+                  />
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => void addQuick(status)}
+                    aria-label={`Adicionar tarefa em ${STATUS_LABELS[status]}`}
+                  >
+                    <i className="fa-solid fa-plus text-xs" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-t p-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-muted-foreground"
+                    onClick={onOpenNewTask}
+                  >
+                    <i className="fa-solid fa-plus text-xs" />
+                    Nova tarefa
+                  </Button>
+                </div>
+              )}
             </div>
           )
         })}

@@ -45,6 +45,7 @@ export function usePreferences() {
       mutation.mutate({ default_view: view }),
     setProject: (projectId: string | null) =>
       mutation.mutate({ active_project_id: projectId }),
+    setShowAll: (show: boolean) => mutation.mutate({ show_all_tasks: show }),
     isSaving: mutation.isPending,
   }
 }

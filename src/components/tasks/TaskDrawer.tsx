@@ -40,13 +40,14 @@ import {
   TASK_STATUSES,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
-import type { Task, TaskPriority, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
 
 interface TaskDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   task: Task | null
   projectId: string | null
+  projects: Project[]
   creator: {
     currentUserId: string
     createTask: (input: {
@@ -82,6 +83,7 @@ export default function TaskDrawer({
   onOpenChange,
   task,
   projectId,
+  projects,
   creator,
 }: TaskDrawerProps) {
   const [titleDraft, setTitleDraft] = useState('')
@@ -91,6 +93,7 @@ export default function TaskDrawer({
     useState<string>('')
   const [newSubtask, setNewSubtask] = useState('')
   const [newComment, setNewComment] = useState('')
+  const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isNew = !task?.id
 
@@ -111,6 +114,7 @@ export default function TaskDrawer({
       setLastSavedDescription('')
       setNewSubtask('')
       setNewComment('')
+      setCreateProjectId(projectId ?? projects[0]?.id ?? null)
       return
     }
     setTitleDraft(task.title)
@@ -195,11 +199,11 @@ export default function TaskDrawer({
 
   async function handleCreate() {
     const title = titleDraft.trim()
-    if (!title || !projectId) return
+    if (!title || !createProjectId) return
     try {
       await creator.createTask({
         title,
-        project_id: projectId,
+        project_id: createProjectId,
         status: 'backlog',
         assigned_to: creator.currentUserId,
       })
@@ -283,20 +287,59 @@ export default function TaskDrawer({
           <ScrollArea className="h-[calc(100vh-4.5rem)]">
             <div className="space-y-5 p-4">
               {isNew ? (
-                <div className="space-y-2">
-                  <Label htmlFor="new-task-title">Título</Label>
-                  <Input
-                    id="new-task-title"
-                    autoFocus
-                    value={titleDraft}
-                    onChange={(e) => setTitleDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void handleCreate()
-                    }}
-                    placeholder="O que precisa ser feito?"
-                  />
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-task-project">Projeto</Label>
+                    <Select
+                      value={createProjectId ?? ''}
+                      onValueChange={setCreateProjectId}
+                    >
+                      <SelectTrigger
+                        id="new-task-project"
+                        aria-label="Projeto da tarefa"
+                      >
+                        <SelectValue placeholder="Selecione um projeto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projects.length === 0 ? (
+                          <SelectItem value="" disabled>
+                            Crie um projeto primeiro
+                          </SelectItem>
+                        ) : (
+                          projects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              <span className="inline-flex items-center gap-2">
+                                <span
+                                  className="size-2.5 rounded-full"
+                                  style={{ backgroundColor: project.color }}
+                                />
+                                {project.name}
+                              </span>
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-task-title">Título</Label>
+                    <Input
+                      id="new-task-title"
+                      autoFocus
+                      value={titleDraft}
+                      onChange={(e) => setTitleDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void handleCreate()
+                      }}
+                      placeholder="O que precisa ser feito?"
+                    />
+                  </div>
                   <div className="flex justify-end">
-                    <Button size="sm" onClick={() => void handleCreate()}>
+                    <Button
+                      size="sm"
+                      disabled={!createProjectId}
+                      onClick={() => void handleCreate()}
+                    >
                       <i className="fa-solid fa-plus mr-1" />
                       Criar tarefa
                     </Button>

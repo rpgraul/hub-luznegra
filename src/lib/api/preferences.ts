@@ -5,12 +5,14 @@ export interface UserPreferences {
   user_id: string
   default_view: DefaultView
   active_project_id: string | null
+  show_all_tasks: boolean
   updated_at: string
 }
 
 export const DEFAULT_PREFERENCES: Omit<UserPreferences, 'user_id'> = {
   default_view: 'gantt',
   active_project_id: null,
+  show_all_tasks: false,
   updated_at: '',
 }
 
@@ -31,7 +33,7 @@ export async function getPreferences(userId: string): Promise<UserPreferences> {
 }
 
 export type PreferencesPatch = Partial<
-  Pick<UserPreferences, 'default_view' | 'active_project_id'>
+  Pick<UserPreferences, 'default_view' | 'active_project_id' | 'show_all_tasks'>
 >
 
 export async function updatePreferences(

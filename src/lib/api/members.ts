@@ -7,7 +7,7 @@ export interface ProjectMember {
 }
 
 export async function listProjectMembers(
-  projectId: string,
+  projectId: string | null,
 ): Promise<ProjectMember[]> {
   const { data, error } = await supabase.functions.invoke('project-members', {
     body: { project_id: projectId },

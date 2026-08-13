@@ -24,17 +24,25 @@ export type TaskPatch = Partial<
   Omit<Task, 'id' | 'created_at' | 'updated_at'>
 >
 
+/**
+ * Busca tarefas de todos os projetos.
+ * `showAll=false` filtra apenas as tarefas do próprio usuário
+ * (switch "Minhas tarefas" do dashboard).
+ */
 export async function fetchTasks(
-  projectId: string,
+  showAll: boolean,
   userId: string,
 ): Promise<Task[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('tasks')
     .select('*')
-    .eq('project_id', projectId)
-    .eq('assigned_to', userId)
     .order('order_index', { ascending: true })
 
+  if (!showAll) {
+    query = query.eq('assigned_to', userId)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(error.message)
   return data ?? []
 }

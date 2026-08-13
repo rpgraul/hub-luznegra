@@ -8,6 +8,7 @@ interface TaskCardProps {
   subtitleCount: number
   onOpen: (task: Task) => void
   compact?: boolean
+  project?: { name: string; color: string } | null
 }
 
 export default function TaskCard({
@@ -15,6 +16,7 @@ export default function TaskCard({
   subtitleCount,
   onOpen,
   compact = false,
+  project = null,
 }: TaskCardProps) {
   const overdue =
     !!task.due_date &&
@@ -51,6 +53,24 @@ export default function TaskCard({
           aria-label="Prioridade"
         />
       </div>
+
+      {project && (
+        <div className="mt-1.5">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
+            style={{
+              color: project.color,
+              backgroundColor: `${project.color}1A`,
+            }}
+          >
+            <span
+              className="size-1.5 rounded-full"
+              style={{ backgroundColor: project.color }}
+            />
+            {project.name}
+          </span>
+        </div>
+      )}
 
       {!compact && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">

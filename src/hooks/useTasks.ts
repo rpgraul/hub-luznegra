@@ -21,34 +21,31 @@ export const TASK_STATUSES = [
   'done',
 ] as const
 
-function tasksKey(projectId: string | null): (string | null)[] {
-  return ['tasks', projectId]
+function tasksKey(showAll: boolean): (string | boolean)[] {
+  return ['tasks', showAll]
 }
 
-export function useTasks(projectId: string | null) {
+export function useTasks(showAll: boolean) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const KEY = useMemo(() => tasksKey(projectId), [projectId])
+  const KEY = useMemo(() => tasksKey(showAll), [showAll])
 
   const query = useQuery({
     queryKey: KEY,
-    queryFn: () => fetchTasks(projectId!, user!.id),
-    enabled: !!projectId && !!user,
+    queryFn: () => fetchTasks(showAll, user!.id),
+    enabled: !!user,
   })
 
-  // Realtime: filtra por projeto; a RLS só entrega tarefas do próprio usuário.
+  // Realtime: escuta a tabela inteira (a RLS entrega o que o usuário pode ver).
   useEffect(() => {
-    if (!projectId) return
-
     const channel = supabase
-      .channel(`tasks-${projectId}`)
+      .channel('tasks-all')
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'tasks',
-          filter: `project_id=eq.${projectId}`,
         },
         () => {
           void queryClient.invalidateQueries({ queryKey: KEY })
@@ -59,7 +56,7 @@ export function useTasks(projectId: string | null) {
     return () => {
       void supabase.removeChannel(channel)
     }
-  }, [projectId, KEY, queryClient])
+  }, [KEY, queryClient])
 
   function setTasks(updater: (tasks: Task[]) => Task[]) {
     queryClient.setQueryData<Task[]>(KEY, (old) => updater(old ?? []))

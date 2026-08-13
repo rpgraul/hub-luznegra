@@ -1,4 +1,5 @@
-// Edge Function: membros de um projeto (para dropdown de responsável).
+// Edge Function: membros de um projeto (dropdown de responsável).
+// Sem project_id, retorna a equipe inteira (dashboard "Todas as tarefas").
 // profiles tem RLS restritiva (só o próprio perfil), então o frontend não pode
 // listar membros diretamente — aqui a service role faz a consulta.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.3'
@@ -14,9 +15,8 @@ Deno.serve(async (req) => {
       return json({ error: 'Não autorizado.' }, 401)
     }
 
-    const body = (await req.json()) as { project_id?: string }
+    const body = (await req.json()) as { project_id?: string | null }
     const projectId = body.project_id
-    if (!projectId) return json({ error: 'project_id é obrigatório.' }, 400)
 
     const token = authHeader.replace('Bearer ', '')
 
@@ -28,6 +28,16 @@ Deno.serve(async (req) => {
 
     const { data: caller } = await admin.auth.getUser(token)
     if (!caller.user) return json({ error: 'Não autorizado.' }, 401)
+
+    // Sem projeto: lista a equipe inteira (dropdowns com "Todas as tarefas").
+    if (!projectId) {
+      const { data: all } = await admin
+        .from('profiles')
+        .select('id, username, full_name')
+        .order('full_name', { nullsFirst: true })
+        .order('username')
+      return json({ data: all ?? [] })
+    }
 
     // Confere participação usando o RPC já existente (SECURITY DEFINER, p/ authenticated)
     const userClient = createClient(

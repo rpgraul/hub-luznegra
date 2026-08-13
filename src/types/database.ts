@@ -27,6 +27,7 @@ export type UserPreferences = {
   user_id: string
   default_view: DefaultView
   active_project_id: string | null
+  show_all_tasks: boolean
   updated_at: string
 }
 
@@ -110,12 +111,14 @@ export interface Database {
           user_id: string
           default_view?: DefaultView
           active_project_id?: string | null
+          show_all_tasks?: boolean
           updated_at?: string
         }
         Update: {
           user_id?: string
           default_view?: DefaultView
           active_project_id?: string | null
+          show_all_tasks?: boolean
           updated_at?: string
         }
         Relationships: []

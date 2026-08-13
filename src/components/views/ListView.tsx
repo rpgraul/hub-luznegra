@@ -29,10 +29,12 @@ import { userColor, userRowColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
 import { PRIORITY_ICONS, STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
-import type { Task, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskStatus } from '@/types/database'
 
 interface ListViewProps {
   tasks: Task[]
+  projects: Project[]
+  grouped: boolean
   onOpenTask: (task: Task) => void
   memberOf: (id: string | null) => ProjectMember | null
   moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
@@ -107,8 +109,96 @@ function AssigneeCell({ member }: { member: ProjectMember | null }) {
   )
 }
 
+interface TaskRowProps {
+  task: Task
+  selected: boolean
+  childrenCount: number
+  memberOf: (id: string | null) => ProjectMember | null
+  onToggle: (checked: boolean) => void
+  onOpen: () => void
+}
+
+function TaskRow({
+  task,
+  selected,
+  childrenCount,
+  memberOf: memberLookup,
+  onToggle,
+  onOpen,
+}: TaskRowProps) {
+  const isChild = !!task.parent_id
+  const overdue =
+    !!task.due_date &&
+    task.status !== 'done' &&
+    task.due_date < todayIso()
+  const rowStyle = task.assigned_to
+    ? { backgroundColor: userRowColor(task.assigned_to) }
+    : undefined
+
+  return (
+    <TableRow
+      style={rowStyle}
+      className={
+        selected ? 'cursor-pointer bg-primary/5' : 'cursor-pointer'
+      }
+      onClick={onOpen}
+    >
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={selected}
+          onCheckedChange={(checked) => onToggle(checked === true)}
+          aria-label={`Selecionar ${task.title}`}
+        />
+      </TableCell>
+      <TableCell>
+        <div
+          className="flex items-center gap-2 text-sm font-medium"
+          style={{ paddingLeft: isChild ? 20 : 0 }}
+        >
+          {isChild && (
+            <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
+          )}
+          <span
+            className={
+              task.status === 'done'
+                ? 'text-muted-foreground line-through'
+                : ''
+            }
+          >
+            {task.title}
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        <AssigneeCell member={memberLookup(task.assigned_to)} />
+      </TableCell>
+      <TableCell>
+        <StatusPill status={task.status} />
+      </TableCell>
+      <TableCell>
+        <PriorityBadge priority={task.priority} />
+      </TableCell>
+      <TableCell className={`text-xs ${overdue ? 'font-medium text-red-600' : ''}`}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
+      </TableCell>
+      <TableCell className="text-center text-xs text-muted-foreground">
+        {childrenCount > 0 ? (
+          <span>
+            <i className="fa-regular fa-sitemap mr-1" />
+            {childrenCount}
+          </span>
+        ) : (
+          '—'
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
+
 export default function ListView({
   tasks,
+  projects,
+  grouped,
   onOpenTask,
   memberOf,
   moveTaskStatus,
@@ -117,19 +207,15 @@ export default function ListView({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const parents = useMemo(
-    () =>
-      tasks
-        .filter((task) => !task.parent_id)
-        .sort(
-          (a, b) =>
-            STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
-            a.order_index - b.order_index,
-        ),
-    [tasks],
-  )
-
   const rows = useMemo(() => {
+    const parents = tasks
+      .filter((task) => !task.parent_id)
+      .sort(
+        (a, b) =>
+          STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
+          a.order_index - b.order_index,
+      )
+
     const all: Task[] = []
     for (const parent of parents) {
       all.push(parent)
@@ -140,7 +226,29 @@ export default function ListView({
       )
     }
     return all
-  }, [parents, tasks])
+  }, [tasks])
+
+  const sections = useMemo(() => {
+    if (!grouped) return []
+    const ids = new Set(
+      tasks.map((task) => task.project_id).filter((id): id is string => !!id),
+    )
+    const list: Array<{
+      project: Project | null
+      sectionTasks: Task[]
+    }> = projects
+      .filter((project) => ids.has(project.id))
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+      .map((project) => ({
+        project,
+        sectionTasks: tasks.filter((task) => task.project_id === project.id),
+      }))
+    const orphan = tasks.filter((task) => !task.project_id)
+    if (orphan.length > 0) {
+      list.push({ project: null, sectionTasks: orphan })
+    }
+    return list
+  }, [tasks, projects, grouped])
 
   const allSelected = rows.length > 0 && rows.every((task) => selected.has(task.id))
 
@@ -167,9 +275,7 @@ export default function ListView({
   async function moveSelected(status: TaskStatus) {
     const ids = [...selected]
     try {
-      await Promise.all(
-        ids.map((id) => moveTaskStatus({ id, status })),
-      )
+      await Promise.all(ids.map((id) => moveTaskStatus({ id, status })))
       setSelected(new Set())
       toast.success(
         `${ids.length} tarefa(s) movida(s) para ${STATUS_LABELS[status]}.`,
@@ -199,118 +305,119 @@ export default function ListView({
     }
   }
 
+  function renderRows(list: Task[]) {
+    return list.map((task) => (
+      <TaskRow
+        key={task.id}
+        task={task}
+        selected={selected.has(task.id)}
+        childrenCount={tasks.filter((t) => t.parent_id === task.id).length}
+        memberOf={memberOf}
+        onToggle={(checked) => toggleOne(task.id, checked)}
+        onOpen={() => onOpenTask(task)}
+      />
+    ))
+  }
+
+  const emptyMessage = grouped ? 'Nenhuma tarefa por aqui.' : 'Nenhuma tarefa neste projeto.'
+
   return (
     <div className="p-4">
-      <div className="rounded-xl border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-10">
-                <Checkbox
-                  checked={
-                    allSelected || (selected.size > 0 ? 'indeterminate' : false)
-                  }
-                  onCheckedChange={(checked) => toggleAll(checked === true)}
-                  aria-label="Selecionar todas"
-                />
-              </TableHead>
-              <TableHead>Título</TableHead>
-              <TableHead className="w-40">Responsável</TableHead>
-              <TableHead className="w-32">Status</TableHead>
-              <TableHead className="w-28">Prioridade</TableHead>
-              <TableHead className="w-28">Vencimento</TableHead>
-              <TableHead className="w-24 text-center">Subtarefas</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  Nenhuma tarefa neste projeto.
-                </TableCell>
-              </TableRow>
-            )}
-            {rows.map((task) => {
-              const isChild = !!task.parent_id
-              const childrenCount = isChild
-                ? 0
-                : tasks.filter((t) => t.parent_id === task.id).length
-              const overdue =
-                !!task.due_date &&
-                task.status !== 'done' &&
-                task.due_date < todayIso()
-              const rowStyle = task.assigned_to
-                ? { backgroundColor: userRowColor(task.assigned_to) }
-                : undefined
-
-              return (
-                <TableRow
-                  key={task.id}
-                  style={rowStyle}
-                  className={
-                    selected.has(task.id) ? 'cursor-pointer bg-primary/5' : 'cursor-pointer'
-                  }
-                  onClick={() => onOpenTask(task)}
-                >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={selected.has(task.id)}
-                      onCheckedChange={(checked) =>
-                        toggleOne(task.id, checked === true)
-                      }
-                      aria-label={`Selecionar ${task.title}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div
-                      className="flex items-center gap-2 text-sm font-medium"
-                      style={{ paddingLeft: isChild ? 20 : 0 }}
-                    >
-                      {isChild && (
-                        <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
+      {grouped ? (
+        <div className="space-y-6">
+          {sections.length === 0 && (
+            <div className="rounded-xl border bg-background px-4 py-10 text-center text-sm text-muted-foreground">
+              {emptyMessage}
+            </div>
+          )}
+          {sections.map(({ project, sectionTasks }) => {
+            const sectionRows = rows.filter((task) =>
+              sectionTasks.some((t) => t.id === task.id),
+            )
+            return (
+              <section key={project?.id ?? '__sem_projeto__'}>
+                <header className="mb-2 flex items-center gap-2 px-1">
+                  <span
+                    className="size-2.5 rounded-full"
+                    style={{ backgroundColor: project?.color ?? '#94A3B8' }}
+                  />
+                  <h2 className="text-sm font-semibold">
+                    {project?.name ?? 'Sem projeto'}
+                  </h2>
+                  <span className="text-xs text-muted-foreground">
+                    {sectionRows.length} tarefa(s)
+                  </span>
+                </header>
+                <div className="rounded-xl border bg-background">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10" />
+                        <TableHead>Título</TableHead>
+                        <TableHead className="w-40">Responsável</TableHead>
+                        <TableHead className="w-32">Status</TableHead>
+                        <TableHead className="w-28">Prioridade</TableHead>
+                        <TableHead className="w-28">Vencimento</TableHead>
+                        <TableHead className="w-24 text-center">Subtarefas</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sectionRows.length === 0 && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={7}
+                            className="py-8 text-center text-sm text-muted-foreground"
+                          >
+                            {emptyMessage}
+                          </TableCell>
+                        </TableRow>
                       )}
-                      <span
-                        className={
-                          task.status === 'done'
-                            ? 'text-muted-foreground line-through'
-                            : ''
-                        }
-                      >
-                        {task.title}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <AssigneeCell member={memberOf(task.assigned_to)} />
-                  </TableCell>
-                  <TableCell>
-                    <StatusPill status={task.status} />
-                  </TableCell>
-                  <TableCell>
-                    <PriorityBadge priority={task.priority} />
-                  </TableCell>
-                  <TableCell className={`text-xs ${overdue ? 'font-medium text-red-600' : ''}`}>
-                    {task.due_date ? formatDate(task.due_date) : '—'}
-                  </TableCell>
-                  <TableCell className="text-center text-xs text-muted-foreground">
-                    {childrenCount > 0 ? (
-                      <span>
-                        <i className="fa-regular fa-sitemap mr-1" />
-                        {childrenCount}
-                      </span>
-                    ) : (
-                      '—'
-                    )}
+                      {renderRows(sectionRows)}
+                    </TableBody>
+                  </Table>
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-background">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      allSelected || (selected.size > 0 ? 'indeterminate' : false)
+                    }
+                    onCheckedChange={(checked) => toggleAll(checked === true)}
+                    aria-label="Selecionar todas"
+                  />
+                </TableHead>
+                <TableHead>Título</TableHead>
+                <TableHead className="w-40">Responsável</TableHead>
+                <TableHead className="w-32">Status</TableHead>
+                <TableHead className="w-28">Prioridade</TableHead>
+                <TableHead className="w-28">Vencimento</TableHead>
+                <TableHead className="w-24 text-center">Subtarefas</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    {emptyMessage}
                   </TableCell>
                 </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-      </div>
+              )}
+              {renderRows(rows)}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
       {selected.size > 0 && (
         <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-popover px-4 py-2.5 shadow-lg">

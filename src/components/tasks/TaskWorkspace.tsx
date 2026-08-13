@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
 import KanbanView from '@/components/views/KanbanView'
@@ -9,13 +9,19 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePreferences } from '@/hooks/usePreferences'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { useTasks } from '@/hooks/useTasks'
-import type { Task } from '@/types/database'
+import type { Project, Task } from '@/types/database'
 
 interface TaskWorkspaceProps {
   initialTaskId?: string
+  projects: Project[]
+  showAllTasks: boolean
 }
 
-export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
+export default function TaskWorkspace({
+  initialTaskId,
+  projects,
+  showAllTasks,
+}: TaskWorkspaceProps) {
   const { user } = useAuth()
   const { preferences } = usePreferences()
   const activeProjectId = preferences?.active_project_id ?? null
@@ -25,17 +31,22 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
   const [draftStart, setDraftStart] = useState<string | null>(null)
   const [draftDue, setDraftDue] = useState<string | null>(null)
 
-  const tasksApi = useTasks(activeProjectId)
+  const tasksApi = useTasks(showAllTasks)
   const { tasks } = tasksApi
   const { memberOf } = useProjectMembers(activeProjectId)
 
+  const visibleTasks = useMemo(() => {
+    if (!activeProjectId) return tasks
+    return tasks.filter((task) => task.project_id === activeProjectId)
+  }, [tasks, activeProjectId])
+
   useEffect(() => {
-    if (!initialTaskId || !tasks) return
-    const task = tasks.find((t) => t.id === initialTaskId)
+    if (!initialTaskId || !visibleTasks) return
+    const task = visibleTasks.find((t) => t.id === initialTaskId)
     if (!task) return
     setSelectedTask(task)
     setDrawerOpen(true)
-  }, [initialTaskId, tasks])
+  }, [initialTaskId, visibleTasks])
 
   function openTask(task: Task) {
     setSelectedTask(task)
@@ -60,19 +71,6 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
 
   const view = preferences?.default_view ?? 'gantt'
 
-  if (!activeProjectId) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div className="max-w-sm text-center">
-          <i className="fa-solid fa-folder-open mb-3 text-3xl text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            Selecione um projeto no topo para ver suas tarefas.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   const contentClassName = `h-full transition-opacity duration-200 ${
     drawerOpen ? 'opacity-70' : ''
   }`
@@ -82,17 +80,19 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
       <div className={contentClassName}>
         {view === 'gantt' && (
           <GanttView
-            tasks={tasks}
+            tasks={visibleTasks}
             onOpenTask={openTask}
             updateTask={tasksApi.updateTask}
           />
         )}
         {view === 'kanban' && (
           <KanbanView
-            tasks={tasks}
+            tasks={visibleTasks}
             projectId={activeProjectId}
+            projects={projects}
             currentUserId={user!.id}
             onOpenTask={openTask}
+            onOpenNewTask={() => openNewTask()}
             moveTaskStatus={tasksApi.moveTaskStatus}
             reorderTask={tasksApi.reorderTask}
             createTask={tasksApi.createTask}
@@ -100,7 +100,9 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
         )}
         {view === 'lista' && (
           <ListView
-            tasks={tasks}
+            tasks={visibleTasks}
+            projects={projects}
+            grouped={!activeProjectId}
             onOpenTask={openTask}
             memberOf={memberOf}
             moveTaskStatus={tasksApi.moveTaskStatus}
@@ -109,7 +111,7 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
         )}
         {view === 'calendario' && (
           <CalendarView
-            tasks={tasks}
+            tasks={visibleTasks}
             onOpenTask={openTask}
             onSelectSlot={openNewTask}
             updateTask={tasksApi.updateTask}
@@ -132,6 +134,7 @@ export default function TaskWorkspace({ initialTaskId }: TaskWorkspaceProps) {
         onOpenChange={closeDrawer}
         task={selectedTask}
         projectId={activeProjectId}
+        projects={projects}
         creator={{
           currentUserId: user!.id,
           createTask: async (input) => {

@@ -3,9 +3,9 @@ import { listProjectMembers, type ProjectMember } from '@/lib/api/members'
 
 export function useProjectMembers(projectId: string | null) {
   const query = useQuery({
-    queryKey: ['project-members', projectId],
-    queryFn: () => listProjectMembers(projectId!),
-    enabled: !!projectId,
+    queryKey: ['project-members', projectId ?? 'all'],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: true,
     staleTime: 60_000,
   })
 
