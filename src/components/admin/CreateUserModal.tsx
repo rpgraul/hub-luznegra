@@ -1,16 +1,12 @@
 import { useState, type FormEvent } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  toast,
+  Button,
+  Modal,
+  TextField,
+  Label,
+  Input,
+} from '@heroui/react'
 import { createUser } from '@/lib/supabaseClient'
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,}$/
@@ -87,79 +83,60 @@ export default function CreateUserModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Novo Usuário</DialogTitle>
-          <DialogDescription>
-            A conta será criada com senha temporária. O e-mail de boas-vindas
-            será enviado em breve.
-          </DialogDescription>
-        </DialogHeader>
+    <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Backdrop />
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-md">
+          <Modal.Header>
+            <Modal.Heading>Novo Usuário</Modal.Heading>
+          </Modal.Header>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Modal.Body>
+              <TextField.Root
+                value={username}
+                onChange={setUsername}
+                autoFocus
+                isRequired
+              >
+                <Label>Username</Label>
+                <Input placeholder="ex: joao.silva" />
+              </TextField.Root>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cu-username">Username</Label>
-            <Input
-              id="cu-username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="ex: joao.silva"
-              autoFocus
-              required
-            />
-          </div>
+              <TextField.Root value={email} onChange={setEmail} type="email" isRequired>
+                <Label>E-mail</Label>
+                <Input placeholder="joao@editora.com.br" />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="cu-email">E-mail</Label>
-            <Input
-              id="cu-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="joao@editora.com.br"
-              required
-            />
-          </div>
+              <TextField.Root value={fullName} onChange={setFullName}>
+                <Label>Nome completo</Label>
+                <Input placeholder="João da Silva" />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="cu-fullname">Nome completo</Label>
-            <Input
-              id="cu-fullname"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="João da Silva"
-            />
-          </div>
+              <TextField.Root
+                value={password}
+                onChange={setPassword}
+                type="password"
+                autoComplete="new-password"
+                isRequired
+              >
+                <Label>Senha temporária</Label>
+                <Input />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="cu-password">Senha temporária</Label>
-            <Input
-              id="cu-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          </div>
-
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Criando...' : 'Criar usuário'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline" type="button" onPress={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" isDisabled={submitting}>
+                {submitting ? 'Criando...' : 'Criar usuário'}
+              </Button>
+            </Modal.Footer>
+          </form>
+          <Modal.CloseTrigger />
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Root>
   )
 }

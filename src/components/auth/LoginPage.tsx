@@ -1,9 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useNavigate } from 'react-router'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Checkbox } from '@/components/ui/checkbox'
+import { Button, TextField, Label, Input, Checkbox } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 
 export default function LoginPage() {
@@ -49,44 +46,35 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="identifier">Usuário ou E-mail</Label>
-          <Input
-            id="identifier"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            autoComplete="username"
-            autoFocus
-            required
-          />
-        </div>
+        <TextField.Root
+          value={identifier}
+          onChange={setIdentifier}
+          autoComplete="username"
+          isRequired
+          autoFocus
+        >
+          <Label>Usuário ou E-mail</Label>
+          <Input />
+        </TextField.Root>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Senha</Label>
-          <Input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-        </div>
+        <TextField.Root
+          value={password}
+          onChange={setPassword}
+          type="password"
+          autoComplete="current-password"
+          isRequired
+        >
+          <Label>Senha</Label>
+          <Input />
+        </TextField.Root>
 
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="remember"
-            checked={remember}
-            onCheckedChange={(checked) => setRemember(checked === true)}
-          />
-          <Label htmlFor="remember" className="text-sm font-normal">
-            Manter logado
-          </Label>
-        </div>
+        <Checkbox isSelected={remember} onChange={setRemember}>
+          Manter logado
+        </Checkbox>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        <Button type="submit" className="w-full" disabled={submitting}>
+        <Button type="submit" className="w-full" isDisabled={submitting}>
           {submitting ? 'Entrando...' : 'Entrar'}
         </Button>
       </form>

@@ -4,7 +4,7 @@ import { withDragAndDrop } from '@/lib/withDragAndDrop'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css'
 import moment from 'moment/min/moment-with-locales'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { userColor } from '@/utils/colors'
 import type { Task } from '@/types/database'
 
@@ -88,7 +88,7 @@ export default function CalendarView({
         start_date: moment(start).format('YYYY-MM-DD'),
         due_date: moment(end).subtract(1, 'days').format('YYYY-MM-DD'),
       },
-    }).catch(() => toast.error('Não foi possível salvar as datas.'))
+    }).catch(() => toast.danger('Não foi possível salvar as datas.'))
   }
 
   const handleEventResize: withDragAndDropProps<CalendarEvent>['onEventResize'] = ({
@@ -102,7 +102,7 @@ export default function CalendarView({
         start_date: moment(start).format('YYYY-MM-DD'),
         due_date: moment(end).subtract(1, 'days').format('YYYY-MM-DD'),
       },
-    }).catch(() => toast.error('Não foi possível salvar as datas.'))
+    }).catch(() => toast.danger('Não foi possível salvar as datas.'))
   }
 
   return (

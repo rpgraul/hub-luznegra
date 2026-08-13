@@ -1,16 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { toast, Button, Modal, TextField, Label, Input } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import {
@@ -160,145 +149,130 @@ export default function ProfileModal({ open, onOpenChange }: ProfileModalProps) 
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Perfil</DialogTitle>
-            <DialogDescription>
-              Atualize suas informações, senha e férias.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="flex items-center gap-4">
-              {avatarUrl ? (
-                <img
-                  src={avatarUrl}
-                  alt="Foto de perfil"
-                  className="size-16 rounded-full object-cover"
-                />
-              ) : (
-                <span
-                  className="flex size-16 items-center justify-center rounded-full text-xl font-semibold text-white"
-                  style={{ backgroundColor: userColor(user?.id ?? '') }}
-                >
-                  {displayName.charAt(0).toUpperCase()}
-                </span>
-              )}
-              <div className="space-y-1">
-                <Label
-                  htmlFor="avatar-file"
-                  className="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium"
-                >
-                  <i className="fa-solid fa-camera mr-2" />
-                  Alterar foto
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  JPG ou PNG, máximo 2MB
-                </p>
-                <Input
-                  id="avatar-file"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="p-fullname">Nome completo</Label>
-              <Input
-                id="p-fullname"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-3 rounded-md border p-4">
-              <h2 className="text-sm font-medium">Alterar senha</h2>
-              <div className="space-y-2">
-                <Label htmlFor="p-current-password">Senha atual</Label>
-                <Input
-                  id="p-current-password"
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="p-new-password">Nova senha</Label>
-                  <Input
-                    id="p-new-password"
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    autoComplete="new-password"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="p-confirm-password">Confirmar nova senha</Label>
-                  <Input
-                    id="p-confirm-password"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    autoComplete="new-password"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Deixe em branco para não alterar.
+      <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
+        <Modal.Backdrop />
+        <Modal.Container>
+          <Modal.Dialog className="sm:max-w-lg">
+            <Modal.Header>
+              <Modal.Heading>Perfil</Modal.Heading>
+              <p className="text-sm text-muted-foreground">
+                Atualize suas informações, senha e férias.
               </p>
-            </div>
+            </Modal.Header>
 
-            <div className="space-y-3 rounded-md border p-4">
-              <h2 className="text-sm font-medium">Férias</h2>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="p-ferias-inicio">Início</Label>
-                  <Input
-                    id="p-ferias-inicio"
-                    type="date"
-                    value={feriasInicio}
-                    onChange={(e) => setFeriasInicio(e.target.value)}
-                  />
+            <Modal.Body>
+              <form id="profile-form" onSubmit={handleSubmit} className="space-y-6">
+                <div className="flex items-center gap-4">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Foto de perfil"
+                      className="size-16 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="flex size-16 items-center justify-center rounded-full text-xl font-semibold text-white"
+                      style={{ backgroundColor: userColor(user?.id ?? '') }}
+                    >
+                      {displayName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor="avatar-file"
+                      className="cursor-pointer rounded-md border px-3 py-1.5 text-sm font-medium"
+                    >
+                      <i className="fa-solid fa-camera mr-2" />
+                      Alterar foto
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      JPG ou PNG, máximo 2MB
+                    </p>
+                    <Input
+                      id="avatar-file"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="p-ferias-fim">Fim</Label>
-                  <Input
-                    id="p-ferias-fim"
-                    type="date"
-                    value={feriasFim}
-                    onChange={(e) => setFeriasFim(e.target.value)}
-                  />
+
+                <TextField.Root value={fullName} onChange={setFullName}>
+                  <Label>Nome completo</Label>
+                  <Input />
+                </TextField.Root>
+
+                <div className="space-y-3 rounded-md border p-4">
+                  <h2 className="text-sm font-medium">Alterar senha</h2>
+                  <TextField.Root
+                    value={currentPassword}
+                    onChange={setCurrentPassword}
+                    type="password"
+                    autoComplete="current-password"
+                  >
+                    <Label>Senha atual</Label>
+                    <Input />
+                  </TextField.Root>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <TextField.Root
+                      value={newPassword}
+                      onChange={setNewPassword}
+                      type="password"
+                      autoComplete="new-password"
+                    >
+                      <Label>Nova senha</Label>
+                      <Input />
+                    </TextField.Root>
+                    <TextField.Root
+                      value={confirmPassword}
+                      onChange={setConfirmPassword}
+                      type="password"
+                      autoComplete="new-password"
+                    >
+                      <Label>Confirmar nova senha</Label>
+                      <Input />
+                    </TextField.Root>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Deixe em branco para não alterar.
+                  </p>
                 </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Ao salvar, você será avisado sobre tarefas atribuídas no
-                período.
-              </p>
-            </div>
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+                <div className="space-y-3 rounded-md border p-4">
+                  <h2 className="text-sm font-medium">Férias</h2>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <TextField.Root value={feriasInicio} onChange={setFeriasInicio} type="date">
+                      <Label>Início</Label>
+                      <Input />
+                    </TextField.Root>
+                    <TextField.Root value={feriasFim} onChange={setFeriasFim} type="date">
+                      <Label>Fim</Label>
+                      <Input />
+                    </TextField.Root>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Ao salvar, você será avisado sobre tarefas atribuídas no
+                    período.
+                  </p>
+                </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-              >
+                {error && <p className="text-sm text-destructive">{error}</p>}
+              </form>
+            </Modal.Body>
+
+            <Modal.Footer>
+              <Button variant="outline" onPress={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={saving}>
+              <Button type="submit" form="profile-form" isDisabled={saving}>
                 {saving ? 'Salvando...' : 'Salvar'}
               </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+            </Modal.Footer>
+            <Modal.CloseTrigger />
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Root>
 
       <FeriasAlert
         open={alertOpen}

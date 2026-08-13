@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Gantt from 'frappe-gantt'
 import '@/assets/frappe-gantt.css'
-import { toast } from 'sonner'
+import { toast } from '@heroui/react'
 import { userColor } from '@/utils/colors'
 import type { Task } from '@/types/database'
 
@@ -72,7 +72,7 @@ export default function GanttView({
         void updateTask({
           id: task.id,
           patch: { start_date: nextStart, due_date: nextDue },
-        }).catch(() => toast.error('Não foi possível salvar as datas.'))
+        }).catch(() => toast.danger('Não foi possível salvar as datas.'))
       },
     })
 

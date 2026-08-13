@@ -1,30 +1,5 @@
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { toast, Button, Checkbox, Table, Select, ListBox, Chip, AlertDialog } from '@heroui/react'
 import { userColor, userRowColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
 import { PRIORITY_ICONS, STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from '@/utils/status'
@@ -49,21 +24,25 @@ const STATUS_ORDER: Record<Task['status'], number> = {
   done: 4,
 }
 
+const STATUS_CHIP_COLOR: Record<Task['status'], string> = {
+  backlog: 'default',
+  todo: 'secondary',
+  in_progress: 'primary',
+  review: 'warning',
+  done: 'success',
+}
+
 function StatusPill({ status }: { status: Task['status'] }) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
-      style={{
-        color: STATUS_COLORS[status],
-        backgroundColor: `${STATUS_COLORS[status]}1A`,
-      }}
-    >
-      <span
-        className="size-1.5 rounded-full"
-        style={{ backgroundColor: STATUS_COLORS[status] }}
-      />
-      {STATUS_LABELS[status]}
-    </span>
+    <Chip size="sm" color={STATUS_CHIP_COLOR[status] as 'default'} variant="soft">
+      <span className="flex items-center gap-1.5">
+        <span
+          className="size-1.5 rounded-full"
+          style={{ backgroundColor: STATUS_COLORS[status] }}
+        />
+        {STATUS_LABELS[status]}
+      </span>
+    </Chip>
   )
 }
 
@@ -136,21 +115,19 @@ function TaskRow({
     : undefined
 
   return (
-    <TableRow
+    <Table.Row
       style={rowStyle}
-      className={
-        selected ? 'cursor-pointer bg-primary/5' : 'cursor-pointer'
-      }
+      className={selected ? 'cursor-pointer bg-primary/5' : 'cursor-pointer'}
       onClick={onOpen}
     >
-      <TableCell onClick={(e) => e.stopPropagation()}>
+      <Table.Cell onClick={(e) => e.stopPropagation()}>
         <Checkbox
-          checked={selected}
-          onCheckedChange={(checked) => onToggle(checked === true)}
+          isSelected={selected}
+          onChange={(checked) => onToggle(checked)}
           aria-label={`Selecionar ${task.title}`}
         />
-      </TableCell>
-      <TableCell>
+      </Table.Cell>
+      <Table.Cell>
         <div
           className="flex items-center gap-2 text-sm font-medium"
           style={{ paddingLeft: isChild ? 20 : 0 }}
@@ -168,20 +145,20 @@ function TaskRow({
             {task.title}
           </span>
         </div>
-      </TableCell>
-      <TableCell>
+      </Table.Cell>
+      <Table.Cell>
         <AssigneeCell member={memberLookup(task.assigned_to)} />
-      </TableCell>
-      <TableCell>
+      </Table.Cell>
+      <Table.Cell>
         <StatusPill status={task.status} />
-      </TableCell>
-      <TableCell>
+      </Table.Cell>
+      <Table.Cell>
         <PriorityBadge priority={task.priority} />
-      </TableCell>
-      <TableCell className={`text-xs ${overdue ? 'font-medium text-red-600' : ''}`}>
+      </Table.Cell>
+      <Table.Cell className={`text-xs ${overdue ? 'font-medium text-red-600' : ''}`}>
         {task.due_date ? formatDate(task.due_date) : '—'}
-      </TableCell>
-      <TableCell className="text-center text-xs text-muted-foreground">
+      </Table.Cell>
+      <Table.Cell className="text-center text-xs text-muted-foreground">
         {childrenCount > 0 ? (
           <span>
             <i className="fa-regular fa-sitemap mr-1" />
@@ -190,8 +167,75 @@ function TaskRow({
         ) : (
           '—'
         )}
-      </TableCell>
-    </TableRow>
+      </Table.Cell>
+    </Table.Row>
+  )
+}
+
+interface TasksTableProps {
+  rows: Task[]
+  selected: Set<string>
+  grouped?: boolean
+  emptyMessage: string
+  onToggle: (taskId: string, checked: boolean) => void
+  onOpen: (task: Task) => void
+  toggleAll: (checked: boolean) => void
+  memberOf: (id: string | null) => ProjectMember | null
+  countSubtasks: (task: Task) => number
+}
+
+function TasksTable({
+  rows,
+  selected,
+  emptyMessage,
+  onToggle,
+  onOpen,
+  toggleAll,
+  memberOf,
+  countSubtasks,
+}: TasksTableProps) {
+  const allSelected = rows.length > 0 && rows.every((task) => selected.has(task.id))
+  const partialSelected = selected.size > 0 && !allSelected
+
+  return (
+    <Table.Root aria-label="Tarefas" className="w-full">
+      <Table.Header>
+        <Table.Column className="w-10">
+          <Checkbox
+            isSelected={allSelected}
+            isIndeterminate={partialSelected}
+            onChange={(checked) => toggleAll(checked)}
+            aria-label="Selecionar todas"
+          />
+        </Table.Column>
+        <Table.Column>Título</Table.Column>
+        <Table.Column>Responsável</Table.Column>
+        <Table.Column>Status</Table.Column>
+        <Table.Column>Prioridade</Table.Column>
+        <Table.Column>Vencimento</Table.Column>
+        <Table.Column className="text-center">Subtarefas</Table.Column>
+      </Table.Header>
+      <Table.Body>
+        {rows.length === 0 && (
+          <Table.Row className="hover:bg-transparent">
+            <Table.Cell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+              {emptyMessage}
+            </Table.Cell>
+          </Table.Row>
+        )}
+        {rows.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            selected={selected.has(task.id)}
+            childrenCount={countSubtasks(task)}
+            memberOf={memberOf}
+            onToggle={(checked) => onToggle(task.id, checked)}
+            onOpen={() => onOpen(task)}
+          />
+        ))}
+      </Table.Body>
+    </Table.Root>
   )
 }
 
@@ -250,8 +294,6 @@ export default function ListView({
     return list
   }, [tasks, projects, grouped])
 
-  const allSelected = rows.length > 0 && rows.every((task) => selected.has(task.id))
-
   function toggleAll(checked: boolean) {
     if (checked) {
       setSelected(new Set(rows.map((task) => task.id)))
@@ -281,7 +323,7 @@ export default function ListView({
         `${ids.length} tarefa(s) movida(s) para ${STATUS_LABELS[status]}.`,
       )
     } catch (error) {
-      toast.error(
+      toast.danger(
         error instanceof Error
           ? error.message
           : 'Não foi possível mover as tarefas.',
@@ -297,7 +339,7 @@ export default function ListView({
       setConfirmDelete(false)
       toast.success(`${ids.length} tarefa(s) excluída(s).`)
     } catch (error) {
-      toast.error(
+      toast.danger(
         error instanceof Error
           ? error.message
           : 'Não foi possível excluir as tarefas.',
@@ -305,18 +347,8 @@ export default function ListView({
     }
   }
 
-  function renderRows(list: Task[]) {
-    return list.map((task) => (
-      <TaskRow
-        key={task.id}
-        task={task}
-        selected={selected.has(task.id)}
-        childrenCount={tasks.filter((t) => t.parent_id === task.id).length}
-        memberOf={memberOf}
-        onToggle={(checked) => toggleOne(task.id, checked)}
-        onOpen={() => onOpenTask(task)}
-      />
-    ))
+  function countSubtasks(task: Task) {
+    return tasks.filter((t) => t.parent_id === task.id).length
   }
 
   const emptyMessage = grouped ? 'Nenhuma tarefa por aqui.' : 'Nenhuma tarefa neste projeto.'
@@ -349,32 +381,16 @@ export default function ListView({
                   </span>
                 </header>
                 <div className="rounded-xl border bg-background">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10" />
-                        <TableHead>Título</TableHead>
-                        <TableHead className="w-40">Responsável</TableHead>
-                        <TableHead className="w-32">Status</TableHead>
-                        <TableHead className="w-28">Prioridade</TableHead>
-                        <TableHead className="w-28">Vencimento</TableHead>
-                        <TableHead className="w-24 text-center">Subtarefas</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sectionRows.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={7}
-                            className="py-8 text-center text-sm text-muted-foreground"
-                          >
-                            {emptyMessage}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {renderRows(sectionRows)}
-                    </TableBody>
-                  </Table>
+                  <TasksTable
+                    rows={sectionRows}
+                    selected={selected}
+                    emptyMessage={emptyMessage}
+                    onToggle={toggleOne}
+                    onOpen={onOpenTask}
+                    toggleAll={toggleAll}
+                    memberOf={memberOf}
+                    countSubtasks={countSubtasks}
+                  />
                 </div>
               </section>
             )
@@ -382,40 +398,16 @@ export default function ListView({
         </div>
       ) : (
         <div className="rounded-xl border bg-background">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={
-                      allSelected || (selected.size > 0 ? 'indeterminate' : false)
-                    }
-                    onCheckedChange={(checked) => toggleAll(checked === true)}
-                    aria-label="Selecionar todas"
-                  />
-                </TableHead>
-                <TableHead>Título</TableHead>
-                <TableHead className="w-40">Responsável</TableHead>
-                <TableHead className="w-32">Status</TableHead>
-                <TableHead className="w-28">Prioridade</TableHead>
-                <TableHead className="w-28">Vencimento</TableHead>
-                <TableHead className="w-24 text-center">Subtarefas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="py-10 text-center text-sm text-muted-foreground"
-                  >
-                    {emptyMessage}
-                  </TableCell>
-                </TableRow>
-              )}
-              {renderRows(rows)}
-            </TableBody>
-          </Table>
+          <TasksTable
+            rows={rows}
+            selected={selected}
+            emptyMessage={emptyMessage}
+            onToggle={toggleOne}
+            onOpen={onOpenTask}
+            toggleAll={toggleAll}
+            memberOf={memberOf}
+            countSubtasks={countSubtasks}
+          />
         </div>
       )}
 
@@ -426,27 +418,32 @@ export default function ListView({
           </span>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Mover para:</span>
-            <Select
-              value=""
-              onValueChange={(value) => void moveSelected(value as TaskStatus)}
+            <Select.Root
+              selectedKey={null}
+              onSelectionChange={(value) => void moveSelected(value as TaskStatus)}
+              aria-label="Mover selecionadas"
+              className="w-40"
+              placeholder="Escolher status"
             >
-              <SelectTrigger className="h-8 w-40" aria-label="Mover selecionadas">
-                <SelectValue placeholder="Escolher status" />
-              </SelectTrigger>
-              <SelectContent>
-                {TASK_STATUSES.map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {STATUS_LABELS[status]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select.Trigger>
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox.Root>
+                  {TASK_STATUSES.map((status) => (
+                    <ListBox.Item key={status} id={status} textValue={STATUS_LABELS[status]}>
+                      {STATUS_LABELS[status]}
+                    </ListBox.Item>
+                  ))}
+                </ListBox.Root>
+              </Select.Popover>
+            </Select.Root>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Button
-              variant="destructive"
+              variant="danger"
               size="sm"
-              onClick={() => setConfirmDelete(true)}
+              onPress={() => setConfirmDelete(true)}
             >
               <i className="fa-solid fa-trash mr-1" />
               Excluir
@@ -454,7 +451,7 @@ export default function ListView({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setSelected(new Set())}
+              onPress={() => setSelected(new Set())}
             >
               Limpar
             </Button>
@@ -462,26 +459,31 @@ export default function ListView({
         </div>
       )}
 
-      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir tarefas selecionadas?</DialogTitle>
-            <DialogDescription>
-              Esta ação é definitiva. As {selected.size} tarefa(s) selecionadas
-              serão excluídas (junto com suas subtarefas).
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(false)}>
-              Cancelar
-            </Button>
-            <Button variant="destructive" onClick={() => void deleteSelected()}>
-              <i className="fa-solid fa-trash mr-1" />
-              Excluir
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialog.Backdrop />
+        <AlertDialog.Container>
+          <AlertDialog.Dialog className="sm:max-w-md">
+            <AlertDialog.Header>
+              <AlertDialog.Heading>Excluir tarefas selecionadas?</AlertDialog.Heading>
+              <p className="text-sm text-muted-foreground">
+                Esta ação é definitiva. As {selected.size} tarefa(s) selecionadas
+                serão excluídas (junto com suas subtarefas).
+              </p>
+            </AlertDialog.Header>
+            <AlertDialog.Body />
+            <AlertDialog.Footer>
+              <Button variant="outline" onPress={() => setConfirmDelete(false)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" onPress={() => void deleteSelected()}>
+                <i className="fa-solid fa-trash mr-1" />
+                Excluir
+              </Button>
+            </AlertDialog.Footer>
+            <AlertDialog.CloseTrigger />
+          </AlertDialog.Dialog>
+        </AlertDialog.Container>
+      </AlertDialog.Root>
     </div>
   )
 }

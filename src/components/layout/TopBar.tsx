@@ -1,14 +1,11 @@
 import { useNavigate } from 'react-router'
 import type { DefaultView, Project } from '@/types/database'
-import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import {
+  Button,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  ListBox,
+  Switch,
+} from '@heroui/react'
 import NotificationBell from '@/components/notifications/NotificationBell'
 import AvatarDropdown from '@/components/profile/AvatarDropdown'
 
@@ -61,56 +58,55 @@ export default function TopBar({
       </button>
 
       <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
-        <Select
-          value={selectValue}
-          onValueChange={(value) =>
-            onProjectChange(value === ALL_PROJECTS ? null : value)
+        <Select.Root
+          selectedKey={selectValue}
+          onSelectionChange={(value) =>
+            onProjectChange(value === ALL_PROJECTS ? null : (value as string))
+          }
+          aria-label="Filtrar por projeto"
+          className="w-full max-w-xs"
+          placeholder={
+            projects.length === 0 ? 'Sem projetos' : 'Todos os projetos'
           }
         >
-          <SelectTrigger
-            className="w-full max-w-xs"
-            aria-label="Filtrar por projeto"
-          >
-            <SelectValue
-              placeholder={
-                projects.length === 0 ? 'Sem projetos' : 'Todos os projetos'
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {projects.length === 0 ? (
-              <SelectItem value={ALL_PROJECTS} disabled>
-                Nenhum projeto disponível
-              </SelectItem>
-            ) : (
-              <>
-                <SelectItem value={ALL_PROJECTS}>
-                  <span className="inline-flex items-center gap-2">
-                    <i className="fa-solid fa-layer-group text-muted-foreground" />
-                    Todos os projetos
-                  </span>
-                </SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
+          <Select.Trigger className="w-full">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox.Root>
+              {projects.length === 0 ? (
+                <ListBox.Item id={ALL_PROJECTS} isDisabled textValue="Nenhum projeto disponível">
+                  Nenhum projeto disponível
+                </ListBox.Item>
+              ) : (
+                <>
+                  <ListBox.Item id={ALL_PROJECTS} textValue="Todos os projetos">
                     <span className="inline-flex items-center gap-2">
-                      <span
-                        className="size-2.5 rounded-full"
-                        style={{ backgroundColor: project.color }}
-                      />
-                      {project.name}
+                      <i className="fa-solid fa-layer-group text-muted-foreground" />
+                      Todos os projetos
                     </span>
-                  </SelectItem>
-                ))}
-              </>
-            )}
-          </SelectContent>
-        </Select>
+                  </ListBox.Item>
+                  {projects.map((project) => (
+                    <ListBox.Item key={project.id} id={project.id} textValue={project.name}>
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          className="size-2.5 rounded-full"
+                          style={{ backgroundColor: project.color }}
+                        />
+                        {project.name}
+                      </span>
+                    </ListBox.Item>
+                  ))}
+                </>
+              )}
+            </ListBox.Root>
+          </Select.Popover>
+        </Select.Root>
 
         <Button
           variant="outline"
-          size="icon"
-          onClick={onCreateProject}
-          title="Novo projeto"
+          isIconOnly
+          onPress={onCreateProject}
           aria-label="Novo projeto"
         >
           <i className="fa-solid fa-plus" />
@@ -121,12 +117,11 @@ export default function TopBar({
         {VIEWS.map((v) => (
           <Button
             key={v.id}
-            variant={view === v.id ? 'secondary' : 'ghost'}
+            variant={view === v.id ? 'primary' : 'ghost'}
             size="sm"
             className="gap-2"
-            onClick={() => onViewChange(v.id)}
+            onPress={() => onViewChange(v.id)}
             aria-pressed={view === v.id}
-            title={v.label}
           >
             <i className={`fa-solid ${v.icon}`} />
             <span className="hidden sm:inline">{v.label}</span>
@@ -143,9 +138,10 @@ export default function TopBar({
         }
       >
         <Switch
-          checked={showAllTasks}
-          onCheckedChange={onShowAllChange}
+          isSelected={showAllTasks}
+          onChange={onShowAllChange}
           aria-label="Mostrar todas as tarefas"
+          size="sm"
         />
         <span className="hidden text-xs text-muted-foreground md:inline">
           {showAllTasks ? 'Todos' : 'Minhas'}

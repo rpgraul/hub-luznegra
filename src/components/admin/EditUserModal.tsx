@@ -1,23 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
+  toast,
+  Button,
+  Modal,
+  TextField,
+  Label,
+  Input,
   Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  ListBox,
+} from '@heroui/react'
 import { updateUser, type AdminUser, type UserRoleName } from '@/lib/supabaseClient'
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,}$/
@@ -95,84 +86,84 @@ export default function EditUserModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Editar Usuário</DialogTitle>
-          <DialogDescription>
-            Deixe a senha em branco para não alterá-la.
-          </DialogDescription>
-        </DialogHeader>
+    <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Backdrop />
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-md">
+          <Modal.Header>
+            <Modal.Heading>Editar Usuário</Modal.Heading>
+          </Modal.Header>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Modal.Body>
+              <TextField.Root
+                value={username}
+                onChange={setUsername}
+                autoFocus
+                isRequired
+              >
+                <Label>Username</Label>
+                <Input />
+              </TextField.Root>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="eu-username">Username</Label>
-            <Input
-              id="eu-username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-              required
-            />
-          </div>
+              <TextField.Root value={email} onChange={setEmail} type="email" isRequired>
+                <Label>E-mail</Label>
+                <Input />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="eu-email">E-mail</Label>
-            <Input
-              id="eu-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
+              <TextField.Root value={fullName} onChange={setFullName}>
+                <Label>Nome completo</Label>
+                <Input />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="eu-fullname">Nome completo</Label>
-            <Input
-              id="eu-fullname"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
-          </div>
+              <Select.Root
+                selectedKey={role}
+                onSelectionChange={(value) => setRole(value as UserRoleName)}
+                placeholder="Selecione o papel"
+              >
+                <Label>Papel</Label>
+                <Select.Trigger className="w-full">
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox.Root>
+                    <ListBox.Item id="member" textValue="Membro">
+                      Membro
+                    </ListBox.Item>
+                    <ListBox.Item id="admin" textValue="Admin">
+                      Admin
+                    </ListBox.Item>
+                  </ListBox.Root>
+                </Select.Popover>
+              </Select.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="eu-role">Papel</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as UserRoleName)}>
-              <SelectTrigger id="eu-role">
-                <SelectValue placeholder="Selecione o papel" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Membro</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <TextField.Root
+                value={password}
+                onChange={setPassword}
+                type="password"
+                autoComplete="new-password"
+              >
+                <Label>Nova senha (opcional)</Label>
+                <Input placeholder="Deixe em branco para manter" />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="eu-password">Nova senha (opcional)</Label>
-            <Input
-              id="eu-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              placeholder="Deixe em branco para manter"
-            />
-          </div>
+              <p className="text-xs text-muted-foreground">
+                Deixe a senha em branco para não alterá-la.
+              </p>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? 'Salvando...' : 'Salvar'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline" type="button" onPress={() => onOpenChange(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" isDisabled={submitting}>
+                {submitting ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </Modal.Footer>
+          </form>
+          <Modal.CloseTrigger />
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Root>
   )
 }

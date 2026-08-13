@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '@heroui/react'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
 import KanbanView from '@/components/views/KanbanView'
 import ListView from '@/components/views/ListView'
@@ -122,7 +122,7 @@ export default function TaskWorkspace({
       {!drawerOpen && (
         <Button
           className="absolute bottom-6 right-6 z-10 gap-2 shadow-lg"
-          onClick={() => openNewTask()}
+          onPress={() => openNewTask()}
         >
           <i className="fa-solid fa-plus" />
           Nova tarefa

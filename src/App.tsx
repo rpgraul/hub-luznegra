@@ -1,12 +1,12 @@
 import { BrowserRouter } from 'react-router'
 import AppRoutes from '@/routes'
-import { Toaster } from '@/components/ui/sonner'
+import { ToastProvider } from '@heroui/react'
 
 function App() {
   return (
     <BrowserRouter>
+      <ToastProvider placement="top end" />
       <AppRoutes />
-      <Toaster position="top-right" richColors />
     </BrowserRouter>
   )
 }

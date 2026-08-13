@@ -5,9 +5,7 @@ import {
   Droppable,
   type DropResult,
 } from '@hello-pangea/dnd'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { toast, Button, Input } from '@heroui/react'
 import TaskCard from '@/components/tasks/TaskCard'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { TASK_STATUSES } from '@/hooks/useTasks'
@@ -64,7 +62,7 @@ export default function KanbanView({
       })
       setQuickAdd((prev) => ({ ...prev, [status]: '' }))
     } catch (error) {
-      toast.error(
+      toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a tarefa.',
       )
     }
@@ -86,7 +84,7 @@ export default function KanbanView({
         void reorderTask({ id: draggableId, orderIndex: destination.index })
       })
     } catch (error) {
-      toast.error(
+      toast.danger(
         error instanceof Error ? error.message : 'Não foi possível mover a tarefa.',
       )
     }
@@ -182,9 +180,9 @@ export default function KanbanView({
                   />
                   <Button
                     variant="outline"
-                    size="icon"
+                    isIconOnly
                     className="h-8 w-8 shrink-0"
-                    onClick={() => void addQuick(status)}
+                    onPress={() => void addQuick(status)}
                     aria-label={`Adicionar tarefa em ${STATUS_LABELS[status]}`}
                   >
                     <i className="fa-solid fa-plus text-xs" />
@@ -196,7 +194,7 @@ export default function KanbanView({
                     variant="ghost"
                     size="sm"
                     className="w-full text-muted-foreground"
-                    onClick={onOpenNewTask}
+                    onPress={onOpenNewTask}
                   >
                     <i className="fa-solid fa-plus text-xs" />
                     Nova tarefa

@@ -1,18 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Check } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { toast, Button, Modal, TextField, Label, Input, TextArea } from '@heroui/react'
 import { createProject } from '@/lib/api/projects'
 import type { Project } from '@/types/database'
 
@@ -67,7 +55,7 @@ export default function ProjectModal({
       onOpenChange(false)
       onCreated(project)
     } catch (error) {
-      toast.error(
+      toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar o projeto.',
       )
     } finally {
@@ -76,74 +64,64 @@ export default function ProjectModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Novo Projeto</DialogTitle>
-          <DialogDescription>
-            Crie um projeto para organizar as tarefas da equipe.
-          </DialogDescription>
-        </DialogHeader>
+    <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
+      <Modal.Backdrop />
+      <Modal.Container>
+        <Modal.Dialog className="sm:max-w-md">
+          <Modal.Header>
+            <Modal.Heading>Novo Projeto</Modal.Heading>
+            <p className="text-sm text-muted-foreground">
+              Crie um projeto para organizar as tarefas da equipe.
+            </p>
+          </Modal.Header>
+          <Modal.Body>
+            <form id="project-form" onSubmit={handleSubmit} className="space-y-4">
+              <TextField.Root value={name} onChange={setName} isRequired>
+                <Label>Nome</Label>
+                <Input placeholder="ex: Catálogo 2026" />
+              </TextField.Root>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="proj-name">Nome</Label>
-            <Input
-              id="proj-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="ex: Catálogo 2026"
-              autoFocus
-              required
-            />
-          </div>
+              <TextField.Root value={description} onChange={setDescription}>
+                <Label>Descrição</Label>
+                <TextArea
+                  placeholder="O que este projeto envolve?"
+                  rows={3}
+                />
+              </TextField.Root>
 
-          <div className="space-y-2">
-            <Label htmlFor="proj-desc">Descrição</Label>
-            <Textarea
-              id="proj-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="O que este projeto envolve?"
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Cor</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              {PROJECT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  aria-label={`Cor ${c}`}
-                  aria-pressed={color === c}
-                  className={`flex size-7 items-center justify-center rounded-full transition-transform ${
-                    color === c ? 'scale-110 ring-2 ring-ring ring-offset-2' : ''
-                  }`}
-                  style={{ backgroundColor: c }}
-                >
-                  {color === c && <Check className="size-4 text-white" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+              <div className="space-y-2">
+                <Label>Cor</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {PROJECT_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setColor(c)}
+                      aria-label={`Cor ${c}`}
+                      aria-pressed={color === c}
+                      className={`flex size-7 items-center justify-center rounded-full transition-transform ${
+                        color === c ? 'scale-110 ring-2 ring-ring ring-offset-2' : ''
+                      }`}
+                      style={{ backgroundColor: c }}
+                    >
+                      {color === c && <Check className="size-4 text-white" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </form>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline" onPress={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" form="project-form" isDisabled={submitting}>
               {submitting ? 'Criando...' : 'Criar projeto'}
             </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          </Modal.Footer>
+          <Modal.CloseTrigger />
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Root>
   )
 }

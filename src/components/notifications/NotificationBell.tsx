@@ -1,14 +1,6 @@
 import { useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+import { Button, Dropdown, Badge } from '@heroui/react'
 import {
   getNotifications,
   getUnreadCount,
@@ -60,50 +52,48 @@ export default function NotificationBell() {
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Notificações" className="relative">
-          <i className="fa-solid fa-bell text-muted-foreground" />
-          {unread > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-semibold text-white">
-              {unread > 99 ? '99+' : unread}
-            </span>
-          )}
+    <Dropdown.Root>
+      <Dropdown.Trigger>
+        <Button variant="ghost" isIconOnly aria-label="Notificações" className="relative">
+          <Badge color="danger" placement="top-right">
+            <i className="fa-solid fa-bell text-muted-foreground" />
+            {unread > 0 && <Badge.Label>{unread > 99 ? '99+' : unread}</Badge.Label>}
+          </Badge>
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80">
-        <DropdownMenuLabel className="flex items-center justify-between">
-          <span>Notificações</span>
-          {unread > 0 && (
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => {
-                void markAllNotificationsRead()
-                refetchAll()
-              }}
-            >
-              Marcar todas como lidas
-            </button>
-          )}
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <div className="max-h-80 overflow-y-auto">
+      </Dropdown.Trigger>
+      <Dropdown.Popover className="w-80 max-w-[calc(100vw-2rem)]">
+        <Dropdown.Menu>
+          <Dropdown.Item key="__header" isDisabled className="cursor-default opacity-100">
+            <span className="flex w-full items-center justify-between">
+              <span>Notificações</span>
+              {unread > 0 && (
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => {
+                    void markAllNotificationsRead()
+                    refetchAll()
+                  }}
+                >
+                  Marcar todas como lidas
+                </button>
+              )}
+            </span>
+          </Dropdown.Item>
           {notifications.length === 0 && (
-            <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              Nenhuma notificação.
-            </p>
+            <Dropdown.Item key="__empty" isDisabled className="cursor-default opacity-100">
+              <span className="px-2 py-4 text-center text-sm text-muted-foreground">
+                Nenhuma notificação.
+              </span>
+            </Dropdown.Item>
           )}
           {notifications.map((notification) => {
             const type = TYPE_ICONS[notification.type]
             return (
-              <DropdownMenuItem
+              <Dropdown.Item
                 key={notification.id}
-                className="cursor-pointer items-start gap-3 py-2"
-                onSelect={(e) => {
-                  e.preventDefault()
-                  void handleOpen(notification)
-                }}
+                className="items-start gap-3 py-2"
+                onAction={() => void handleOpen(notification)}
               >
                 <i
                   className={`fa-solid ${type.icon} mt-0.5 text-sm ${type.color}`}
@@ -117,11 +107,11 @@ export default function NotificationBell() {
                 {!notification.read && (
                   <span className="mt-1.5 size-2 shrink-0 rounded-full bg-blue-500" />
                 )}
-              </DropdownMenuItem>
+              </Dropdown.Item>
             )
           })}
-        </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   )
 }
