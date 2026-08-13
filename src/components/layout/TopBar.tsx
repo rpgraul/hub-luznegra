@@ -52,7 +52,12 @@ export default function TopBar({
         onClick={() => navigate('/dashboard')}
         className="flex shrink-0 items-center gap-2 text-lg font-semibold"
       >
-        Hub
+        <img
+          src="/logo.svg"
+          alt="Logo da Editora Luz Negra"
+          className="h-8 w-auto"
+        />
+        <span className="hidden sm:inline">Editora Luz Negra</span>
       </button>
 
       <div className="flex min-w-0 flex-1 items-center justify-center gap-2">
