@@ -198,24 +198,36 @@ function TasksTable({
   const partialSelected = selected.size > 0 && !allSelected
 
   return (
-    <Table.Root aria-label="Tarefas" className="w-full">
-      <Table.Content>
-        <Table.Header>
-          <Table.Column className="w-10">
-            <Checkbox
-              isSelected={allSelected}
-              isIndeterminate={partialSelected}
-              onChange={(checked) => toggleAll(checked)}
-              aria-label="Selecionar todas"
-            />
-          </Table.Column>
-          <Table.Column>Título</Table.Column>
-          <Table.Column>Responsável</Table.Column>
-          <Table.Column>Status</Table.Column>
-          <Table.Column>Prioridade</Table.Column>
-          <Table.Column>Vencimento</Table.Column>
-          <Table.Column className="text-center">Subtarefas</Table.Column>
-        </Table.Header>
+    <div>
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <label className="flex cursor-pointer items-center gap-2">
+          <Checkbox
+            isSelected={allSelected}
+            isIndeterminate={partialSelected}
+            onChange={(checked) => toggleAll(checked)}
+            aria-label="Selecionar todas"
+          />
+          <span className="text-xs font-medium text-muted-foreground">
+            Selecionar todas
+          </span>
+        </label>
+        <span className="text-xs text-muted-foreground">
+          {rows.length} tarefa(s)
+        </span>
+      </div>
+      <Table.Root className="w-full">
+        <Table.Content aria-label="Tarefas">
+          <Table.Header>
+            <Table.Column className="w-10">
+              <span className="sr-only">Selecionar</span>
+            </Table.Column>
+            <Table.Column>Título</Table.Column>
+            <Table.Column>Responsável</Table.Column>
+            <Table.Column>Status</Table.Column>
+            <Table.Column>Prioridade</Table.Column>
+            <Table.Column>Vencimento</Table.Column>
+            <Table.Column className="text-center">Subtarefas</Table.Column>
+          </Table.Header>
         <Table.Body>
           {rows.length === 0 && (
             <Table.Row className="hover:bg-transparent">
@@ -236,8 +248,9 @@ function TasksTable({
             />
           ))}
         </Table.Body>
-      </Table.Content>
-    </Table.Root>
+        </Table.Content>
+      </Table.Root>
+    </div>
   )
 }
 

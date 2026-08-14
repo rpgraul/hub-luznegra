@@ -95,7 +95,7 @@ export default function UserManagement() {
       )}
 
       <Table.Root>
-        <Table.Content>
+        <Table.Content aria-label="Usuários">
           <Table.Header>
             <Table.Column isRowHeader>Usuário</Table.Column>
             <Table.Column>E-mail</Table.Column>
