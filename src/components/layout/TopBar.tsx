@@ -222,7 +222,6 @@ export default function TopBar({
             variant="ghost"
             isIconOnly
             aria-label="Layouts e combinações"
-            title="Layouts"
             className="text-primary-foreground/85 hover:bg-white/10"
           >
             <i className="fa-solid fa-sliders text-base" />
@@ -230,21 +229,32 @@ export default function TopBar({
         </Dropdown.Trigger>
         <Dropdown.Popover>
           <Dropdown.Menu>
-            <Dropdown.Section title="Predefinidos">
-              {BUILTIN_PRESETS.map((preset) => (
-                <Dropdown.Item
-                  key={preset.id}
-                  onAction={() => onApplyPreset(preset.scheme)}
-                >
-                  <i className="fa-solid fa-layer-group mr-2 text-muted-foreground" />
-                  {preset.name}
-                </Dropdown.Item>
-              ))}
-            </Dropdown.Section>
+            <Dropdown.Item key="__header" isDisabled className="cursor-default opacity-100">
+              <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Predefinidos
+              </span>
+            </Dropdown.Item>
+            {BUILTIN_PRESETS.map((preset) => (
+              <Dropdown.Item
+                key={preset.id}
+                onAction={() => onApplyPreset(preset.scheme)}
+              >
+                <i className="fa-solid fa-layer-group mr-2 text-muted-foreground" />
+                {preset.name}
+              </Dropdown.Item>
+            ))}
             {presets.length > 0 && (
-              <Dropdown.Section title="Meus layouts">
+              <>
+                <Dropdown.Item key="__mine" isDisabled className="cursor-default opacity-100">
+                  <span className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Meus layouts
+                  </span>
+                </Dropdown.Item>
                 {presets.map((preset) => (
-                  <Dropdown.Item key={preset.id} onAction={() => onApplyPreset(preset.scheme)}>
+                  <Dropdown.Item
+                    key={preset.id}
+                    onAction={() => onApplyPreset(preset.scheme)}
+                  >
                     <i className="fa-solid fa-bookmark mr-2 text-primary" />
                     {preset.name}
                   </Dropdown.Item>
@@ -259,14 +269,12 @@ export default function TopBar({
                     Remover “{preset.name}”
                   </Dropdown.Item>
                 ))}
-              </Dropdown.Section>
+              </>
             )}
-            <Dropdown.Section>
-              <Dropdown.Item onAction={() => setSavePresetOpen(true)}>
-                <i className="fa-solid fa-floppy-disk mr-2" />
-                Salvar layout atual…
-              </Dropdown.Item>
-            </Dropdown.Section>
+            <Dropdown.Item key="__save" onAction={() => setSavePresetOpen(true)}>
+              <i className="fa-solid fa-floppy-disk mr-2" />
+              Salvar layout atual…
+            </Dropdown.Item>
           </Dropdown.Menu>
         </Dropdown.Popover>
       </Dropdown.Root>
@@ -300,7 +308,7 @@ export default function TopBar({
               </p>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="bordered" onPress={() => setSavePresetOpen(false)}>
+              <Button variant="outline" onPress={() => setSavePresetOpen(false)}>
                 Cancelar
               </Button>
               <Button isDisabled={!presetName.trim()} onPress={handleSavePreset}>

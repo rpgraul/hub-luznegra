@@ -34,6 +34,7 @@ interface TaskDrawerProps {
     deleteTask: (id: string) => Promise<unknown>
     moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
     childrenOf: (id: string) => Task[]
+    refreshTasks?: () => void
   }
 }
 
@@ -199,6 +200,7 @@ export default function TaskDrawer({
         assigned_to: task.assigned_to,
       })
       setNewSubtask('')
+      creator.refreshTasks?.()
     } catch (error) {
       toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a subtarefa.',

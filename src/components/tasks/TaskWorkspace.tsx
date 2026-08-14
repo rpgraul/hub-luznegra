@@ -27,7 +27,12 @@ import {
   type LayoutState,
   type ViewLayout,
 } from '@/lib/layout'
-import type { DefaultView, Project, Task } from '@/types/database'
+import type {
+  DefaultView,
+  Json,
+  Project,
+  Task,
+} from '@/types/database'
 
 interface TaskWorkspaceProps {
   initialTaskId?: string
@@ -172,7 +177,7 @@ export default function TaskWorkspace({
         start_date: input.start_date,
         due_date: input.due_date,
         estimated_hours: input.estimated_hours,
-        description: input.description,
+        description: input.description as unknown as Json,
       })
 
       for (const subtaskTitle of input.subtasks) {
