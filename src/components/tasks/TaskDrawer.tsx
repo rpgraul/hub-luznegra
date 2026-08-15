@@ -90,7 +90,7 @@ export default function TaskDrawer({
       return
     }
     setTitleDraft(task.title)
-    const json = task.description as SerializedEditorState | null
+    const json = task.description as unknown as SerializedEditorState | null
     const parsed = json ?? { ...EMPTY_DESCRIPTION }
     setDescriptionDraft(parsed)
     setLastSavedDescription(JSON.stringify(parsed))

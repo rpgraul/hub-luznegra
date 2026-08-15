@@ -2,7 +2,7 @@
 // Edge Function: Assistente de IA do Hub (DeepSeek via OpenAI-compatible API)
 // Executa comandos em linguagem natural para gerenciar tarefas e projetos.
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.3'
+import { createClient } from '@supabase/supabase-js'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 interface Message {

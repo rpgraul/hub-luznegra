@@ -1,7 +1,7 @@
 // Edge Function: envio de e-mail via Resend (página de teste).
 // A chave RESEND_API_KEY vive apenas nas variáveis de ambiente do Supabase —
 // nunca é exposta ao frontend.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.3'
+import { createClient } from '@supabase/supabase-js'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 const FROM = 'no-reply@hub.luznegra.com.br'

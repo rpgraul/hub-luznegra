@@ -4,7 +4,7 @@
 //   diário 07:00 America/Sao_Paulo → {"job": "due"}
 //   a cada 5 minutos                → {"job": "queue"}
 // A chave RESEND_API_KEY vive apenas nas variáveis de ambiente.
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.3'
+import { createClient } from '@supabase/supabase-js'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 const FROM = 'no-reply@hub.luznegra.com.br'
