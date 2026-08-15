@@ -71,10 +71,12 @@ Deno.serve(async (req) => {
       if (a.assigned_to) ids.add(a.assigned_to)
     }
 
+    if (ids.size === 0) return json({ data: [] })
+
     const { data: profiles } = await admin
       .from('profiles')
       .select('id, username, full_name')
-      .in('id', ids)
+      .in('id', Array.from(ids))
 
     return json({ data: profiles ?? [] })
   } catch (err) {
