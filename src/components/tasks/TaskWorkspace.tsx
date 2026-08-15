@@ -299,7 +299,7 @@ export default function TaskWorkspace({
 
       {!drawerOpen && (
         <Button
-          className="absolute bottom-6 right-6 z-10 gap-2 shadow-lg"
+          className="absolute bottom-6 right-20 z-10 gap-2 shadow-lg"
           onPress={() => openNewTask()}
         >
           <i className="fa-solid fa-plus" />

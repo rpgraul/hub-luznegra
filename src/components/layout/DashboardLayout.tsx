@@ -19,6 +19,8 @@ import type { DefaultView, Project } from '@/types/database'
 import TopBar from '@/components/layout/TopBar'
 import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 import ProjectModal from '@/components/projects/ProjectModal'
+import AIAssistantFloatingButton from '@/components/ai/AIAssistantFloatingButton'
+import AIAssistantModal from '@/components/ai/AIAssistantModal'
 
 interface DashboardLayoutProps {
   children?: ReactNode
@@ -33,6 +35,7 @@ export default function DashboardLayout({
   const { preferences, setView, setProject, setShowAll } = usePreferences()
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
 
   const [layout, setLayout] = useState<LayoutState>(() => loadLayout())
   const [presets, setPresets] = useState<SavedPreset[]>(() => loadPresets())
@@ -120,6 +123,20 @@ export default function DashboardLayout({
         open={projectModalOpen}
         onOpenChange={setProjectModalOpen}
         onCreated={handleProjectCreated}
+      />
+
+      <AIAssistantFloatingButton
+        isOpen={aiModalOpen}
+        onClick={() => setAiModalOpen(!aiModalOpen)}
+      />
+
+      <AIAssistantModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        projectId={preferences?.active_project_id ?? null}
+        projectName={
+          projects.find((p) => p.id === preferences?.active_project_id)?.name
+        }
       />
     </div>
   )

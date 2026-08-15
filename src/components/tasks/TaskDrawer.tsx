@@ -94,7 +94,7 @@ export default function TaskDrawer({
     const parsed = json ?? { ...EMPTY_DESCRIPTION }
     setDescriptionDraft(parsed)
     setLastSavedDescription(JSON.stringify(parsed))
-  })
+  }, [task, projectId, projects])
 
   useEffect(() => {
     if (!comments.comments.length) return
