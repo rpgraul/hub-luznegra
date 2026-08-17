@@ -120,14 +120,30 @@ export function useTasks(showAll: boolean) {
     onMutate: async ({ id, status }) => {
       await queryClient.cancelQueries({ queryKey: KEY })
       const previous = queryClient.getQueryData<Task[]>(KEY)
-      setTasks((tasks) =>
-        tasks.map((task) => {
+      setTasks((tasks) => {
+        const current = tasks.find((t) => t.id === id)
+        let nextTasks = tasks.map((task) => {
           const affected = task.id === id || (task.parent_id === id && status === 'done')
           return affected
             ? { ...task, status, updated_at: new Date().toISOString() }
             : task
-        }),
-      )
+        })
+
+        if (status === 'done' && current?.parent_id) {
+          const parentId = current.parent_id
+          const allSiblingsDone = nextTasks
+            .filter((t) => t.parent_id === parentId)
+            .every((t) => t.status === 'done')
+          if (allSiblingsDone) {
+            nextTasks = nextTasks.map((t) =>
+              t.id === parentId
+                ? { ...t, status: 'done', updated_at: new Date().toISOString() }
+                : t,
+            )
+          }
+        }
+        return nextTasks
+      })
       return { previous }
     },
     onError: (_error, _vars, context) => {

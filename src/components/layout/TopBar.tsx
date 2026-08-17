@@ -17,10 +17,10 @@ import {
 } from '@/lib/layout'
 
 const VIEWS: Array<{ id: DefaultView; label: string; icon: string }> = [
-  { id: 'lista', label: 'Lista', icon: 'fa-list-ul' },
-  { id: 'kanban', label: 'Quadro', icon: 'fa-columns' },
-  { id: 'calendario', label: 'Calendário', icon: 'fa-calendar-days' },
   { id: 'gantt', label: 'Gantt', icon: 'fa-chart-gantt' },
+  { id: 'lista', label: 'Lista', icon: 'fa-list-ul' },
+  { id: 'kanban', label: 'Kanban', icon: 'fa-columns' },
+  { id: 'calendario', label: 'Calendário', icon: 'fa-calendar-days' },
 ]
 
 interface TopBarProps {

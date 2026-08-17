@@ -29,12 +29,22 @@ interface ListViewProps {
   deleteTask: (id: string) => Promise<unknown>
 }
 
+type SortField = 'status' | 'due_date' | 'priority' | 'title'
+type SortDirection = 'asc' | 'desc'
+
 const STATUS_ORDER: Record<Task['status'], number> = {
   backlog: 0,
   todo: 1,
   in_progress: 2,
   review: 3,
   done: 4,
+}
+
+const PRIORITY_ORDER: Record<Task['priority'], number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
 }
 
 const PRIORITY_LABELS_SHORT: Record<Task['priority'], string> = {
@@ -139,7 +149,7 @@ function TaskRow({
   const descriptionPreview = extractDescriptionText(task.description)
   const hoverTooltip = descriptionPreview
     ? `${task.title}\n\nDescrição:\n${descriptionPreview}`
-    : `${task.title}\n(Dê 2 cliques para abrir detalhes)`
+    : `${task.title}\n(Clique ou dê 2 cliques para abrir detalhes)`
 
   return (
     <Table.Row
@@ -179,6 +189,7 @@ function TaskRow({
       <Table.Cell>
         <div
           title={hoverTooltip}
+          onDoubleClick={onOpen}
           className="flex flex-col gap-1 py-1"
           style={{ paddingLeft: isChild ? 22 : 0 }}
         >
@@ -187,13 +198,14 @@ function TaskRow({
               <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
             )}
             <span
-              className={
+              onClick={onOpen}
+              className={`cursor-pointer transition hover:text-[#7b68ee] ${
                 isDone
                   ? 'text-muted-foreground line-through'
                   : overdue
                     ? 'text-rose-600 font-bold'
                     : 'text-foreground'
-              }
+              }`}
             >
               {task.title}
             </span>
@@ -205,8 +217,8 @@ function TaskRow({
                 e.stopPropagation()
                 onOpen()
               }}
-              title="Editar tarefa (2 cliques)"
-              className="cursor-pointer text-muted-foreground/40 opacity-0 transition hover:text-[#7b68ee] group-hover:opacity-100"
+              title="Abrir detalhes da tarefa"
+              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-[#7b68ee] group-hover:opacity-100"
             >
               <i className="fa-regular fa-pen-to-square text-[11px]" />
             </button>
@@ -311,6 +323,9 @@ interface TasksTableProps {
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
   projectById?: Map<string, Project>
+  onSortBy: (field: SortField) => void
+  currentSortField: SortField
+  currentSortDir: SortDirection
 }
 
 function TasksTable({
@@ -325,10 +340,24 @@ function TasksTable({
   memberOf,
   countSubtasks,
   projectById,
+  onSortBy,
+  currentSortField,
+  currentSortDir,
 }: TasksTableProps) {
   const allSelected =
     rows.length > 0 && rows.every((task) => selected.has(task.id))
   const partialSelected = selected.size > 0 && !allSelected
+
+  function renderSortIcon(field: SortField) {
+    if (currentSortField !== field) {
+      return <i className="fa-solid fa-sort ml-1 text-[10px] opacity-40 group-hover:opacity-100" />
+    }
+    return (
+      <i
+        className={`fa-solid fa-sort-${currentSortDir === 'asc' ? 'up' : 'down'} ml-1 text-[10px] text-[#7b68ee]`}
+      />
+    )
+  }
 
   return (
     <div>
@@ -346,7 +375,7 @@ function TasksTable({
           </span>
         </label>
         <span className="text-xs font-semibold text-muted-foreground">
-          {rows.length} tarefa(s) • <span className="font-normal opacity-80">2 cliques para editar</span>
+          {rows.length} tarefa(s)
         </span>
       </div>
       <Table.Root className="w-full text-xs">
@@ -358,11 +387,47 @@ function TasksTable({
             <Table.Column className="w-8 text-center">
               <span className="sr-only">Concluir</span>
             </Table.Column>
-            <Table.Column>Título & Descrição</Table.Column>
+            <Table.Column>
+              <button
+                type="button"
+                onClick={() => onSortBy('title')}
+                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <span>Título & Descrição</span>
+                {renderSortIcon('title')}
+              </button>
+            </Table.Column>
             <Table.Column>Responsável</Table.Column>
-            <Table.Column>Status</Table.Column>
-            <Table.Column>Prioridade</Table.Column>
-            <Table.Column>Vencimento</Table.Column>
+            <Table.Column>
+              <button
+                type="button"
+                onClick={() => onSortBy('status')}
+                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <span>Status</span>
+                {renderSortIcon('status')}
+              </button>
+            </Table.Column>
+            <Table.Column>
+              <button
+                type="button"
+                onClick={() => onSortBy('priority')}
+                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <span>Prioridade</span>
+                {renderSortIcon('priority')}
+              </button>
+            </Table.Column>
+            <Table.Column>
+              <button
+                type="button"
+                onClick={() => onSortBy('due_date')}
+                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <span>Vencimento</span>
+                {renderSortIcon('due_date')}
+              </button>
+            </Table.Column>
             <Table.Column className="text-center">Subtarefas</Table.Column>
           </Table.Header>
           <Table.Body>
@@ -415,32 +480,56 @@ export default function ListView({
 }: ListViewProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [sortField, setSortField] = useState<SortField>('status')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
   const projectById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
     [projects],
   )
 
+  function handleSortBy(field: SortField) {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
+  }
+
   const rows = useMemo(() => {
-    const parents = tasks
-      .filter((task) => !task.parent_id)
-      .sort(
-        (a, b) =>
-          STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
-          a.order_index - b.order_index,
-      )
+    const parents = tasks.filter((task) => !task.parent_id)
+
+    parents.sort((a, b) => {
+      let cmp = 0
+      if (sortField === 'status') {
+        cmp = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
+      } else if (sortField === 'priority') {
+        cmp = PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]
+      } else if (sortField === 'due_date') {
+        const da = a.due_date ?? '9999-99-99'
+        const db = b.due_date ?? '9999-99-99'
+        cmp = da.localeCompare(db)
+      } else if (sortField === 'title') {
+        cmp = a.title.localeCompare(b.title, 'pt-BR')
+      }
+
+      if (cmp === 0) {
+        cmp = a.order_index - b.order_index
+      }
+      return sortDirection === 'asc' ? cmp : -cmp
+    })
 
     const all: Task[] = []
     for (const parent of parents) {
       all.push(parent)
-      all.push(
-        ...tasks
-          .filter((task) => task.parent_id === parent.id)
-          .sort((a, b) => a.order_index - b.order_index),
-      )
+      const subtasks = tasks
+        .filter((task) => task.parent_id === parent.id)
+        .sort((a, b) => a.order_index - b.order_index)
+      all.push(...subtasks)
     }
     return all
-  }, [tasks])
+  }, [tasks, sortField, sortDirection])
 
   const sections = useMemo(() => {
     if (!grouped) return []
@@ -546,125 +635,221 @@ export default function ListView({
     : 'Nenhuma tarefa neste projeto.'
 
   return (
-    <div className="p-4">
-      {grouped ? (
-        <div className="space-y-6">
-          {sections.length === 0 && (
-            <div className="rounded-md border border-border bg-background px-4 py-10 text-center text-sm text-muted-foreground shadow-2xs">
-              {emptyMessage}
-            </div>
-          )}
-          {sections.map(({ project, sectionTasks }) => {
-            const sectionRows = rows.filter((task) =>
-              sectionTasks.some((t) => t.id === task.id),
-            )
-            return (
-              <section key={project?.id ?? '__sem_projeto__'}>
-                <header className="mb-2 flex items-center gap-2 px-1">
-                  <span
-                    className="size-2.5 rounded-full shadow-2xs"
-                    style={{ backgroundColor: project?.color ?? '#94A3B8' }}
-                  />
-                  <h2 className="text-xs font-bold text-foreground">
-                    {project?.name ?? 'Sem projeto'}
-                  </h2>
-                  <span className="text-xs text-muted-foreground">
-                    {sectionRows.length} tarefa(s)
-                  </span>
-                </header>
-                <div className="rounded-md border border-border bg-background shadow-2xs">
-                  <TasksTable
-                    rows={sectionRows}
-                    selected={selected}
-                    emptyMessage={emptyMessage}
-                    onToggle={toggleOne}
-                    onToggleDone={handleToggleDone}
-                    onChangeStatus={handleChangeStatus}
-                    onOpen={onOpenTask}
-                    toggleAll={toggleAll}
-                    memberOf={memberOf}
-                    countSubtasks={countSubtasks}
-                    projectById={projectById}
-                  />
-                </div>
-              </section>
-            )
-          })}
-        </div>
-      ) : (
-        <div className="rounded-md border border-border bg-background shadow-2xs">
-          <TasksTable
-            rows={rows}
-            selected={selected}
-            emptyMessage={emptyMessage}
-            onToggle={toggleOne}
-            onToggleDone={handleToggleDone}
-            onChangeStatus={handleChangeStatus}
-            onOpen={onOpenTask}
-            toggleAll={toggleAll}
-            memberOf={memberOf}
-            countSubtasks={countSubtasks}
-            projectById={projectById}
-          />
-        </div>
-      )}
-
-      {/* Bulk Action Bar */}
-      {selected.size > 0 && (
-        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
-          <span className="text-xs font-bold">
-            {selected.size} selecionada(s)
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {/* Top Filter & Sort Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">
+            Ordenar por:
           </span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Mover para:</span>
-            <Select.Root
-              selectedKey={null}
-              onSelectionChange={(value) =>
-                void moveSelected(value as TaskStatus)
-              }
-              aria-label="Mover selecionadas"
-              className="w-40"
-              placeholder="Escolher status"
-            >
-              <Select.Trigger className="rounded-md border border-border bg-background">
-                <Select.Value />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox.Root className="rounded-md border border-border bg-card">
-                  {TASK_STATUSES.map((status) => (
-                    <ListBox.Item
-                      key={status}
-                      id={status}
-                      textValue={STATUS_LABELS[status]}
-                    >
-                      {STATUS_LABELS[status]}
-                    </ListBox.Item>
-                  ))}
-                </ListBox.Root>
-              </Select.Popover>
-            </Select.Root>
-          </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
-              variant="danger"
               size="sm"
-              className="rounded-md"
-              onPress={() => setConfirmDelete(true)}
+              variant={sortField === 'status' ? 'secondary' : 'outline'}
+              className="h-7 px-2 text-xs rounded-md"
+              onPress={() => handleSortBy('status')}
             >
-              <i className="fa-solid fa-trash mr-1" />
-              Excluir
+              Status
             </Button>
             <Button
-              variant="outline"
               size="sm"
-              className="rounded-md"
-              onPress={() => setSelected(new Set())}
+              variant={sortField === 'due_date' ? 'secondary' : 'outline'}
+              className="h-7 px-2 text-xs rounded-md"
+              onPress={() => handleSortBy('due_date')}
             >
-              Limpar
+              Data
+            </Button>
+            <Button
+              size="sm"
+              variant={sortField === 'priority' ? 'secondary' : 'outline'}
+              className="h-7 px-2 text-xs rounded-md"
+              onPress={() => handleSortBy('priority')}
+            >
+              Prioridade
+            </Button>
+            <Button
+              size="sm"
+              variant={sortField === 'title' ? 'secondary' : 'outline'}
+              className="h-7 px-2 text-xs rounded-md"
+              onPress={() => handleSortBy('title')}
+            >
+              Título
             </Button>
           </div>
         </div>
-      )}
+
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">
+            {rows.length} tarefa(s) no total
+          </span>
+        </div>
+      </div>
+
+      {/* Main Table Area */}
+      <div className="flex-1 overflow-y-auto p-4">
+        {grouped ? (
+          <div className="space-y-6">
+            {sections.length === 0 && (
+              <div className="rounded-md border border-border bg-background px-4 py-10 text-center text-sm text-muted-foreground shadow-2xs">
+                {emptyMessage}
+              </div>
+            )}
+            {sections.map(({ project, sectionTasks }) => {
+              const sectionRows = rows.filter((task) =>
+                sectionTasks.some((t) => t.id === task.id),
+              )
+              return (
+                <section key={project?.id ?? '__sem_projeto__'}>
+                  <header className="mb-2 flex items-center gap-2 px-1">
+                    <span
+                      className="size-2.5 rounded-full shadow-2xs"
+                      style={{ backgroundColor: project?.color ?? '#94A3B8' }}
+                    />
+                    <h2 className="text-xs font-bold text-foreground">
+                      {project?.name ?? 'Sem projeto'}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      {sectionRows.length} tarefa(s)
+                    </span>
+                  </header>
+                  <div className="rounded-md border border-border bg-background shadow-2xs">
+                    <TasksTable
+                      rows={sectionRows}
+                      selected={selected}
+                      emptyMessage={emptyMessage}
+                      onToggle={toggleOne}
+                      onToggleDone={handleToggleDone}
+                      onChangeStatus={handleChangeStatus}
+                      onOpen={onOpenTask}
+                      toggleAll={toggleAll}
+                      memberOf={memberOf}
+                      countSubtasks={countSubtasks}
+                      projectById={projectById}
+                      onSortBy={handleSortBy}
+                      currentSortField={sortField}
+                      currentSortDir={sortDirection}
+                    />
+                  </div>
+                </section>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="rounded-md border border-border bg-background shadow-2xs">
+            <TasksTable
+              rows={rows}
+              selected={selected}
+              emptyMessage={emptyMessage}
+              onToggle={toggleOne}
+              onToggleDone={handleToggleDone}
+              onChangeStatus={handleChangeStatus}
+              onOpen={onOpenTask}
+              toggleAll={toggleAll}
+              memberOf={memberOf}
+              countSubtasks={countSubtasks}
+              projectById={projectById}
+              onSortBy={handleSortBy}
+              currentSortField={sortField}
+              currentSortDir={sortDirection}
+            />
+          </div>
+        )}
+
+        {/* Bulk Action Bar */}
+        {selected.size > 0 && (
+          <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
+            <span className="text-xs font-bold">
+              {selected.size} selecionada(s)
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Mover para:</span>
+              <Select.Root
+                selectedKey={null}
+                onSelectionChange={(value) =>
+                  void moveSelected(value as TaskStatus)
+                }
+                aria-label="Mover selecionadas"
+                className="w-40"
+                placeholder="Escolher status"
+              >
+                <Select.Trigger className="rounded-md border border-border bg-background">
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox.Root className="rounded-md border border-border bg-card">
+                    {TASK_STATUSES.map((status) => (
+                      <ListBox.Item
+                        key={status}
+                        id={status}
+                        textValue={STATUS_LABELS[status]}
+                      >
+                        {STATUS_LABELS[status]}
+                      </ListBox.Item>
+                    ))}
+                  </ListBox.Root>
+                </Select.Popover>
+              </Select.Root>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="danger"
+                size="sm"
+                className="rounded-md"
+                onPress={() => setConfirmDelete(true)}
+              >
+                <i className="fa-solid fa-trash mr-1" />
+                Excluir
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-md"
+                onPress={() => setSelected(new Set())}
+              >
+                Limpar
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Shortcuts & Quick Commands Footer (same as Gantt) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-muted-foreground select-none">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+              Clique / Duplo clique
+            </kbd>
+            <span>Abrir detalhes</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+              Hover no título
+            </kbd>
+            <span>Ver descrição</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+              Círculo
+            </kbd>
+            <span>Concluir / Reabrir</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+              Menu Status
+            </kbd>
+            <span>Troca rápida</span>
+          </span>
+        </div>
+
+        <div>
+          <span className="text-[10px] opacity-75">
+            Ordenado por:{' '}
+            <strong className="text-foreground capitalize">{sortField}</strong> (
+            {sortDirection === 'asc' ? 'Crescente' : 'Decrescente'})
+          </span>
+        </div>
+      </div>
 
       <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialog.Backdrop />

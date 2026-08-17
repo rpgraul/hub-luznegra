@@ -2,13 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import {
   toast,
   Button,
-  TextField,
   Label,
-  Input,
-  TextArea,
   Checkbox,
   Separator,
-  Drawer,
   Select,
   ListBox,
   AlertDialog,
@@ -81,6 +77,7 @@ export default function TaskDrawer({
   const [tagInput, setTagInput] = useState('')
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saving, setSaving] = useState(false)
   const isNew = !task?.id
 
   const commentScrollRef = useRef<HTMLDivElement>(null)
@@ -128,9 +125,14 @@ export default function TaskDrawer({
 
   function commitTaskPatch(patch: Partial<Task>) {
     if (!task) return
+    setSaving(true)
     void creator
       .updateTask({ id: task.id, patch })
-      .catch(() => toast.danger('Não foi possível salvar as alterações.'))
+      .then(() => setSaving(false))
+      .catch(() => {
+        setSaving(false)
+        toast.danger('Não foi possível salvar as alterações.')
+      })
   }
 
   function handleTitleChange(value: string) {
@@ -151,6 +153,15 @@ export default function TaskDrawer({
     descriptionTimer.current = window.setTimeout(() => {
       commitTaskPatch({ description: json as unknown as Task['description'] })
     }, 800)
+  }
+
+  function handleManualSave() {
+    if (!task) return
+    commitTaskPatch({
+      title: titleDraft.trim(),
+      description: descriptionDraft as unknown as Task['description'],
+    })
+    toast.success('Todas as alterações foram salvas!')
   }
 
   function handleStartDate(value: string) {
@@ -216,7 +227,8 @@ export default function TaskDrawer({
         assigned_to: creator.currentUserId,
       })
       setTitleDraft('')
-      toast.success('Tarefa criada.')
+      toast.success('Tarefa criada com sucesso!')
+      onOpenChange(false)
     } catch (error) {
       toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a tarefa.',
@@ -237,6 +249,7 @@ export default function TaskDrawer({
       })
       setNewSubtask('')
       creator.refreshTasks?.()
+      toast.success('Subtarefa criada!')
     } catch (error) {
       toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a subtarefa.',
@@ -273,494 +286,505 @@ export default function TaskDrawer({
 
   const subtasks = task ? creator.childrenOf(task.id) : []
 
+  if (!open) return null
+
   return (
     <>
-      <Drawer.Root isOpen={open} onOpenChange={onOpenChange}>
-        <Drawer.Backdrop
-          isDismissable={false}
-          className="bg-black/30 backdrop-blur-xs transition-opacity"
-        />
-        {/* Placed on the LEFT side as requested */}
-        <Drawer.Content
-          placement="left"
-          className="fixed inset-y-0 left-0 z-50 flex h-full w-full flex-col border-r border-border bg-card shadow-2xl sm:max-w-[55%] animate-in slide-in-from-left duration-300"
-        >
-          <Drawer.Dialog className="flex h-full w-full flex-col">
-            {/* Header with clear title on the left and Close X button on the top right */}
-            <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-5 py-3.5">
-              <div className="flex items-center gap-2">
-                <i className="fa-regular fa-rectangle-list text-[#7b68ee] text-sm" />
-                <h2 className="text-sm font-bold text-foreground">
-                  {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
-                </h2>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+        onClick={() => onOpenChange(false)}
+      />
+
+      {/* Slide-over Drawer strictly on the RIGHT side */}
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[580px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
+        {/* Drawer Header */}
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/95 px-5 backdrop-blur">
+          <div className="flex items-center gap-2">
+            <i className="fa-regular fa-rectangle-list text-[#7b68ee] text-sm" />
+            <h2 className="text-sm font-bold text-foreground">
+              {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
+            </h2>
+            {saving && (
+              <span className="text-[10px] text-muted-foreground animate-pulse">
+                Salvando...
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            aria-label="Fechar painel"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          >
+            <i className="fa-solid fa-xmark text-sm" />
+          </button>
+        </div>
+
+        {/* Drawer Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {isNew ? (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Projeto *</Label>
+                <Select.Root
+                  selectedKey={createProjectId}
+                  onSelectionChange={(value) =>
+                    setCreateProjectId(typeof value === 'string' ? value : null)
+                  }
+                  aria-label="Projeto da tarefa"
+                  className="w-full"
+                  placeholder="Selecione um projeto"
+                >
+                  <Select.Trigger className="rounded-md border border-border bg-background">
+                    <Select.Value />
+                  </Select.Trigger>
+                  <Select.Popover>
+                    <ListBox.Root className="rounded-md border border-border bg-card">
+                      {projects.length === 0 ? (
+                        <ListBox.Item id="__none" isDisabled textValue="Crie um projeto primeiro">
+                          Crie um projeto primeiro
+                        </ListBox.Item>
+                      ) : (
+                        projects.map((project) => (
+                          <ListBox.Item key={project.id} id={project.id} textValue={project.name}>
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="size-2 rounded-full"
+                                style={{ backgroundColor: project.color }}
+                              />
+                              {project.name}
+                            </span>
+                          </ListBox.Item>
+                        ))
+                      )}
+                    </ListBox.Root>
+                  </Select.Popover>
+                </Select.Root>
               </div>
-              <button
-                type="button"
-                onClick={() => onOpenChange(false)}
-                aria-label="Fechar painel"
-                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Título da Tarefa *</Label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  value={titleDraft}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  placeholder="Digite o título da tarefa..."
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs font-medium text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleCreate()
+                  }}
+                />
+              </div>
+
+              <Button
+                variant="primary"
+                className="w-full rounded-md bg-[#7b68ee] text-xs font-semibold text-white hover:bg-[#6c5ce7]"
+                onPress={() => void handleCreate()}
+                isDisabled={!titleDraft.trim() || !createProjectId}
               >
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
+                <i className="fa-solid fa-plus mr-1.5" />
+                Criar Tarefa
+              </Button>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Title Input with highlighted border */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Título da Tarefa</Label>
+                <input
+                  type="text"
+                  value={titleDraft}
+                  onChange={(e) => handleTitleChange(e.target.value)}
+                  placeholder="Título da tarefa..."
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-bold text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                />
+              </div>
 
-            <Drawer.Body className="flex-1 overflow-y-auto p-5">
-              <div className="space-y-4">
-                {isNew ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-foreground">Projeto</Label>
-                      <Select.Root
-                        selectedKey={createProjectId}
-                        onSelectionChange={(value) =>
-                          setCreateProjectId(typeof value === 'string' ? value : null)
-                        }
-                        aria-label="Projeto da tarefa"
-                        className="w-full"
-                        placeholder="Selecione um projeto"
-                      >
-                        <Select.Trigger className="rounded-md border border-border bg-background">
-                          <Select.Value />
-                        </Select.Trigger>
-                        <Select.Popover>
-                          <ListBox.Root className="rounded-md border border-border bg-card">
-                            {projects.length === 0 ? (
-                              <ListBox.Item id="__none" isDisabled textValue="Crie um projeto primeiro">
-                                Crie um projeto primeiro
-                              </ListBox.Item>
-                            ) : (
-                              projects.map((project) => (
-                                <ListBox.Item key={project.id} id={project.id} textValue={project.name}>
-                                  <span className="inline-flex items-center gap-2">
-                                    <span
-                                      className="size-2 rounded-full"
-                                      style={{ backgroundColor: project.color }}
-                                    />
-                                    {project.name}
-                                  </span>
-                                </ListBox.Item>
-                              ))
-                            )}
-                          </ListBox.Root>
-                        </Select.Popover>
-                      </Select.Root>
-                    </div>
+              {/* Description Editor with highlighted border */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Descrição</Label>
+                <div className="rounded-md border border-border bg-background p-1.5 shadow-2xs">
+                  <LexicalEditor
+                    key={task.id}
+                    initialValue={descriptionDraft}
+                    onChange={handleDescriptionChange}
+                  />
+                </div>
+              </div>
 
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-foreground">Título da Tarefa</Label>
-                      <TextField.Root
-                        value={titleDraft}
-                        onChange={setTitleDraft}
-                        isRequired
-                      >
-                        <Input
-                          placeholder="Digite o título da tarefa..."
-                          className="rounded-md border border-border bg-background"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') void handleCreate()
-                          }}
-                        />
-                      </TextField.Root>
-                    </div>
+              <Separator className="my-2" />
 
-                    <Button
-                      variant="primary"
-                      className="w-full rounded-md bg-[#7b68ee] font-semibold text-white hover:bg-[#6c5ce7]"
-                      onPress={() => void handleCreate()}
-                      isDisabled={!titleDraft.trim() || !createProjectId}
+              {/* Tags / Etiquetas */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Etiquetas / Tags</Label>
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background p-2 shadow-2xs">
+                  {(task.tags ?? []).map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 rounded-md border border-[#7b68ee]/30 bg-[#7b68ee]/15 px-2 py-0.5 text-xs font-semibold text-[#7b68ee]"
                     >
-                      <i className="fa-solid fa-plus mr-1.5" />
-                      Criar Tarefa
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Title Input with crisp border */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-foreground">Título</Label>
-                      <TextField.Root
-                        value={titleDraft}
-                        onChange={handleTitleChange}
-                        className="w-full"
+                      <span>#{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTag(tag)}
+                        className="cursor-pointer text-[#7b68ee]/70 transition hover:text-red-500"
+                        title="Remover tag"
                       >
-                        <Input
-                          className="rounded-md border border-border bg-background px-3 py-2 text-sm font-bold tracking-tight text-foreground shadow-2xs focus:border-[#7b68ee]"
-                          placeholder="Título da tarefa"
-                        />
-                      </TextField.Root>
-                    </div>
+                        <i className="fa-solid fa-xmark text-[10px]" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    placeholder="Adicionar tag (Enter)..."
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault()
+                        handleAddTag()
+                      }
+                    }}
+                    className="min-w-[130px] flex-1 bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                </div>
+              </div>
 
-                    {/* Description Editor with crisp border */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-foreground">Descrição</Label>
-                      <div className="rounded-md border border-border bg-background p-1.5 shadow-2xs">
-                        <LexicalEditor
-                          key={task.id}
-                          initialValue={descriptionDraft}
-                          onChange={handleDescriptionChange}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              {/* Attributes Grid */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Status</Label>
+                  <Select.Root
+                    selectedKey={task.status}
+                    onSelectionChange={(value) =>
+                      void creator
+                        .moveTaskStatus({
+                          id: task.id,
+                          status: value as TaskStatus,
+                        })
+                        .catch(() =>
+                          toast.danger('Não foi possível alterar o status.'),
+                        )
+                    }
+                    aria-label="Alterar status"
+                    className="w-full"
+                  >
+                    <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox.Root className="rounded-md border border-border bg-card">
+                        {TASK_STATUSES.map((status) => (
+                          <ListBox.Item key={status} id={status} textValue={STATUS_LABELS[status]}>
+                            {STATUS_LABELS[status]}
+                          </ListBox.Item>
+                        ))}
+                      </ListBox.Root>
+                    </Select.Popover>
+                  </Select.Root>
+                </div>
 
-                {task && !isNew && (
-                  <>
-                    <Separator className="my-2" />
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Prioridade</Label>
+                  <Select.Root
+                    selectedKey={task.priority}
+                    onSelectionChange={(value) =>
+                      commitTaskPatch({ priority: value as TaskPriority })
+                    }
+                    aria-label="Alterar prioridade"
+                    className="w-full"
+                  >
+                    <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox.Root className="rounded-md border border-border bg-card">
+                        {TASK_PRIORITIES.map((priority) => (
+                          <ListBox.Item key={priority} id={priority} textValue={PRIORITY_LABELS[priority]}>
+                            {PRIORITY_LABELS[priority]}
+                          </ListBox.Item>
+                        ))}
+                      </ListBox.Root>
+                    </Select.Popover>
+                  </Select.Root>
+                </div>
 
-                    {/* Tags / Etiquetas Section */}
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-foreground">Etiquetas / Tags</Label>
-                      <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background p-2 shadow-2xs">
-                        {(task.tags ?? []).map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-1 rounded-md border border-[#7b68ee]/30 bg-[#7b68ee]/15 px-2 py-0.5 text-xs font-semibold text-[#7b68ee]"
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Responsável</Label>
+                  <Select.Root
+                    selectedKey={task.assigned_to ?? NO_ASSIGNEE}
+                    onSelectionChange={(value) =>
+                      handleAssignee(typeof value === 'string' ? value : null)
+                    }
+                    aria-label="Alterar responsável"
+                    className="w-full"
+                  >
+                    <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Popover>
+                      <ListBox.Root className="rounded-md border border-border bg-card">
+                        <ListBox.Item id={NO_ASSIGNEE} textValue="sem responsável">
+                          — sem responsável —
+                        </ListBox.Item>
+                        {members.map((member) => (
+                          <ListBox.Item
+                            key={member.id}
+                            id={member.id}
+                            textValue={member.full_name ?? member.username}
                           >
-                            <span>#{tag}</span>
+                            {member.full_name ?? member.username}
+                          </ListBox.Item>
+                        ))}
+                      </ListBox.Root>
+                    </Select.Popover>
+                  </Select.Root>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Horas Estimadas</Label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={task.estimated_hours != null ? String(task.estimated_hours) : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      const value = raw === '' ? null : Number.parseFloat(raw)
+                      if (value !== null && !Number.isNaN(value)) {
+                        commitTaskPatch({ estimated_hours: Math.max(0, value) })
+                      }
+                    }}
+                    placeholder="0"
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Início</Label>
+                  <input
+                    type="date"
+                    value={task.start_date ?? ''}
+                    onChange={(e) => handleStartDate(e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-foreground">Conclusão</Label>
+                  <input
+                    type="date"
+                    value={task.due_date ?? ''}
+                    onChange={(e) => handleDueDate(e.target.value)}
+                    className={`w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs ${
+                      task.due_date &&
+                      task.due_date < todayIso() &&
+                      task.status !== 'done'
+                        ? 'border-red-500 font-semibold text-red-600'
+                        : ''
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <Separator className="my-2" />
+
+              {/* Subtasks Section */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-foreground">
+                  Subtarefas{' '}
+                  <span className="font-normal text-muted-foreground">
+                    ({subtasks.length})
+                  </span>
+                </Label>
+                <ul className="space-y-1.5">
+                  {subtasks.length === 0 && (
+                    <li className="text-xs text-muted-foreground">
+                      Nenhuma subtarefa adicionada.
+                    </li>
+                  )}
+                  {subtasks.map((subtask) => (
+                    <li
+                      key={subtask.id}
+                      onClick={() =>
+                        void creator
+                          .moveTaskStatus({
+                            id: subtask.id,
+                            status: subtask.status === 'done' ? 'todo' : 'done',
+                          })
+                          .catch(() =>
+                            toast.danger('Não foi possível atualizar a subtarefa.'),
+                          )
+                      }
+                      className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs shadow-2xs transition hover:bg-muted/40"
+                    >
+                      <Checkbox
+                        isSelected={subtask.status === 'done'}
+                        onChange={() => {}}
+                      />
+                      <span
+                        className={`flex-1 truncate ${
+                          subtask.status === 'done'
+                            ? 'text-muted-foreground line-through'
+                            : 'font-medium text-foreground'
+                        }`}
+                      >
+                        {subtask.title}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newSubtask}
+                    onChange={(e) => setNewSubtask(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void handleCreateSubtask()
+                    }}
+                    placeholder="Adicionar subtarefa (Enter)..."
+                    className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-md border border-border text-xs"
+                    onPress={() => void handleCreateSubtask()}
+                    isDisabled={!newSubtask.trim()}
+                  >
+                    <i className="fa-solid fa-plus mr-1" />
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+
+              <Separator className="my-2" />
+
+              {/* Comments Section */}
+              <div className="space-y-2.5">
+                <Label className="text-xs font-semibold text-foreground">Comentários e Atividades</Label>
+                <div
+                  ref={commentScrollRef}
+                  className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-muted/20 p-2.5 text-xs shadow-2xs"
+                >
+                  {comments.comments.length === 0 && (
+                    <p className="py-2 text-center text-xs text-muted-foreground">
+                      Nenhum comentário ainda.
+                    </p>
+                  )}
+                  {comments.comments.map((comment) => {
+                    const isMine = comment.author_id === creator.currentUserId
+                    const authorMember = members.find((m) => m.id === comment.author_id)
+                    const authorName = authorMember?.full_name ?? authorMember?.username ?? 'Usuário'
+                    return (
+                      <div
+                        key={comment.id}
+                        className="rounded-md border border-border bg-background p-2.5 shadow-2xs"
+                      >
+                        <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                          <span className="font-semibold text-foreground">
+                            {authorName}
+                          </span>
+                          <span>{formatDateTime(comment.created_at)}</span>
+                        </div>
+                        <p className="whitespace-pre-wrap text-xs text-foreground">{comment.content}</p>
+                        {isMine && (
+                          <div className="mt-1 flex justify-end">
                             <button
                               type="button"
-                              onClick={() => handleRemoveTag(tag)}
-                              className="cursor-pointer text-[#7b68ee]/70 transition hover:text-red-500"
-                              title="Remover tag"
+                              onClick={() =>
+                                void comments
+                                  .deleteComment(comment.id)
+                                  .catch(() =>
+                                    toast.danger(
+                                      'Não foi possível excluir o comentário.',
+                                    ),
+                                  )
+                              }
+                              className="cursor-pointer text-[10px] text-muted-foreground transition hover:text-red-600"
                             >
-                              <i className="fa-solid fa-xmark text-[10px]" />
+                              Excluir
                             </button>
-                          </span>
-                        ))}
-                        <input
-                          type="text"
-                          placeholder="Adicionar tag (Enter)..."
-                          value={tagInput}
-                          onChange={(e) => setTagInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ',') {
-                              e.preventDefault()
-                              handleAddTag()
-                            }
-                          }}
-                          className="min-w-[130px] flex-1 bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Grid of Attributes with uniform rounded-md & distinct borders */}
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Status</Label>
-                        <Select.Root
-                          selectedKey={task.status}
-                          onSelectionChange={(value) =>
-                            void creator
-                              .moveTaskStatus({
-                                id: task.id,
-                                status: value as TaskStatus,
-                              })
-                              .catch(() =>
-                                toast.danger('Não foi possível alterar o status.'),
-                              )
-                          }
-                          aria-label="Alterar status"
-                          className="w-full"
-                        >
-                          <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
-                            <Select.Value />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox.Root className="rounded-md border border-border bg-card">
-                              {TASK_STATUSES.map((status) => (
-                                <ListBox.Item key={status} id={status} textValue={STATUS_LABELS[status]}>
-                                  {STATUS_LABELS[status]}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox.Root>
-                          </Select.Popover>
-                        </Select.Root>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Prioridade</Label>
-                        <Select.Root
-                          selectedKey={task.priority}
-                          onSelectionChange={(value) =>
-                            commitTaskPatch({ priority: value as TaskPriority })
-                          }
-                          aria-label="Alterar prioridade"
-                          className="w-full"
-                        >
-                          <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
-                            <Select.Value />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox.Root className="rounded-md border border-border bg-card">
-                              {TASK_PRIORITIES.map((priority) => (
-                                <ListBox.Item key={priority} id={priority} textValue={PRIORITY_LABELS[priority]}>
-                                  {PRIORITY_LABELS[priority]}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox.Root>
-                          </Select.Popover>
-                        </Select.Root>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Responsável</Label>
-                        <Select.Root
-                          selectedKey={task.assigned_to ?? NO_ASSIGNEE}
-                          onSelectionChange={(value) =>
-                            handleAssignee(typeof value === 'string' ? value : null)
-                          }
-                          aria-label="Alterar responsável"
-                          className="w-full"
-                        >
-                          <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
-                            <Select.Value />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox.Root className="rounded-md border border-border bg-card">
-                              <ListBox.Item id={NO_ASSIGNEE} textValue="sem responsável">
-                                — sem responsável —
-                              </ListBox.Item>
-                              {members.map((member) => (
-                                <ListBox.Item
-                                  key={member.id}
-                                  id={member.id}
-                                  textValue={member.full_name ?? member.username}
-                                >
-                                  {member.full_name ?? member.username}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox.Root>
-                          </Select.Popover>
-                        </Select.Root>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Horas Estimadas</Label>
-                        <TextField.Root
-                          type="number"
-                          value={
-                            task.estimated_hours != null
-                              ? String(task.estimated_hours)
-                              : ''
-                          }
-                          onChange={(raw) => {
-                            const value = raw === '' ? null : Number.parseFloat(raw)
-                            if (value !== null && !Number.isNaN(value)) {
-                              commitTaskPatch({ estimated_hours: Math.max(0, value) })
-                            }
-                          }}
-                        >
-                          <Input
-                            placeholder="0"
-                            className="rounded-md border border-border bg-background shadow-2xs"
-                          />
-                        </TextField.Root>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Início</Label>
-                        <TextField.Root
-                          type="date"
-                          value={task.start_date ?? ''}
-                          onChange={handleStartDate}
-                        >
-                          <Input className="rounded-md border border-border bg-background shadow-2xs" />
-                        </TextField.Root>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-foreground">Conclusão</Label>
-                        <TextField.Root
-                          type="date"
-                          value={task.due_date ?? ''}
-                          onChange={handleDueDate}
-                        >
-                          <Input
-                            className={`rounded-md border border-border bg-background shadow-2xs ${
-                              task.due_date &&
-                              task.due_date < todayIso() &&
-                              task.status !== 'done'
-                                ? 'border-red-500'
-                                : ''
-                            }`}
-                          />
-                        </TextField.Root>
-                      </div>
-                    </div>
-
-                    <Separator className="my-2" />
-
-                    {/* Subtasks Section */}
-                    <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-foreground">
-                        Subtarefas{' '}
-                        <span className="font-normal text-muted-foreground">
-                          ({subtasks.length})
-                        </span>
-                      </Label>
-                      <ul className="space-y-1.5">
-                        {subtasks.length === 0 && (
-                          <li className="text-xs text-muted-foreground">
-                            Nenhuma subtarefa adicionada.
-                          </li>
+                          </div>
                         )}
-                        {subtasks.map((subtask) => (
-                          <li
-                            key={subtask.id}
-                            onClick={() =>
-                              void creator
-                                .moveTaskStatus({
-                                  id: subtask.id,
-                                  status: subtask.status === 'done' ? 'todo' : 'done',
-                                })
-                                .catch(() =>
-                                  toast.danger('Não foi possível atualizar a subtarefa.'),
-                                )
-                            }
-                            className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs shadow-2xs transition hover:bg-muted/40"
-                          >
-                            <Checkbox
-                              isSelected={subtask.status === 'done'}
-                              onChange={() => {}}
-                            />
-                            <span
-                              className={`flex-1 truncate ${
-                                subtask.status === 'done'
-                                  ? 'text-muted-foreground line-through'
-                                  : 'font-medium text-foreground'
-                              }`}
-                            >
-                              {subtask.title}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="flex gap-2">
-                        <TextField.Root value={newSubtask} onChange={setNewSubtask} className="flex-1">
-                          <Input
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') void handleCreateSubtask()
-                            }}
-                            placeholder="Adicionar subtarefa..."
-                            className="rounded-md border border-border bg-background text-xs shadow-2xs"
-                          />
-                        </TextField.Root>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-md border border-border"
-                          onPress={() => void handleCreateSubtask()}
-                          isDisabled={!newSubtask.trim()}
-                        >
-                          <i className="fa-solid fa-plus mr-1" />
-                          Adicionar
-                        </Button>
                       </div>
-                    </div>
+                    )
+                  })}
+                </div>
 
-                    <Separator className="my-2" />
-
-                    {/* Comments Section */}
-                    <div className="space-y-2.5">
-                      <Label className="text-xs font-semibold text-foreground">Comentários e Atividades</Label>
-                      <div
-                        ref={commentScrollRef}
-                        className="max-h-44 space-y-2 overflow-y-auto rounded-md border border-border bg-muted/20 p-2.5 text-xs shadow-2xs"
-                      >
-                        {comments.comments.length === 0 && (
-                          <p className="py-2 text-center text-xs text-muted-foreground">
-                            Nenhum comentário ainda.
-                          </p>
-                        )}
-                        {comments.comments.map((comment) => {
-                          const isMine = comment.author_id === creator.currentUserId
-                          const authorMember = members.find((m) => m.id === comment.author_id)
-                          const authorName = authorMember?.full_name ?? authorMember?.username ?? 'Usuário'
-                          return (
-                            <div
-                              key={comment.id}
-                              className="rounded-md border border-border bg-background p-2.5 shadow-2xs"
-                            >
-                              <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                                <span className="font-semibold text-foreground">
-                                  {authorName}
-                                </span>
-                                <span>{formatDateTime(comment.created_at)}</span>
-                              </div>
-                              <p className="whitespace-pre-wrap text-xs text-foreground">{comment.content}</p>
-                              {isMine && (
-                                <div className="mt-1 flex justify-end">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      void comments
-                                        .deleteComment(comment.id)
-                                        .catch(() =>
-                                          toast.danger(
-                                            'Não foi possível excluir o comentário.',
-                                          ),
-                                        )
-                                    }
-                                    className="cursor-pointer text-[10px] text-muted-foreground transition hover:text-red-600"
-                                  >
-                                    Excluir
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-
-                      <TextField.Root value={newComment} onChange={setNewComment}>
-                        <TextArea
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault()
-                              void handleAddComment()
-                            }
-                          }}
-                          placeholder="Escreva um comentário..."
-                          className="rounded-md border border-border bg-background text-xs shadow-2xs resize-none"
-                          rows={2}
-                        />
-                      </TextField.Root>
-                      <div className="flex justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="rounded-md border border-border"
-                          onPress={() => void handleAddComment()}
-                          isDisabled={!newComment.trim()}
-                        >
-                          <i className="fa-regular fa-paper-plane mr-1" />
-                          Comentar
-                        </Button>
-                      </div>
-                    </div>
-
-                    <Separator className="my-2" />
-
-                    <div className="flex justify-between pt-1">
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        className="rounded-md"
-                        onPress={() => setConfirmDelete(true)}
-                      >
-                        <i className="fa-solid fa-trash mr-1" />
-                        Excluir Tarefa
-                      </Button>
-                    </div>
-                  </>
-                )}
+                <div className="space-y-1.5">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        void handleAddComment()
+                      }
+                    }}
+                    placeholder="Escreva um comentário (Enter para enviar)..."
+                    rows={2}
+                    className="w-full resize-none rounded-md border border-border bg-background p-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                  />
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-md border border-border text-xs"
+                      onPress={() => void handleAddComment()}
+                      isDisabled={!newComment.trim()}
+                    >
+                      <i className="fa-regular fa-paper-plane mr-1" />
+                      Comentar
+                    </Button>
+                  </div>
+                </div>
               </div>
-            </Drawer.Body>
-          </Drawer.Dialog>
-        </Drawer.Content>
-      </Drawer.Root>
+            </div>
+          )}
+        </div>
 
+        {/* Drawer Sticky Footer with explicit Salvar button */}
+        {task && !isNew && (
+          <div className="flex shrink-0 items-center justify-between border-t border-border bg-card/95 px-5 py-3 backdrop-blur">
+            <Button
+              variant="danger"
+              size="sm"
+              className="rounded-md text-xs"
+              onPress={() => setConfirmDelete(true)}
+            >
+              <i className="fa-solid fa-trash mr-1" />
+              Excluir
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-md border border-border text-xs"
+                onPress={() => onOpenChange(false)}
+              >
+                Fechar
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="rounded-md bg-[#7b68ee] text-xs font-semibold text-white hover:bg-[#6c5ce7]"
+                onPress={handleManualSave}
+                isDisabled={saving}
+              >
+                <i className="fa-solid fa-floppy-disk mr-1" />
+                {saving ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Delete Confirmation Alert */}
       <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialog.Backdrop />
         <AlertDialog.Container>

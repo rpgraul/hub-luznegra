@@ -5,7 +5,7 @@ import {
   Droppable,
   type DropResult,
 } from '@hello-pangea/dnd'
-import { toast, Button, Input } from '@heroui/react'
+import { toast, Button } from '@heroui/react'
 import TaskCard from '@/components/tasks/TaskCard'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { TASK_STATUSES } from '@/hooks/useTasks'
@@ -30,22 +30,13 @@ interface KanbanViewProps {
 
 export default function KanbanView({
   tasks,
-  projectId,
   projects,
-  currentUserId,
   onOpenTask,
   onOpenNewTask,
   moveTaskStatus,
   reorderTask,
   createTask,
 }: KanbanViewProps) {
-  const [quickAdd, setQuickAdd] = useState<Record<TaskStatus, string>>({
-    backlog: '',
-    todo: '',
-    in_progress: '',
-    review: '',
-    done: '',
-  })
   const [showSubtasksAsCards, setShowSubtasksAsCards] = useState(false)
 
   const projectById = new Map(projects.map((project) => [project.id, project]))
@@ -54,30 +45,6 @@ export default function KanbanView({
   // Partition top-level and subtasks
   const topLevelTasks = tasks.filter((task) => !task.parent_id)
   const displayTasks = showSubtasksAsCards ? tasks : topLevelTasks
-
-  async function addQuick(status: TaskStatus) {
-    const title = quickAdd[status].trim()
-    if (!title) return
-    const targetProject = projectId || projects[0]?.id
-    if (!targetProject) {
-      toast.danger('Selecione ou crie um projeto primeiro.')
-      return
-    }
-    try {
-      await createTask({
-        title,
-        project_id: targetProject,
-        status,
-        assigned_to: currentUserId,
-      })
-      setQuickAdd((prev) => ({ ...prev, [status]: '' }))
-      toast.success('Tarefa criada!')
-    } catch (error) {
-      toast.danger(
-        error instanceof Error ? error.message : 'Não foi possível criar a tarefa.',
-      )
-    }
-  }
 
   function handleToggleDone(task: Task) {
     const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done'
@@ -270,34 +237,6 @@ export default function KanbanView({
                       </div>
                     )}
                   </Droppable>
-
-                  {/* Quick Add at bottom of column */}
-                  <div className="flex gap-1.5 border-t border-border/80 bg-card/40 p-2 rounded-b-md">
-                    <Input
-                      value={quickAdd[status]}
-                      onChange={(e) =>
-                        setQuickAdd((prev) => ({
-                          ...prev,
-                          [status]: e.target.value,
-                        }))
-                      }
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void addQuick(status)
-                      }}
-                      placeholder="+ Nova tarefa..."
-                      className="h-7 text-xs rounded-md border border-border bg-background"
-                    />
-                    <Button
-                      variant="outline"
-                      isIconOnly
-                      size="sm"
-                      className="h-7 w-7 shrink-0 rounded-md border border-border text-muted-foreground hover:text-foreground"
-                      onPress={() => void addQuick(status)}
-                      aria-label={`Adicionar tarefa em ${STATUS_LABELS[status]}`}
-                    >
-                      <i className="fa-solid fa-plus text-xs" />
-                    </Button>
-                  </div>
                 </div>
               )
             })}

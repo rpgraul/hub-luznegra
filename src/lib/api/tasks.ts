@@ -80,10 +80,16 @@ export async function moveTaskStatus(
   id: string,
   status: TaskStatus,
 ): Promise<void> {
-  const { error } = await supabase.from('tasks').update({ status }).eq('id', id)
+  const { data: currentTask, error } = await supabase
+    .from('tasks')
+    .update({ status })
+    .eq('id', id)
+    .select('id, parent_id')
+    .single()
   if (error) throw new Error(error.message)
 
   if (status === 'done') {
+    // 1. Mark all subtasks done when parent is marked done
     const { data: children, error: childError } = await supabase
       .from('tasks')
       .select('id')
@@ -92,12 +98,29 @@ export async function moveTaskStatus(
     if ((children ?? []).length > 0) {
       const { error: subError } = await supabase
         .from('tasks')
-        .update({ status })
+        .update({ status: 'done' })
         .in(
           'id',
           (children ?? []).map((c) => c.id),
         )
       if (subError) throw new Error(subError.message)
+    }
+
+    // 2. Mark parent done if ALL sibling subtasks are now done
+    if (currentTask?.parent_id) {
+      const { data: siblings, error: sibError } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .eq('parent_id', currentTask.parent_id)
+      if (!sibError && siblings && siblings.length > 0) {
+        const allDone = siblings.every((s) => s.status === 'done')
+        if (allDone) {
+          await supabase
+            .from('tasks')
+            .update({ status: 'done' })
+            .eq('id', currentTask.parent_id)
+        }
+      }
     }
   }
 }
