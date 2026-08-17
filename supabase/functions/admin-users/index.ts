@@ -79,16 +79,25 @@ Deno.serve(async (req) => {
           (profiles ?? []).map((p) => [p.id, p]),
         )
 
-        const users = (authUsers.users ?? []).map((u) => ({
-          id: u.id,
-          email: u.email ?? '',
-          username: profilesById.get(u.id)?.username ?? '',
-          full_name: profilesById.get(u.id)?.full_name ?? null,
-          role: profilesById.get(u.id)?.role ?? 'member',
-          created_at: u.created_at,
-          last_sign_in_at: u.last_sign_in_at,
-          banned_until: u.banned_until,
-        }))
+        const users = (authUsers.users ?? []).map((u) => {
+          const isBanned = Boolean(
+            u.banned_until &&
+            u.banned_until !== 'none' &&
+            !isNaN(new Date(u.banned_until).getTime()) &&
+            new Date(u.banned_until).getTime() > Date.now()
+          )
+          return {
+            id: u.id,
+            email: u.email ?? '',
+            username: profilesById.get(u.id)?.username ?? '',
+            full_name: profilesById.get(u.id)?.full_name ?? null,
+            avatar_url: profilesById.get(u.id)?.avatar_url ?? null,
+            role: profilesById.get(u.id)?.role ?? 'member',
+            created_at: u.created_at,
+            last_sign_in_at: u.last_sign_in_at,
+            banned_until: isBanned ? u.banned_until : null,
+          }
+        })
 
         return json({ data: users })
       }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast, Button, Modal, Table } from '@heroui/react'
+import { toast } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import DashboardLayout from '@/components/layout/DashboardLayout'
@@ -82,10 +82,14 @@ export default function UserManagement() {
             {users.length} usuário(s) cadastrado(s)
           </p>
         </div>
-        <Button onPress={() => setCreateOpen(true)}>
-          <i className="fa-solid fa-user-plus mr-2" />
-          Novo Usuário
-        </Button>
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 cursor-pointer"
+        >
+          <i className="fa-solid fa-user-plus text-xs" />
+          <span>Novo Usuário</span>
+        </button>
       </div>
 
       {error && (
@@ -94,107 +98,114 @@ export default function UserManagement() {
         </p>
       )}
 
-      <Table.Root>
-        <Table.Content aria-label="Usuários">
-          <Table.Header>
-            <Table.Column isRowHeader>Usuário</Table.Column>
-            <Table.Column>E-mail</Table.Column>
-            <Table.Column>Papel</Table.Column>
-            <Table.Column>Status</Table.Column>
-            <Table.Column className="text-right">Ações</Table.Column>
-          </Table.Header>
-          <Table.Body>
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+        <table className="w-full border-collapse text-xs">
+          <thead className="border-b border-border bg-slate-100 dark:bg-slate-800">
+            <tr className="text-slate-800 dark:text-slate-100">
+              <th className="px-4 py-3 text-left font-bold text-slate-800 dark:text-slate-100">Usuário</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-800 dark:text-slate-100">E-mail</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-800 dark:text-slate-100">Papel</th>
+              <th className="px-4 py-3 text-left font-bold text-slate-800 dark:text-slate-100">Status</th>
+              <th className="px-4 py-3 text-right font-bold text-slate-800 dark:text-slate-100">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
             {isLoading ? (
-              <Table.Row>
-                <Table.Cell className="text-center text-sm text-muted-foreground" colSpan={5}>
-                  Carregando...
-                </Table.Cell>
-              </Table.Row>
+              <tr>
+                <td className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>
+                  <i className="fa-solid fa-circle-notch fa-spin mr-2" />
+                  Carregando usuários...
+                </td>
+              </tr>
             ) : users.length === 0 ? (
-              <Table.Row>
-                <Table.Cell className="text-center text-sm text-muted-foreground" colSpan={5}>
+              <tr>
+                <td className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>
                   Nenhum usuário encontrado.
-                </Table.Cell>
-              </Table.Row>
+                </td>
+              </tr>
             ) : (
               users.map((u) => {
                 const banned = u.banned_until !== null
                 const name = u.full_name ?? u.username
                 return (
-                  <Table.Row key={u.id}>
-                    <Table.Cell>
-                      <div className="flex items-center gap-2">
+                  <tr key={u.id} className="transition hover:bg-muted/40">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
                         <span
-                          className="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-2xs"
                           style={{ backgroundColor: userColor(u.id) }}
                         >
                           {u.username.charAt(0).toUpperCase()}
                         </span>
                         <div>
-                          <div className="font-medium">{name}</div>
-                          <div className="text-xs text-muted-foreground">@{u.username}</div>
+                          <div className="font-semibold text-foreground text-xs">{name}</div>
+                          <div className="text-[11px] text-muted-foreground">@{u.username}</div>
                         </div>
                       </div>
-                    </Table.Cell>
-                    <Table.Cell>{u.email}</Table.Cell>
-                    <Table.Cell>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground font-mono text-xs">{u.email}</td>
+                    <td className="px-4 py-3">
                       {u.role === 'admin' ? (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                        <span className="rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-[11px] font-bold text-primary">
                           Admin
                         </span>
                       ) : (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border/60">
                           Membro
                         </span>
                       )}
-                    </Table.Cell>
-                    <Table.Cell>
+                    </td>
+                    <td className="px-4 py-3">
                       {banned ? (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-destructive">
-                          <span className="size-2 rounded-full bg-destructive" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-0.5 text-xs font-semibold text-rose-600 border border-rose-500/20">
+                          <span className="size-1.5 rounded-full bg-rose-500" />
                           Desativado
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 text-sm text-emerald-600">
-                          <span className="size-2 rounded-full bg-emerald-500" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
                           Ativo
                         </span>
                       )}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onPress={() => setEditUser(u)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setEditUser(u)}
+                          className="flex items-center gap-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs"
                         >
-                          <i className="fa-solid fa-pen mr-2 text-xs" />
-                          Editar
-                        </Button>
+                          <i className="fa-solid fa-pen text-[10px]" />
+                          <span>Editar</span>
+                        </button>
                         {banned ? (
-                          <Button size="sm" onPress={() => void handleReactivate(u)}>
-                            <i className="fa-solid fa-rotate-left mr-2 text-xs" />
-                            Reativar
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            onPress={() => setToDeactivate(u)}
+                          <button
+                            type="button"
+                            onClick={() => void handleReactivate(u)}
+                            className="flex items-center gap-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs"
                           >
-                            <i className="fa-solid fa-user-slash mr-2 text-xs" />
-                            Desativar
-                          </Button>
+                            <i className="fa-solid fa-rotate-left text-[10px]" />
+                            <span>Reativar</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setToDeactivate(u)}
+                            className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 cursor-pointer shadow-2xs"
+                          >
+                            <i className="fa-solid fa-user-slash text-[10px]" />
+                            <span>Desativar</span>
+                          </button>
                         )}
                       </div>
-                    </Table.Cell>
-                  </Table.Row>
+                    </td>
+                  </tr>
                 )
               })
             )}
-          </Table.Body>
-        </Table.Content>
-      </Table.Root>
+          </tbody>
+        </table>
+      </div>
 
       <CreateUserModal
         open={createOpen}
@@ -211,40 +222,63 @@ export default function UserManagement() {
         />
       )}
 
-      <Modal.Root
-        isOpen={toDeactivate !== null}
-        onOpenChange={(open) => !open && setToDeactivate(null)}
-      >
-        <Modal.Backdrop />
-        <Modal.Container>
-          <Modal.Dialog className="sm:max-w-md">
-            <Modal.Header>
-              <Modal.Heading>Desativar usuário</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body>
-              <p className="text-sm">
-                {toDeactivate
-                  ? `${toDeactivate.full_name ?? toDeactivate.username} perderá o acesso imediatamente. Esta ação pode ser revertida em "Reativar".`
-                  : ''}
-              </p>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="outline" onPress={() => setToDeactivate(null)}>
-                Cancelar
-              </Button>
-              <Button
-                className="bg-destructive text-white"
-                isDisabled={deactivating}
-                onPress={() => toDeactivate && void handleDeactivate(toDeactivate)}
+      {toDeactivate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-card shadow-2xl transition-all p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-rose-500/10 text-rose-600">
+                <i className="fa-solid fa-triangle-exclamation text-base" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Desativar Usuário</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Confirmar bloqueio de acesso
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs text-foreground/80 leading-relaxed">
+              Tem certeza de que deseja desativar o usuário{' '}
+              <strong className="text-foreground">
+                {toDeactivate.full_name ?? toDeactivate.username} (@{toDeactivate.username})
+              </strong>
+              ? Ele perderá o acesso ao sistema imediatamente. Esta ação poderá ser revertida a qualquer momento.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setToDeactivate(null)}
+                className="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs"
               >
-                {deactivating ? 'Desativando...' : 'Desativar'}
-              </Button>
-            </Modal.Footer>
-            <Modal.CloseTrigger />
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Root>
-      </main>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deactivating}
+                onClick={() => toDeactivate && void handleDeactivate(toDeactivate)}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-rose-700 disabled:opacity-60 cursor-pointer"
+              >
+                {deactivating ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                    <span>Desativando...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-user-slash text-xs" />
+                    <span>Confirmar Desativação</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
     </DashboardLayout>
   )
 }

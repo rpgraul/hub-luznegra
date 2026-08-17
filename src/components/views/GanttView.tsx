@@ -814,22 +814,22 @@ export default function GanttView({
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr
-                    className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur"
+                    className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800"
                     style={{ height: HEADER_HEIGHT }}
                   >
-                    <th className="w-9 min-w-[36px] px-2 text-center font-bold text-muted-foreground">
+                    <th className="w-9 min-w-[36px] px-2 text-center font-bold text-slate-800 dark:text-slate-100">
                       <i className="fa-solid fa-check text-[11px]" title="Concluir" />
                     </th>
-                    <th className="min-w-[170px] px-3 text-left font-bold text-muted-foreground">
+                    <th className="min-w-[170px] px-3 text-left font-bold text-slate-800 dark:text-slate-100">
                       Tarefa & Tags
                     </th>
-                    <th className="w-28 min-w-[110px] px-2 text-left font-bold text-muted-foreground">
+                    <th className="w-28 min-w-[110px] px-2 text-left font-bold text-slate-800 dark:text-slate-100">
                       Status
                     </th>
-                    <th className="w-32 min-w-[125px] px-2 text-left font-bold text-muted-foreground">
+                    <th className="w-32 min-w-[125px] px-2 text-left font-bold text-slate-800 dark:text-slate-100">
                       Início
                     </th>
-                    <th className="w-32 min-w-[125px] px-2 pr-3 text-left font-bold text-muted-foreground">
+                    <th className="w-32 min-w-[125px] px-2 pr-3 text-left font-bold text-slate-800 dark:text-slate-100">
                       Fim
                     </th>
                   </tr>
