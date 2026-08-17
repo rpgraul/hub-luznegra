@@ -14,8 +14,8 @@ interface GanttViewProps {
 }
 
 const BAR_HEIGHT = 24
-const PADDING = 10
-const ROW_HEIGHT = BAR_HEIGHT + PADDING // 34px
+const PADDING = 12
+const ROW_HEIGHT = BAR_HEIGHT + PADDING // 36px
 const UPPER_HEADER_HEIGHT = 28
 const LOWER_HEADER_HEIGHT = 28
 const HEADER_HEIGHT = UPPER_HEADER_HEIGHT + LOWER_HEADER_HEIGHT // 56px
@@ -43,7 +43,7 @@ const ZOOM_CONFIGS: ZoomConfig[] = [
     label: 'Dia',
     shortLabel: 'Dia',
     view_mode: 'Day',
-    column_width: 32,
+    column_width: 34,
     snap_at: '1d',
   },
   {
@@ -51,7 +51,7 @@ const ZOOM_CONFIGS: ZoomConfig[] = [
     label: 'Semana',
     shortLabel: 'Semana',
     view_mode: 'Week',
-    column_width: 55,
+    column_width: 56,
     snap_at: '1d',
   },
   {
@@ -59,7 +59,7 @@ const ZOOM_CONFIGS: ZoomConfig[] = [
     label: 'Mês',
     shortLabel: 'Mês',
     view_mode: 'Month',
-    column_width: 85,
+    column_width: 86,
     snap_at: '1d',
   },
   {
@@ -82,10 +82,10 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
   backlog: '#64748b',
-  todo: '#3b82f6',
-  in_progress: '#eab308',
+  todo: '#0284c7',
+  in_progress: '#7c3aed',
   review: '#a855f7',
-  done: '#22c55e',
+  done: '#10b981',
 }
 
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
@@ -129,7 +129,14 @@ export default function GanttView({
   const tableRef = useRef<HTMLDivElement>(null)
   const ganttInstanceRef = useRef<Gantt | null>(null)
   const isSyncingScroll = useRef(false)
-  const [zoomIndex, setZoomIndex] = useState(1) // Default: Day compact
+  const isInteractingRef = useRef(false)
+  const pendingChangeRef = useRef<{
+    taskId: string
+    start: string
+    due: string
+  } | null>(null)
+
+  const [zoomIndex, setZoomIndex] = useState(1)
   const [showTable, setShowTable] = useState(true)
 
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
@@ -152,7 +159,6 @@ export default function GanttView({
           ? addDaysLocal(task.due_date, 1)
           : addDaysLocal(task.start_date ?? today, 1)
 
-        // Calculate deadline & progression along the days
         let progress = 0
         let isOverdue = false
 
@@ -190,16 +196,110 @@ export default function GanttView({
           custom_class: customClass,
           color:
             task.status === 'done'
-              ? '#22c55e'
+              ? '#10b981'
               : isOverdue
-                ? '#ef4444'
+                ? '#f43f5e'
                 : task.assigned_to
                   ? userColor(task.assigned_to)
-                  : STATUS_COLORS[task.status] || '#3b82f6',
+                  : STATUS_COLORS[task.status] || '#7b68ee',
         }
       }),
     [rows, today],
   )
+
+  // Commit pending date changes after user finishes dragging
+  const commitPendingDateChange = useCallback(() => {
+    if (!pendingChangeRef.current) return
+    const { taskId, start: nextStart, due: nextDue } = pendingChangeRef.current
+    pendingChangeRef.current = null
+
+    const task = tasks.find((t) => t.id === taskId)
+    if (!task) return
+
+    if (task.start_date === nextStart && task.due_date === nextDue) return
+
+    const oldStart = task.start_date ?? today
+    const deltaDays = diffDaysLocal(oldStart, nextStart)
+
+    const promises: Promise<unknown>[] = [
+      updateTask({
+        id: task.id,
+        patch: { start_date: nextStart, due_date: nextDue },
+      }),
+    ]
+
+    // Cascade Parent -> Children
+    const directChildren = tasks.filter((t) => t.parent_id === task.id)
+    if (directChildren.length > 0 && deltaDays !== 0) {
+      for (const child of directChildren) {
+        const childPatch: Partial<Task> = {}
+        if (child.start_date) {
+          childPatch.start_date = addDaysLocal(child.start_date, deltaDays)
+        }
+        if (child.due_date) {
+          childPatch.due_date = addDaysLocal(child.due_date, deltaDays)
+        }
+        if (Object.keys(childPatch).length > 0) {
+          promises.push(updateTask({ id: child.id, patch: childPatch }))
+        }
+      }
+    }
+
+    // Cascade Child -> Parent
+    if (task.parent_id) {
+      const parentTask = tasks.find((t) => t.id === task.parent_id)
+      if (parentTask) {
+        let parentStart = parentTask.start_date
+        let parentDue = parentTask.due_date
+        let parentChanged = false
+
+        if (!parentStart || nextStart < parentStart) {
+          parentStart = nextStart
+          parentChanged = true
+        }
+        if (!parentDue || nextDue > parentDue) {
+          parentDue = nextDue
+          parentChanged = true
+        }
+
+        if (parentChanged) {
+          promises.push(
+            updateTask({
+              id: parentTask.id,
+              patch: { start_date: parentStart, due_date: parentDue },
+            }),
+          )
+        }
+      }
+    }
+
+    void Promise.all(promises)
+      .then(() => {
+        toast.success(
+          directChildren.length > 0 && deltaDays !== 0
+            ? `Tarefa e ${directChildren.length} subtarefa(s) atualizadas!`
+            : 'Prazos atualizados!',
+        )
+      })
+      .catch(() => toast.danger('Erro ao salvar as alterações de prazo.'))
+  }, [tasks, today, updateTask])
+
+  // Mouse up listener on window to commit drag
+  useEffect(() => {
+    function handleWindowMouseUp() {
+      if (isInteractingRef.current) {
+        isInteractingRef.current = false
+        commitPendingDateChange()
+      }
+    }
+
+    window.addEventListener('mouseup', handleWindowMouseUp)
+    window.addEventListener('pointerup', handleWindowMouseUp)
+    return () => {
+      window.removeEventListener('mouseup', handleWindowMouseUp)
+      window.removeEventListener('pointerup', handleWindowMouseUp)
+    }
+  }, [commitPendingDateChange])
 
   // Synchronize vertical scroll between table and timeline
   useEffect(() => {
@@ -316,11 +416,15 @@ export default function GanttView({
       return
     }
 
+    // If user is actively dragging, do not destroy/refresh Gantt instance
+    if (isInteractingRef.current) return
+
     const tasksById = new Map(rows.map(({ task }) => [task.id, task]))
     const undatedById = new Map(
       rows.map(({ task, undated }) => [task.id, undated]),
     )
 
+    // Recreate gantt instance
     wrapper.innerHTML = ''
 
     const gantt = new Gantt(wrapper, ganttTasks, {
@@ -352,10 +456,10 @@ export default function GanttView({
         if (task.start_date && task.due_date) {
           const totalDays = Math.max(1, diffDaysLocal(task.start_date, task.due_date) + 1)
           if (task.status === 'done') {
-            durationHtml = `<div style="margin-top:3px;font-size:11px;color:#22c55e;font-weight:600;"><i class="fa-solid fa-check"></i> Tarefa Concluída (${totalDays} dias)</div>`
+            durationHtml = `<div style="margin-top:3px;font-size:11px;color:#10b981;font-weight:600;"><i class="fa-solid fa-check"></i> Tarefa Concluída (${totalDays} dias)</div>`
           } else if (today > task.due_date) {
             const overdueDays = diffDaysLocal(task.due_date, today)
-            durationHtml = `<div style="margin-top:3px;font-size:11px;color:#ef4444;font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasada há ${overdueDays} dia(s) (Total: ${totalDays} dias)</div>`
+            durationHtml = `<div style="margin-top:3px;font-size:11px;color:#f43f5e;font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasada há ${overdueDays} dia(s) (Total: ${totalDays} dias)</div>`
           } else if (today >= task.start_date) {
             const elapsed = diffDaysLocal(task.start_date, today) + 1
             const pct = Math.min(100, Math.max(0, Math.round((elapsed / totalDays) * 100)))
@@ -393,91 +497,27 @@ export default function GanttView({
         `
       },
       on_date_change: (gTask, start, end) => {
-        const taskId = String(gTask.id)
-        const task = tasksById.get(taskId)
-        if (!task) return
-
+        isInteractingRef.current = true
         const nextStart = formatLocalDate(start)
         const nextDue = addDaysLocal(formatLocalDate(end), -1)
-
-        // If no change, return
-        if (task.start_date === nextStart && task.due_date === nextDue) return
-
-        const oldStart = task.start_date ?? today
-        const deltaDays = diffDaysLocal(oldStart, nextStart)
-
-        const promises: Promise<unknown>[] = []
-
-        // 1. Update the dragged/resized task
-        promises.push(
-          updateTask({
-            id: task.id,
-            patch: { start_date: nextStart, due_date: nextDue },
-          }),
-        )
-
-        // 2. Cascade Parent -> Children:
-        // If parent task is moved, shift all children by the exact same delta
-        const directChildren = tasks.filter((t) => t.parent_id === task.id)
-        if (directChildren.length > 0 && deltaDays !== 0) {
-          for (const child of directChildren) {
-            const childPatch: Partial<Task> = {}
-            if (child.start_date) {
-              childPatch.start_date = addDaysLocal(child.start_date, deltaDays)
-            }
-            if (child.due_date) {
-              childPatch.due_date = addDaysLocal(child.due_date, deltaDays)
-            }
-            if (Object.keys(childPatch).length > 0) {
-              promises.push(updateTask({ id: child.id, patch: childPatch }))
-            }
-          }
+        pendingChangeRef.current = {
+          taskId: String(gTask.id),
+          start: nextStart,
+          due: nextDue,
         }
-
-        // 3. Cascade Child -> Parent:
-        // If child extends beyond parent's range, automatically expand parent
-        if (task.parent_id) {
-          const parentTask = tasksById.get(task.parent_id)
-          if (parentTask) {
-            let parentStart = parentTask.start_date
-            let parentDue = parentTask.due_date
-            let parentChanged = false
-
-            if (!parentStart || nextStart < parentStart) {
-              parentStart = nextStart
-              parentChanged = true
-            }
-            if (!parentDue || nextDue > parentDue) {
-              parentDue = nextDue
-              parentChanged = true
-            }
-
-            if (parentChanged) {
-              promises.push(
-                updateTask({
-                  id: parentTask.id,
-                  patch: { start_date: parentStart, due_date: parentDue },
-                }),
-              )
-            }
-          }
-        }
-
-        void Promise.all(promises)
-          .then(() => {
-            toast.success(
-              directChildren.length > 0 && deltaDays !== 0
-                ? `Tarefa e ${directChildren.length} subtarefa(s) atualizadas!`
-                : 'Prazos atualizados!',
-            )
-          })
-          .catch(() => toast.danger('Erro ao salvar as alterações de prazo.'))
       },
     })
 
     ganttInstanceRef.current = gantt
 
-    // Double click to open task
+    // Mark interaction on mousedown inside timeline
+    function handleTimelineMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('.bar-wrapper, .handle')) {
+        isInteractingRef.current = true
+      }
+    }
+
     function handleDoubleClick(event: MouseEvent) {
       const target = event.target as Element | null
       const bar = target?.closest?.('.bar-wrapper[data-id]')
@@ -487,15 +527,16 @@ export default function GanttView({
       if (task) onOpenTask(task)
     }
 
+    wrapper.addEventListener('mousedown', handleTimelineMouseDown)
     wrapper.addEventListener('dblclick', handleDoubleClick)
 
-    // Scroll to today smoothly after layout calculation
     const timer = setTimeout(() => {
       scrollToToday(false)
     }, 60)
 
     return () => {
       clearTimeout(timer)
+      wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
       wrapper.removeEventListener('dblclick', handleDoubleClick)
       if (gantt) {
         gantt.clear()
@@ -504,7 +545,7 @@ export default function GanttView({
       wrapper.innerHTML = ''
       ganttInstanceRef.current = null
     }
-  }, [ganttTasks, rows, currentZoom, onOpenTask, updateTask, scrollToToday, tasks, today])
+  }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today])
 
   // Ctrl + Scroll to Zoom listener
   useEffect(() => {
@@ -545,7 +586,6 @@ export default function GanttView({
       updateTask({ id: task.id, patch: { [field]: next } }),
     ]
 
-    // If child task extended beyond parent, expand parent
     if (task.parent_id && next) {
       const parentTask = tasks.find((t) => t.id === task.parent_id)
       if (parentTask) {
@@ -599,7 +639,7 @@ export default function GanttView({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background select-none">
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/60 px-4 py-2 text-xs backdrop-blur">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs backdrop-blur">
         {/* Left Side: Stats & Toggle Table */}
         <div className="flex items-center gap-2">
           <Button
@@ -614,7 +654,7 @@ export default function GanttView({
             <span>{showTable ? 'Ocultar Tabela' : 'Mostrar Tabela'}</span>
           </Button>
 
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[11px] text-muted-foreground font-medium">
             {rows.length} tarefa{rows.length !== 1 ? 's' : ''}
           </span>
 
@@ -629,7 +669,7 @@ export default function GanttView({
         {/* Right Side: Zoom Controls & Today Button */}
         <div className="flex items-center gap-2">
           {/* Zoom Buttons & Mode Selector */}
-          <div className="flex items-center rounded-lg border border-border bg-background/80 p-0.5 shadow-xs">
+          <div className="flex items-center rounded-lg border border-border bg-background/80 p-0.5 shadow-2xs">
             <button
               type="button"
               aria-label="Aumentar Zoom (Ctrl + Scroll para cima)"
@@ -652,7 +692,7 @@ export default function GanttView({
                   onClick={() => setZoomIndex(idx)}
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
                     zoomIndex === idx
-                      ? 'bg-primary text-primary-foreground shadow-xs'
+                      ? 'bg-primary text-primary-foreground shadow-2xs'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
                 >
@@ -696,7 +736,7 @@ export default function GanttView({
           {showTable && (
             <div
               ref={tableRef}
-              className="w-[410px] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text"
+              className="w-[410px] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8"
             >
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -740,7 +780,7 @@ export default function GanttView({
                         <tr
                           key={task.id}
                           className={`group border-b border-border/50 transition hover:bg-muted/40 ${
-                            isDone ? 'bg-green-500/5' : isOverdue ? 'bg-red-500/5' : ''
+                            isDone ? 'bg-emerald-500/5' : isOverdue ? 'bg-rose-500/5' : ''
                           }`}
                           style={{ height: ROW_HEIGHT }}
                         >
@@ -750,10 +790,10 @@ export default function GanttView({
                               type="button"
                               onClick={() => handleToggleDone(task)}
                               title={isDone ? 'Reabrir tarefa' : 'Marcar como concluída'}
-                              className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-green-600 focus:outline-none"
+                              className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none"
                             >
                               {isDone ? (
-                                <i className="fa-solid fa-circle-check text-green-500 text-sm" />
+                                <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
                               ) : (
                                 <i className="fa-regular fa-circle text-muted-foreground/60 group-hover:text-foreground text-xs" />
                               )}
@@ -771,9 +811,9 @@ export default function GanttView({
                                 className="h-2 w-2 shrink-0 rounded-full"
                                 style={{
                                   backgroundColor: isDone
-                                    ? '#22c55e'
+                                    ? '#10b981'
                                     : isOverdue
-                                      ? '#ef4444'
+                                      ? '#f43f5e'
                                       : task.assigned_to
                                         ? userColor(task.assigned_to)
                                         : STATUS_COLORS[task.status],
@@ -784,7 +824,7 @@ export default function GanttView({
                                   isDone
                                     ? 'line-through text-muted-foreground'
                                     : isOverdue
-                                      ? 'text-red-500 font-semibold'
+                                      ? 'text-rose-600 font-semibold'
                                       : 'text-foreground'
                                 }`}
                               >
@@ -796,7 +836,7 @@ export default function GanttView({
                                 </span>
                               )}
                               {isOverdue && (
-                                <span className="shrink-0 rounded border border-red-500/30 bg-red-500/10 px-1 text-[9px] font-bold leading-tight text-red-500">
+                                <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[9px] font-bold leading-tight text-rose-600">
                                   atrasada
                                 </span>
                               )}
@@ -854,7 +894,7 @@ export default function GanttView({
                                 handleDateChange(task, 'due_date', e.target.value)
                               }
                               className={`w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] outline-none transition hover:border-border focus:border-primary focus:bg-background ${
-                                isOverdue ? 'text-red-500 font-semibold' : ''
+                                isOverdue ? 'text-rose-600 font-semibold' : ''
                               }`}
                             />
                           </td>
@@ -869,7 +909,7 @@ export default function GanttView({
 
           {/* Gantt Timeline SVG Container */}
           <div
-            className="relative min-w-0 flex-1 overflow-hidden"
+            className="relative min-w-0 flex-1 overflow-hidden pb-8"
             ref={wrapperRef}
           />
         </div>

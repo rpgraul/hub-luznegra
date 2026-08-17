@@ -1,7 +1,7 @@
 :root {
-  --g-arrow-color: #64748b;
-  --g-bar-color: #3b82f6;
-  --g-bar-border: #2563eb;
+  --g-arrow-color: #94a3b8;
+  --g-bar-color: #7b68ee;
+  --g-bar-border: #6c5ce7;
   --g-tick-color-thick: #cbd5e1;
   --g-tick-color: #f1f5f9;
   --g-actions-background: #f8fafc;
@@ -15,9 +15,9 @@
   --g-expected-progress: #cbd5e1;
   --g-header-background: #ffffff;
   --g-row-color: #ffffff;
-  --g-row-border-color: #e2e8f0;
+  --g-row-border-color: #f1f5f9;
   --g-today-highlight: #ef4444;
-  --g-popup-actions: #f1f5f9;
+  --g-popup-actions: #f8fafc;
   --g-weekend-highlight-color: #f8fafc;
   --gv-upper-header-height: 28px;
   --gv-lower-header-height: 28px;
@@ -25,9 +25,9 @@
 
 html[data-theme='dark'],
 .dark {
-  --g-arrow-color: #94a3b8;
-  --g-bar-color: #3b82f6;
-  --g-bar-border: #60a5fa;
+  --g-arrow-color: #64748b;
+  --g-bar-color: #7b68ee;
+  --g-bar-border: #8b5cf6;
   --g-tick-color-thick: #334155;
   --g-tick-color: #1e293b;
   --g-actions-background: #0f172a;
@@ -67,7 +67,7 @@ html[data-theme='dark'],
   left: 0;
   background: var(--g-header-background);
   border: 1px solid var(--g-border-color);
-  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.22), 0 8px 12px -6px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 6px 10px -4px rgba(0, 0, 0, 0.1);
   padding: 12px 14px;
   border-radius: 10px;
   width: max-content;
@@ -83,9 +83,9 @@ html[data-theme='dark'],
   position: sticky;
   top: 0;
   left: 0;
-  border-bottom: 1px solid var(--g-row-border-color);
+  border-bottom: 1px solid var(--g-border-color);
   z-index: 1000;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .gantt-container .upper-header {
@@ -107,7 +107,7 @@ html[data-theme='dark'],
 
 .gantt-container .upper-text {
   position: absolute;
-  top: 4px !important;
+  top: 5px !important;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -121,7 +121,7 @@ html[data-theme='dark'],
 
 .gantt-container .lower-text {
   position: absolute;
-  top: 6px !important;
+  top: 7px !important;
   font-size: 10px;
   font-weight: 600;
   color: var(--g-text-muted);
@@ -150,7 +150,7 @@ html[data-theme='dark'],
   height: 20px;
   top: 32px;
   position: absolute;
-  opacity: 0.18;
+  opacity: 0.15;
 }
 
 /* Today highlight line and marker */
@@ -159,7 +159,7 @@ html[data-theme='dark'],
   background: var(--g-today-highlight);
   width: 2px;
   z-index: 999;
-  box-shadow: 0 0 8px var(--g-today-highlight);
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
   pointer-events: none;
 }
 
@@ -227,12 +227,12 @@ html[data-theme='dark'],
   fill: none;
   stroke: var(--g-arrow-color);
   stroke-width: 1.5;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .gantt .bar-wrapper {
   cursor: grab;
-  transition: opacity 0.15s ease, filter 0.15s ease;
+  transition: filter 0.15s ease;
 }
 
 .gantt .bar-wrapper:active {
@@ -243,20 +243,20 @@ html[data-theme='dark'],
   fill: var(--g-bar-color);
   stroke: var(--g-bar-border);
   stroke-width: 1;
-  rx: 5px;
-  ry: 5px;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+  rx: 6px;
+  ry: 6px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.08));
   transition: filter 0.15s ease;
 }
 
 .gantt .bar-wrapper:hover .bar {
-  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.22));
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.18));
 }
 
 .gantt .bar-progress {
   fill: var(--g-progress-color);
-  rx: 4px;
-  ry: 4px;
+  rx: 5px;
+  ry: 5px;
 }
 
 .gantt .bar-label {
@@ -266,7 +266,7 @@ html[data-theme='dark'],
   font-size: 11px;
   font-weight: 600;
   pointer-events: none;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .gantt .bar-label.big {
@@ -279,10 +279,10 @@ html[data-theme='dark'],
 /* Resize Handles - Widen hit area and make visible on hover */
 .gantt .handle {
   fill: #ffffff;
-  stroke: var(--g-bar-border);
+  stroke: rgba(0, 0, 0, 0.3);
   stroke-width: 1px;
   opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition: opacity 0.15s ease;
   rx: 3px;
   ry: 3px;
   cursor: ew-resize !important;
@@ -291,7 +291,7 @@ html[data-theme='dark'],
 
 .gantt .handle.left,
 .gantt .handle.right {
-  stroke-width: 8px !important;
+  stroke-width: 10px !important;
   stroke: transparent !important;
   cursor: ew-resize !important;
 }
@@ -302,9 +302,9 @@ html[data-theme='dark'],
   opacity: 1 !important;
   cursor: ew-resize !important;
   fill: #ffffff !important;
-  stroke: rgba(0, 0, 0, 0.4) !important;
+  stroke: rgba(0, 0, 0, 0.45) !important;
   stroke-width: 1.5px !important;
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.4));
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
 
 /* Hide the confusing progress drag circle */
@@ -326,7 +326,7 @@ html[data-theme='dark'],
 /* Undated tasks styling */
 .gantt .bar-wrapper.gantt-undated .bar {
   fill: transparent !important;
-  stroke: var(--g-row-border-color) !important;
+  stroke: var(--g-border-color) !important;
   stroke-width: 1.5 !important;
   stroke-dasharray: 4 3;
 }
@@ -342,8 +342,9 @@ html[data-theme='dark'],
 
 /* Done tasks styling */
 .gantt .bar-wrapper.gantt-done .bar {
-  opacity: 0.92;
-  filter: drop-shadow(0 1px 2px rgba(34, 197, 94, 0.25));
+  fill: #10b981 !important;
+  stroke: #059669 !important;
+  opacity: 0.95;
 }
 
 .gantt .bar-wrapper.gantt-done .bar-progress {
@@ -352,7 +353,7 @@ html[data-theme='dark'],
 
 /* Overdue tasks styling */
 .gantt .bar-wrapper.gantt-overdue .bar {
-  stroke: #ef4444 !important;
-  stroke-width: 2px !important;
-  stroke-dasharray: 4 2;
+  fill: #f43f5e !important;
+  stroke: #e11d48 !important;
+  stroke-width: 1.5px !important;
 }
