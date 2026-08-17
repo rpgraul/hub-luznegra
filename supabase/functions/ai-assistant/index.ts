@@ -259,10 +259,31 @@ FORMATO OBRIGATÓRIO (JSON puro):
     // 4. Executa a ação no banco de dados se aplicável
     let actionResult: Record<string, unknown> | null = null
 
+    function normalizeDate(d: unknown): string | null {
+      if (!d || typeof d !== 'string') return null
+      const trimmed = d.trim()
+      const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (brMatch) {
+        return `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`
+      }
+      const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
+      if (isoMatch) {
+        return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`
+      }
+      return null
+    }
+
+    function resolveMemberId(identifier: unknown): string {
+      if (!identifier || typeof identifier !== 'string') return userId
+      const clean = identifier.replace(/^@/, '').toLowerCase().trim()
+      const found = (members ?? []).find((m) => m.id === clean || m.username.toLowerCase() === clean)
+      return found ? found.id : userId
+    }
+
     if (aiParsed.action && aiParsed.action.type !== 'none') {
       const { type, params = {} } = aiParsed.action
 
-      if (type === 'create_task') {
+      if (type === 'create_task' || type === 'create_tasks') {
         const projectIdToUse = (params.project_id as string) || context.projectId || projects?.[0]?.id
         if (projectIdToUse) {
           const taskList = Array.isArray(params.tasks)
@@ -275,16 +296,20 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           for (const item of taskList) {
             if (!item.title) continue
+            const assignedUser = resolveMemberId(item.assigned_to || params.assigned_to)
+            const dueDate = normalizeDate(item.due_date || params.due_date)
+            const startDate = normalizeDate(item.start_date || params.start_date)
+
             const { data: created, error: createError } = await admin
               .from('tasks')
               .insert({
-                title: item.title as string,
+                title: String(item.title),
                 project_id: (item.project_id as string) || projectIdToUse,
                 priority: (item.priority as string) || (params.priority as string) || 'medium',
                 status: (item.status as string) || 'todo',
-                assigned_to: (item.assigned_to as string) || (params.assigned_to as string) || userId,
-                due_date: (item.due_date as string) || null,
-                start_date: (item.start_date as string) || null,
+                assigned_to: assignedUser,
+                due_date: dueDate,
+                start_date: startDate,
                 created_by: userId,
               })
               .select()
@@ -297,13 +322,18 @@ FORMATO OBRIGATÓRIO (JSON puro):
               if (Array.isArray(subtasks) && subtasks.length > 0) {
                 const subtaskInserts = subtasks.map((st, idx) => {
                   const isObj = typeof st === 'object' && st !== null
+                  const stTitle = isObj ? String((st as Record<string, unknown>).title || '') : String(st)
+                  const stDue = isObj ? normalizeDate((st as Record<string, unknown>).due_date) : null
+                  const stStart = isObj ? normalizeDate((st as Record<string, unknown>).start_date) : null
+                  const stAssigned = isObj ? resolveMemberId((st as Record<string, unknown>).assigned_to) : created.assigned_to
+
                   return {
-                    title: isObj ? ((st as Record<string, unknown>).title as string) : String(st),
+                    title: stTitle,
                     project_id: created.project_id,
                     parent_id: created.id,
-                    assigned_to: (isObj ? (st as Record<string, unknown>).assigned_to : null) || created.assigned_to,
-                    due_date: isObj ? ((st as Record<string, unknown>).due_date as string) || null : null,
-                    start_date: isObj ? ((st as Record<string, unknown>).start_date as string) || null : null,
+                    assigned_to: stAssigned,
+                    due_date: stDue || created.due_date,
+                    start_date: stStart,
                     priority: created.priority,
                     status: 'todo',
                     order_index: idx + 1,
@@ -313,6 +343,8 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
                 await admin.from('tasks').insert(subtaskInserts)
               }
+            } else if (createError) {
+              console.error('Task insert error:', createError)
             }
           }
 

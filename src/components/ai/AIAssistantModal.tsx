@@ -93,6 +93,14 @@ function formatInlineMarkdown(text?: string | null) {
   })
 }
 
+const CHAT_STORAGE_KEY = 'hub_ai_chat_messages_v1'
+
+const WELCOME_MSG: AIMessage = {
+  id: 'welcome',
+  role: 'assistant',
+  content: `Olá! Sou o **Lord Camarão**, assistente do Hub da Editora Luz Negra. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
+}
+
 export default function AIAssistantModal({
   open,
   onClose,
@@ -100,17 +108,32 @@ export default function AIAssistantModal({
   projectName,
 }: AIAssistantModalProps) {
   const queryClient = useQueryClient()
-  const [messages, setMessages] = useState<AIMessage[]>([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `Olá! Sou o **Lord Camarão**, assistente do Hub da Editora Luz Negra. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
-    },
-  ])
+  const [messages, setMessages] = useState<AIMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {
+      // ignore
+    }
+    return [WELCOME_MSG]
+  })
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages))
+      } catch {
+        // ignore
+      }
+    }
+  }, [messages])
 
   useEffect(() => {
     if (open) {
@@ -201,13 +224,12 @@ export default function AIAssistantModal({
   }
 
   function handleClear() {
-    setMessages([
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: `Histórico limpo. Como posso ajudar agora?`,
-      },
-    ])
+    try {
+      localStorage.removeItem(CHAT_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
+    setMessages([WELCOME_MSG])
   }
 
   return (
