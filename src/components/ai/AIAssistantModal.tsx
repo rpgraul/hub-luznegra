@@ -176,11 +176,17 @@ export default function AIAssistantModal({
       const replyContent =
         typeof response?.reply === 'string' && response.reply.trim()
           ? response.reply
-          : response?.action?.type === 'create_task'
-            ? 'Tarefa criada com sucesso.'
-            : response?.action?.type === 'create_user'
-              ? 'Usuário criado com sucesso.'
-              : 'Comando processado com sucesso.'
+          : response?.action?.type === 'create_project'
+            ? 'Projeto criado com sucesso.'
+            : response?.action?.type === 'create_task'
+              ? 'Tarefa criada com sucesso.'
+              : response?.action?.type === 'update_task' || response?.action?.type === 'update_tasks'
+                ? 'Prazos/tarefas atualizados com sucesso.'
+                : response?.action?.type === 'delete_task'
+                  ? 'Tarefa excluída com sucesso.'
+                  : response?.action?.type === 'create_user'
+                    ? 'Usuário criado com sucesso.'
+                    : 'Não foi possível encontrar as tarefas ou parâmetros informados para executar a ação.'
 
       const assistantMsg: AIMessage = {
         id: `ai-${Date.now()}`,

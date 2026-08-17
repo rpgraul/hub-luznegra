@@ -94,59 +94,60 @@ Deno.serve(async (req) => {
       status: string
       priority: string
       due_date: string | null
+      start_date: string | null
       assigned_to: string | null
       parent_id: string | null
     }> = []
 
+    let taskQuery = admin
+      .from('tasks')
+      .select('id, title, status, priority, due_date, start_date, assigned_to, parent_id, project_id')
+
     if (context.projectId) {
-      const { data: tasks } = await admin
-        .from('tasks')
-        .select('id, title, status, priority, due_date, assigned_to, parent_id')
-        .eq('project_id', context.projectId)
-        .limit(50)
-      currentProjectTasks = tasks ?? []
+      taskQuery = taskQuery.eq('project_id', context.projectId)
     }
+
+    const { data: tasks } = await taskQuery.limit(80)
+    currentProjectTasks = tasks ?? []
 
     const membersMap = (members ?? []).map((m) => `@${m.username} (${m.full_name || m.username}, id: ${m.id})`).join(', ')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
     const tasksSnippet = currentProjectTasks
-      .slice(0, 10)
-      .map((t) => `[${t.id}] "${t.title}" (${t.status}, ${t.priority})`)
+      .slice(0, 30)
+      .map((t) => `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`)
       .join('\n')
 
-    // 2. Monta o system prompt ultra-enxuto para economia máxima de tokens
+    // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
 Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
-Projetos: ${projectsMap || 'Nenhum'}
-Membros: ${membersMap || 'Nenhum'}
-Tarefas recentes no projeto:
-${tasksSnippet || 'Nenhuma'}
+Projetos cadastrados: ${projectsMap || 'Nenhum'}
+Membros da equipe: ${membersMap || 'Nenhum'}
+Tarefas existentes (use os IDs e títulos reais para referenciar):
+${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 
 DIRETRIZES DE RESPOSTA:
 - Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
-- Vá direto ao ponto, sem introduções longas.
 - NÃO use emojis em nenhuma hipótese.
-- Máximo de 1 a 2 frases curtas ao confirmar ações.
-- Cores válidas para projetos: amarelo (#f59e0b), azul (#3b82f6), roxo (#7b68ee), verde (#10b981), vermelho (#ef4444), rosa (#ec4899), laranja (#f97316), ciano (#0ea5e9), teal (#14b8a6). Se o usuário pedir uma cor por nome (ex: "Amarelo"), converta para o hex correspondente.
-- Se o usuário for administrador e pedir para criar uma conta de usuário/membro:
-  action: create_user, params: { "email": string, "username": string, "full_name"?: string, "role"?: "admin"|"member", "password"?: string }
+- Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
+- Se o usuário pedir para sequenciar ou ajustar prazos de subtarefas de uma tarefa (ex: "gastar 3 dias em cada subtarefa sem paralelismo"):
+  Calcule as datas sequenciais (a partir de hoje ou da data de início da tarefa pai) e gere uma ação com a lista de tarefas a atualizar:
+  action: update_tasks, params: { "tasks": [ { "task_id": string, "task_title": string, "start_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD" } ] }
+- Se o usuário pedir para criar projeto:
+  action: create_project, params: { "name": string, "color"?: string }
+- Se o usuário pedir algo que você NÃO encontrou no banco (ex: uma tarefa que não existe), explique na "reply" com clareza ("Não encontrei a tarefa 'X' no projeto atual.") e retorne "action": { "type": "none" }. NUNCA responda genericamente "Comando processado com sucesso" se nada foi alterado.
 
 FORMATO OBRIGATÓRIO (JSON puro):
 {
-  "reply": "Mensagem curta, direta e sem emojis",
+  "reply": "Explicação curta e direta sobre o que foi executado ou esclarecimento caso não seja possível.",
   "action": {
-    "type": "create_task" | "create_project" | "update_task" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
+    "type": "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
     "params": {
       // create_project: { "name": string, "color"?: string, "description"?: string }
-      // create_task para 1 tarefa: { "title": string, "project_id"?: string, "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] | Array<{ "title": string, "due_date"?: string }> }
-      // create_task para múltiplas tarefas: { "tasks": Array<{ "title": string, "priority"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] }> }
-      // update_task: { "task_id"?: string, "task_title"?: string, "status"?: "backlog"|"todo"|"in_progress"|"review"|"done", "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "title"?: string }
-      // delete_task: { "task_id"?: string, "task_title"?: string }
-      // duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
-      // break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
-      // bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
-      // create_user: { "email": string, "username": string, "full_name"?: string, "role"?: "admin"|"member", "password"?: string }
+      // create_task: { "title": string, "project_id"?: string, "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] }
+      // update_task: { "task_id"?: string, "task_title"?: string, "start_date"?: "YYYY-MM-DD", "due_date"?: "YYYY-MM-DD", "status"?: string, "priority"?: string, "assigned_to"?: string }
+      // update_tasks: { "tasks": Array<{ "task_id"?: string, "task_title"?: string, "start_date"?: "YYYY-MM-DD", "due_date"?: "YYYY-MM-DD", "status"?: string, "priority"?: string }> }
+      // break_down_subtasks: { "parent_task_title": string, "subtasks": string[] }
     }
   }
 }`
@@ -155,7 +156,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
     const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
     const deepseekApiKey = rawKey.trim().replace(/^["']|["']$/g, '')
     let aiParsed: AIResponseStructure = {
-      reply: 'Comando processado.',
+      reply: 'Não foi possível interpretar o comando.',
       action: { type: 'none' },
     }
 
@@ -170,7 +171,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
       const apiMessages = [
         { role: 'system', content: systemPrompt },
-        ...history.slice(-3).map((h) => ({ role: h.role, content: h.content })),
+        ...history.slice(-4).map((h) => ({ role: h.role, content: h.content })),
         { role: 'user', content: message },
       ]
 
@@ -185,7 +186,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           messages: apiMessages,
           response_format: { type: 'json_object' },
           temperature: 0.1,
-          max_tokens: 300,
+          max_tokens: 800,
         }),
       })
 
@@ -527,6 +528,39 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           actionResult = { success: true, task: updated }
         }
+      } else if (type === 'update_tasks' && Array.isArray(params.tasks)) {
+        const updatedList: unknown[] = []
+        for (const item of params.tasks as Array<Record<string, unknown>>) {
+          let taskId = item.task_id as string | undefined
+          if (!taskId && item.task_title) {
+            const { data: found } = await admin
+              .from('tasks')
+              .select('id')
+              .ilike('title', `%${item.task_title}%`)
+              .limit(1)
+            taskId = found?.[0]?.id
+          }
+
+          if (taskId) {
+            const patch: Record<string, unknown> = {}
+            if (item.status) patch.status = item.status
+            if (item.priority) patch.priority = item.priority
+            if (item.title) patch.title = item.title
+            if (item.assigned_to) patch.assigned_to = resolveMemberId(item.assigned_to)
+            if (item.due_date !== undefined) patch.due_date = normalizeDate(item.due_date)
+            if (item.start_date !== undefined) patch.start_date = normalizeDate(item.start_date)
+
+            const { data: updated } = await admin
+              .from('tasks')
+              .update(patch)
+              .eq('id', taskId)
+              .select()
+              .single()
+
+            if (updated) updatedList.push(updated)
+          }
+        }
+        actionResult = { success: true, count: updatedList.length, tasks: updatedList }
       } else if (type === 'delete_task') {
         let taskId = params.task_id as string | undefined
         if (!taskId && params.task_title) {
