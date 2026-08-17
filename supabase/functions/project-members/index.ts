@@ -2,7 +2,7 @@
 // Sem project_id, retorna a equipe inteira (dashboard "Todas as tarefas").
 // profiles tem RLS restritiva (só o próprio perfil), então o frontend não pode
 // listar membros diretamente — aqui a service role faz a consulta.
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 Deno.serve(async (req) => {

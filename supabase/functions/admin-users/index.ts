@@ -1,7 +1,7 @@
 // Edge Function: gerenciamento de contas (apenas admin).
 // Usa a service_role key para a Admin API do GoTrue (nunca expor no frontend).
 // Ações: list | create | update | deactivate | reactivate
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 const ADMIN_BAN_DURATION = '876000h' // ~100 anos = conta desativada
