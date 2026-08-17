@@ -35,37 +35,81 @@ export async function fetchTasks(
   showAll: boolean,
   userId: string,
 ): Promise<Task[]> {
-  let query = supabase
+  const { data, error } = await supabase
     .from('tasks')
     .select('*')
     .order('order_index', { ascending: true })
 
-  if (!showAll) {
-    query = query.or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
+  if (error) {
+    console.error('fetchTasks error:', error)
+    return []
   }
 
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-  return data ?? []
+  const allTasks = (data as Task[]) ?? []
+  if (showAll) {
+    return allTasks
+  }
+
+  // Filtra com segurança em memória para garantir compatibilidade
+  return allTasks.filter(
+    (t) =>
+      t.assigned_to === userId ||
+      (Array.isArray(t.assignees) && t.assignees.includes(userId)),
+  )
 }
 
 export async function createTask(input: NewTaskInput): Promise<Task> {
+  const insertPayload = { ...input }
+  if (!insertPayload.assignees || insertPayload.assignees.length === 0) {
+    delete insertPayload.assignees
+  }
+
   const { data, error } = await supabase
     .from('tasks')
-    .insert(input)
+    .insert(insertPayload)
     .select('*')
     .single()
 
-  if (error) throw new Error(error.message)
+  if (error) {
+    if (error.message.includes('assignees')) {
+      delete insertPayload.assignees
+      const retry = await supabase
+        .from('tasks')
+        .insert(insertPayload)
+        .select('*')
+        .single()
+      if (retry.error) throw new Error(retry.error.message)
+      return retry.data
+    }
+    throw new Error(error.message)
+  }
   return data
 }
 
-export async function updateTask(
-  id: string,
-  patch: TaskPatch,
-): Promise<void> {
-  const { error } = await supabase.from('tasks').update(patch).eq('id', id)
-  if (error) throw new Error(error.message)
+export async function updateTask(id: string, patch: TaskPatch): Promise<Task> {
+  const updatePayload = { ...patch }
+  const { data, error } = await supabase
+    .from('tasks')
+    .update(updatePayload)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) {
+    if (error.message.includes('assignees') && 'assignees' in updatePayload) {
+      delete updatePayload.assignees
+      const retry = await supabase
+        .from('tasks')
+        .update(updatePayload)
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (retry.error) throw new Error(retry.error.message)
+      return retry.data
+    }
+    throw new Error(error.message)
+  }
+  return data
 }
 
 export async function deleteTask(id: string): Promise<void> {
