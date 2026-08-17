@@ -190,18 +190,35 @@ export default function Sidebar({
         <button
           type="button"
           onClick={() => onShowAllChange(!showAllTasks)}
-          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition ${
+          title={
             !showAllTasks
-              ? 'bg-primary/10 text-primary font-semibold'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'Exibindo apenas tarefas atribuídas a você. Clique para ver todas as tarefas.'
+              : 'Exibindo todas as tarefas do projeto. Clique para filtrar apenas as suas.'
+          }
+          className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 font-medium transition border ${
+            !showAllTasks
+              ? 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/15'
+              : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/15'
           }`}
         >
-          <span className="flex items-center gap-2">
-            <i className="fa-solid fa-user-check text-xs" />
-            <span>Minhas Tarefas</span>
+          <span className="flex items-center gap-2 font-semibold">
+            <i
+              className={`fa-solid ${
+                !showAllTasks ? 'fa-user-check text-blue-400' : 'fa-users text-amber-400'
+              } text-xs`}
+            />
+            <span>
+              Tarefas: <span className="underline decoration-1 underline-offset-2">{!showAllTasks ? 'Minhas' : 'Todas'}</span>
+            </span>
           </span>
-          <span className="rounded-full bg-background/80 px-1.5 py-0.2 text-[9px] font-bold text-muted-foreground border border-border">
-            {!showAllTasks ? 'Ativo' : 'Todas'}
+          <span
+            className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${
+              !showAllTasks
+                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            }`}
+          >
+            {!showAllTasks ? 'Filtro Ativo' : 'Visão Geral'}
           </span>
         </button>
       </div>
