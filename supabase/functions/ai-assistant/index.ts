@@ -151,7 +151,9 @@ Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depo
         ? 'https://api.deepseek.com/chat/completions'
         : 'https://api.openai.com/v1/chat/completions'
 
-      const model = Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-chat' : 'gpt-4o-mini'
+      const model =
+        Deno.env.get('DEEPSEEK_MODEL') ||
+        (Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-v4-flash' : 'gpt-4o-mini')
 
       const apiMessages = [
         { role: 'system', content: systemPrompt },
