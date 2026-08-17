@@ -129,17 +129,31 @@ export function useTasks(showAll: boolean) {
             : task
         })
 
-        if (status === 'done' && current?.parent_id) {
+        if (current?.parent_id) {
           const parentId = current.parent_id
-          const allSiblingsDone = nextTasks
-            .filter((t) => t.parent_id === parentId)
-            .every((t) => t.status === 'done')
-          if (allSiblingsDone) {
-            nextTasks = nextTasks.map((t) =>
-              t.id === parentId
-                ? { ...t, status: 'done', updated_at: new Date().toISOString() }
-                : t,
-            )
+          const parent = nextTasks.find((t) => t.id === parentId)
+          const siblings = nextTasks.filter((t) => t.parent_id === parentId)
+          if (siblings.length > 0) {
+            const allSiblingsDone = siblings.every((t) => t.status === 'done')
+            if (allSiblingsDone) {
+              nextTasks = nextTasks.map((t) =>
+                t.id === parentId
+                  ? { ...t, status: 'done', updated_at: new Date().toISOString() }
+                  : t,
+              )
+            } else if (status === 'done' && parent && (parent.status === 'todo' || parent.status === 'backlog')) {
+              nextTasks = nextTasks.map((t) =>
+                t.id === parentId
+                  ? { ...t, status: 'in_progress', updated_at: new Date().toISOString() }
+                  : t,
+              )
+            } else if (status !== 'done' && parent?.status === 'done') {
+              nextTasks = nextTasks.map((t) =>
+                t.id === parentId
+                  ? { ...t, status: 'in_progress', updated_at: new Date().toISOString() }
+                  : t,
+              )
+            }
           }
         }
         return nextTasks

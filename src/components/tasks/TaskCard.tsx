@@ -176,16 +176,16 @@ export default function TaskCard({
                 setSubtasksExpanded(!subtasksExpanded)
               }}
               title="Expandir checklist de subtarefas"
-              className="flex cursor-pointer items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border/80 bg-muted/60 px-2 py-1 text-xs font-semibold text-foreground shadow-2xs transition hover:bg-muted"
             >
-              <i className="fa-solid fa-list-check text-[10px]" />
+              <i className="fa-solid fa-list-check text-xs text-[#7b68ee]" />
               <span>
-                {completedSubtasks}/{totalSubtasks}
+                {completedSubtasks}/{totalSubtasks} subtarefa{totalSubtasks !== 1 ? 's' : ''}
               </span>
               <i
                 className={`fa-solid fa-chevron-${
                   subtasksExpanded ? 'up' : 'down'
-                } text-[8px]`}
+                } text-[10px] text-muted-foreground`}
               />
             </button>
           )}

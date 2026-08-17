@@ -20,7 +20,7 @@ import {
   TASK_STATUSES,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
-import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
 
 interface TaskDrawerProps {
   open: boolean
@@ -38,6 +38,7 @@ interface TaskDrawerProps {
       status?: TaskStatus
       start_date?: string | null
       due_date?: string | null
+      description?: Json | null
       tags?: string[] | null
     }) => Promise<Task>
     updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
@@ -60,53 +61,116 @@ const EMPTY_DESCRIPTION: SerializedEditorState = {
   },
 }
 
+function extractDescriptionText(description: unknown): string {
+  if (!description) return ''
+  if (typeof description === 'string') return description
+  try {
+    const root = (description as { root?: { children?: unknown[] } })?.root
+    if (!root) return ''
+    const texts: string[] = []
+    function traverse(node: unknown) {
+      if (!node || typeof node !== 'object') return
+      const n = node as { text?: string; children?: unknown[] }
+      if (n.text) texts.push(n.text)
+      if (Array.isArray(n.children)) {
+        n.children.forEach(traverse)
+      }
+    }
+    traverse(root)
+    return texts.join(' ').trim()
+  } catch {
+    return ''
+  }
+}
+
+function buildSimpleLexicalJson(text: string): Json {
+  return {
+    root: {
+      type: 'root',
+      format: '',
+      indent: 0,
+      version: 1,
+      children: [
+        {
+          type: 'paragraph',
+          format: '',
+          indent: 0,
+          version: 1,
+          children: [
+            {
+              type: 'text',
+              text,
+              format: 0,
+              detail: 0,
+              mode: 'normal',
+              style: '',
+              version: 1,
+            },
+          ],
+          direction: 'ltr',
+        },
+      ],
+      direction: 'ltr',
+    },
+  } as unknown as Json
+}
+
 export default function TaskDrawer({
   open,
   onOpenChange,
-  task,
+  task: initialTask,
   projectId,
   projects,
   creator,
 }: TaskDrawerProps) {
+  const [currentTask, setCurrentTask] = useState<Task | null>(initialTask)
   const [titleDraft, setTitleDraft] = useState('')
   const [descriptionDraft, setDescriptionDraft] =
     useState<SerializedEditorState>(EMPTY_DESCRIPTION)
   const [lastSavedDescription, setLastSavedDescription] = useState<string>('')
-  const [newSubtask, setNewSubtask] = useState('')
+  
+  // New subtask inputs
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  const [newSubtaskDesc, setNewSubtaskDesc] = useState('')
+  const [newSubtaskDue, setNewSubtaskDue] = useState('')
+
   const [newComment, setNewComment] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saving, setSaving] = useState(false)
-  const isNew = !task?.id
+  const isNew = !currentTask?.id
 
   const commentScrollRef = useRef<HTMLDivElement>(null)
-  const comments = useTaskComments(task?.id ?? null)
+  const comments = useTaskComments(currentTask?.id ?? null)
   const { members } = useProjectMembers(projectId)
 
   const titleTimer = useRef<number | undefined>(undefined)
   const descriptionTimer = useRef<number | undefined>(undefined)
-  const lastTaskId = useRef<string | null | undefined>(undefined)
 
   useEffect(() => {
-    if (lastTaskId.current === task?.id) return
-    lastTaskId.current = task?.id ?? null
-    if (!task) {
+    setCurrentTask(initialTask)
+  }, [initialTask])
+
+  useEffect(() => {
+    if (!currentTask) {
       setTitleDraft('')
       setDescriptionDraft({ ...EMPTY_DESCRIPTION })
       setLastSavedDescription('')
-      setNewSubtask('')
+      setNewSubtaskTitle('')
+      setNewSubtaskDesc('')
+      setNewSubtaskDue('')
       setNewComment('')
       setTagInput('')
       setCreateProjectId(projectId ?? projects[0]?.id ?? null)
       return
     }
-    setTitleDraft(task.title)
-    const json = task.description as unknown as SerializedEditorState | null
+    setTitleDraft(currentTask.title)
+    const json = currentTask.description as unknown as SerializedEditorState | null
     const parsed = json ?? { ...EMPTY_DESCRIPTION }
     setDescriptionDraft(parsed)
     setLastSavedDescription(JSON.stringify(parsed))
-  }, [task, projectId, projects])
+  }, [currentTask, projectId, projects])
 
   useEffect(() => {
     if (!comments.comments.length) return
@@ -124,11 +188,15 @@ export default function TaskDrawer({
   )
 
   function commitTaskPatch(patch: Partial<Task>) {
-    if (!task) return
+    if (!currentTask) return
     setSaving(true)
+    setCurrentTask((prev) => (prev ? { ...prev, ...patch } : null))
     void creator
-      .updateTask({ id: task.id, patch })
-      .then(() => setSaving(false))
+      .updateTask({ id: currentTask.id, patch })
+      .then(() => {
+        setSaving(false)
+        creator.refreshTasks?.()
+      })
       .catch(() => {
         setSaving(false)
         toast.danger('Não foi possível salvar as alterações.')
@@ -137,7 +205,7 @@ export default function TaskDrawer({
 
   function handleTitleChange(value: string) {
     setTitleDraft(value)
-    if (!task) return
+    if (!currentTask) return
     window.clearTimeout(titleTimer.current)
     titleTimer.current = window.setTimeout(() => {
       if (value.trim()) commitTaskPatch({ title: value.trim() })
@@ -156,18 +224,19 @@ export default function TaskDrawer({
   }
 
   function handleManualSave() {
-    if (!task) return
+    if (!currentTask) return
     commitTaskPatch({
       title: titleDraft.trim(),
       description: descriptionDraft as unknown as Task['description'],
     })
     toast.success('Todas as alterações foram salvas!')
+    onOpenChange(false)
   }
 
   function handleStartDate(value: string) {
-    if (!task) return
+    if (!currentTask) return
     const next = value || null
-    if (next && task.due_date && next > task.due_date) {
+    if (next && currentTask.due_date && next > currentTask.due_date) {
       toast.danger('A data de início deve ser anterior à data de conclusão.')
       return
     }
@@ -175,9 +244,9 @@ export default function TaskDrawer({
   }
 
   function handleDueDate(value: string) {
-    if (!task) return
+    if (!currentTask) return
     const next = value || null
-    if (next && task.start_date && task.start_date > next) {
+    if (next && currentTask.start_date && currentTask.start_date > next) {
       toast.danger('A data de conclusão deve ser posterior à data de início.')
       return
     }
@@ -185,21 +254,21 @@ export default function TaskDrawer({
   }
 
   function handleAssignee(value: string | null) {
-    if (!task) return
+    if (!currentTask) return
     const next = value === NO_ASSIGNEE ? null : value
-    if (next !== task.assigned_to) {
+    if (next !== currentTask.assigned_to) {
       commitTaskPatch({ assigned_to: next })
       if (next !== creator.currentUserId) {
-        toast.info('Tarefa transferida: ela sai da sua lista "Minhas Tarefas".')
+        toast.info('Tarefa transferida.')
       }
     }
   }
 
   function handleAddTag() {
-    if (!task) return
+    if (!currentTask) return
     const cleanTag = tagInput.trim().replace(/^#/, '').toLowerCase()
     if (!cleanTag) return
-    const currentTags = task.tags ?? []
+    const currentTags = currentTask.tags ?? []
     if (currentTags.includes(cleanTag)) {
       setTagInput('')
       return
@@ -210,8 +279,8 @@ export default function TaskDrawer({
   }
 
   function handleRemoveTag(tagToRemove: string) {
-    if (!task) return
-    const currentTags = task.tags ?? []
+    if (!currentTask) return
+    const currentTags = currentTask.tags ?? []
     const nextTags = currentTags.filter((t) => t !== tagToRemove)
     commitTaskPatch({ tags: nextTags })
   }
@@ -237,19 +306,23 @@ export default function TaskDrawer({
   }
 
   async function handleCreateSubtask() {
-    const title = newSubtask.trim()
-    if (!title || !task) return
+    const title = newSubtaskTitle.trim()
+    if (!title || !currentTask) return
     try {
       await creator.createTask({
         title,
-        project_id: task.project_id!,
-        parent_id: task.id,
-        status: task.status,
-        assigned_to: task.assigned_to,
+        project_id: currentTask.project_id!,
+        parent_id: currentTask.id,
+        status: 'todo',
+        assigned_to: currentTask.assigned_to,
+        due_date: newSubtaskDue || null,
+        description: newSubtaskDesc.trim() ? buildSimpleLexicalJson(newSubtaskDesc.trim()) : null,
       })
-      setNewSubtask('')
+      setNewSubtaskTitle('')
+      setNewSubtaskDesc('')
+      setNewSubtaskDue('')
       creator.refreshTasks?.()
-      toast.success('Subtarefa criada!')
+      toast.success('Subtarefa criada com sucesso!')
     } catch (error) {
       toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a subtarefa.',
@@ -257,9 +330,34 @@ export default function TaskDrawer({
     }
   }
 
+  function handleUpdateSubtask(subtaskId: string, patch: Partial<Task>) {
+    void creator.updateTask({ id: subtaskId, patch })
+      .then(() => creator.refreshTasks?.())
+      .catch(() => toast.danger('Erro ao atualizar subtarefa.'))
+  }
+
+  function handleToggleSubtask(subtaskId: string, isDone: boolean) {
+    const nextStatus: TaskStatus = isDone ? 'done' : 'todo'
+    void creator.moveTaskStatus({ id: subtaskId, status: nextStatus })
+      .then(() => {
+        creator.refreshTasks?.()
+        toast.success(isDone ? 'Subtarefa concluída!' : 'Subtarefa reaberta.')
+      })
+      .catch(() => toast.danger('Erro ao alterar subtarefa.'))
+  }
+
+  function handleDeleteSubtask(subtaskId: string) {
+    void creator.deleteTask(subtaskId)
+      .then(() => {
+        creator.refreshTasks?.()
+        toast.success('Subtarefa excluída.')
+      })
+      .catch(() => toast.danger('Erro ao excluir subtarefa.'))
+  }
+
   async function handleAddComment() {
     const content = newComment.trim()
-    if (!content || !task) return
+    if (!content || !currentTask) return
     try {
       await comments.addComment(content)
       setNewComment('')
@@ -271,9 +369,9 @@ export default function TaskDrawer({
   }
 
   async function handleDelete() {
-    if (!task) return
+    if (!currentTask) return
     try {
-      await creator.deleteTask(task.id)
+      await creator.deleteTask(currentTask.id)
       setConfirmDelete(false)
       onOpenChange(false)
       toast.success('Tarefa excluída.')
@@ -284,7 +382,7 @@ export default function TaskDrawer({
     }
   }
 
-  const subtasks = task ? creator.childrenOf(task.id) : []
+  const subtasks = currentTask ? creator.childrenOf(currentTask.id) : []
 
   if (!open) return null
 
@@ -297,7 +395,7 @@ export default function TaskDrawer({
       />
 
       {/* Slide-over Drawer strictly on the RIGHT side */}
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[580px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[620px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
         {/* Drawer Header */}
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/95 px-5 backdrop-blur">
           <div className="flex items-center gap-2">
@@ -306,7 +404,7 @@ export default function TaskDrawer({
               {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
             </h2>
             {saving && (
-              <span className="text-[10px] text-muted-foreground animate-pulse">
+              <span className="text-[10px] text-muted-foreground animate-pulse font-medium">
                 Salvando...
               </span>
             )}
@@ -389,7 +487,7 @@ export default function TaskDrawer({
                 Criar Tarefa
               </Button>
             </div>
-          ) : (
+          ) : currentTask && (
             <div className="space-y-4">
               {/* Title Input with highlighted border */}
               <div className="space-y-1.5">
@@ -408,7 +506,7 @@ export default function TaskDrawer({
                 <Label className="text-xs font-semibold text-foreground">Descrição</Label>
                 <div className="rounded-md border border-border bg-background p-1.5 shadow-2xs">
                   <LexicalEditor
-                    key={task.id}
+                    key={currentTask.id}
                     initialValue={descriptionDraft}
                     onChange={handleDescriptionChange}
                   />
@@ -421,7 +519,7 @@ export default function TaskDrawer({
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-foreground">Etiquetas / Tags</Label>
                 <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background p-2 shadow-2xs">
-                  {(task.tags ?? []).map((tag) => (
+                  {(currentTask.tags ?? []).map((tag) => (
                     <span
                       key={tag}
                       className="inline-flex items-center gap-1 rounded-md border border-[#7b68ee]/30 bg-[#7b68ee]/15 px-2 py-0.5 text-xs font-semibold text-[#7b68ee]"
@@ -458,11 +556,11 @@ export default function TaskDrawer({
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground">Status</Label>
                   <Select.Root
-                    selectedKey={task.status}
+                    selectedKey={currentTask.status}
                     onSelectionChange={(value) =>
                       void creator
                         .moveTaskStatus({
-                          id: task.id,
+                          id: currentTask.id,
                           status: value as TaskStatus,
                         })
                         .catch(() =>
@@ -490,7 +588,7 @@ export default function TaskDrawer({
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground">Prioridade</Label>
                   <Select.Root
-                    selectedKey={task.priority}
+                    selectedKey={currentTask.priority}
                     onSelectionChange={(value) =>
                       commitTaskPatch({ priority: value as TaskPriority })
                     }
@@ -515,7 +613,7 @@ export default function TaskDrawer({
                 <div className="space-y-1.5">
                   <Label className="text-xs font-semibold text-foreground">Responsável</Label>
                   <Select.Root
-                    selectedKey={task.assigned_to ?? NO_ASSIGNEE}
+                    selectedKey={currentTask.assigned_to ?? NO_ASSIGNEE}
                     onSelectionChange={(value) =>
                       handleAssignee(typeof value === 'string' ? value : null)
                     }
@@ -550,7 +648,7 @@ export default function TaskDrawer({
                     type="number"
                     min="0"
                     step="0.5"
-                    value={task.estimated_hours != null ? String(task.estimated_hours) : ''}
+                    value={currentTask.estimated_hours != null ? String(currentTask.estimated_hours) : ''}
                     onChange={(e) => {
                       const raw = e.target.value
                       const value = raw === '' ? null : Number.parseFloat(raw)
@@ -567,7 +665,7 @@ export default function TaskDrawer({
                   <Label className="text-xs font-semibold text-foreground">Início</Label>
                   <input
                     type="date"
-                    value={task.start_date ?? ''}
+                    value={currentTask.start_date ?? ''}
                     onChange={(e) => handleStartDate(e.target.value)}
                     className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                   />
@@ -577,12 +675,12 @@ export default function TaskDrawer({
                   <Label className="text-xs font-semibold text-foreground">Conclusão</Label>
                   <input
                     type="date"
-                    value={task.due_date ?? ''}
+                    value={currentTask.due_date ?? ''}
                     onChange={(e) => handleDueDate(e.target.value)}
                     className={`w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs ${
-                      task.due_date &&
-                      task.due_date < todayIso() &&
-                      task.status !== 'done'
+                      currentTask.due_date &&
+                      currentTask.due_date < todayIso() &&
+                      currentTask.status !== 'done'
                         ? 'border-red-500 font-semibold text-red-600'
                         : ''
                     }`}
@@ -592,72 +690,164 @@ export default function TaskDrawer({
 
               <Separator className="my-2" />
 
-              {/* Subtasks Section */}
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-foreground">
-                  Subtarefas{' '}
-                  <span className="font-normal text-muted-foreground">
-                    ({subtasks.length})
+              {/* Enhanced Subtasks Section: Checkbox, Title, Description & Due Date */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-foreground">
+                    Subtarefas{' '}
+                    <span className="font-normal text-muted-foreground">
+                      ({subtasks.length})
+                    </span>
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    {subtasks.filter((s) => s.status === 'done').length}/{subtasks.length} concluída(s)
                   </span>
-                </Label>
-                <ul className="space-y-1.5">
+                </div>
+
+                {/* Subtask list */}
+                <div className="space-y-2">
                   {subtasks.length === 0 && (
-                    <li className="text-xs text-muted-foreground">
+                    <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
                       Nenhuma subtarefa adicionada.
-                    </li>
+                    </p>
                   )}
-                  {subtasks.map((subtask) => (
-                    <li
-                      key={subtask.id}
-                      onClick={() =>
-                        void creator
-                          .moveTaskStatus({
-                            id: subtask.id,
-                            status: subtask.status === 'done' ? 'todo' : 'done',
-                          })
-                          .catch(() =>
-                            toast.danger('Não foi possível atualizar a subtarefa.'),
-                          )
-                      }
-                      className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs shadow-2xs transition hover:bg-muted/40"
-                    >
-                      <Checkbox
-                        isSelected={subtask.status === 'done'}
-                        onChange={() => {}}
-                      />
-                      <span
-                        className={`flex-1 truncate ${
-                          subtask.status === 'done'
-                            ? 'text-muted-foreground line-through'
-                            : 'font-medium text-foreground'
+                  {subtasks.map((subtask) => {
+                    const subtaskDescText = extractDescriptionText(subtask.description)
+                    const isSubtaskDone = subtask.status === 'done'
+                    return (
+                      <div
+                        key={subtask.id}
+                        className={`rounded-md border border-border p-2.5 shadow-2xs transition space-y-2 ${
+                          isSubtaskDone ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-background'
                         }`}
                       >
-                        {subtask.title}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <div className="flex gap-2">
+                        {/* Subtask Header Row: Checkbox, Title, Actions */}
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            isSelected={isSubtaskDone}
+                            onChange={(checked) => handleToggleSubtask(subtask.id, checked)}
+                            aria-label={`Concluir subtarefa ${subtask.title}`}
+                          />
+                          <input
+                            type="text"
+                            defaultValue={subtask.title}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim()
+                              if (val && val !== subtask.title) {
+                                handleUpdateSubtask(subtask.id, { title: val })
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur()
+                              }
+                            }}
+                            placeholder="Título da subtarefa..."
+                            className={`flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-xs font-semibold focus:border-[#7b68ee] focus:bg-background focus:outline-none ${
+                              isSubtaskDone ? 'text-muted-foreground line-through' : 'text-foreground'
+                            }`}
+                          />
+
+                          {/* Open Subtask Details in Drawer */}
+                          <button
+                            type="button"
+                            onClick={() => setCurrentTask(subtask)}
+                            title="Editar detalhes completos desta subtarefa"
+                            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-[#7b68ee]"
+                          >
+                            <i className="fa-solid fa-arrow-up-right-from-square text-[11px]" />
+                          </button>
+
+                          {/* Delete Subtask */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSubtask(subtask.id)}
+                            title="Excluir subtarefa"
+                            className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-red-500"
+                          >
+                            <i className="fa-solid fa-trash text-[11px]" />
+                          </button>
+                        </div>
+
+                        {/* Subtask Details Row: Description & Due Date */}
+                        <div className="flex flex-wrap items-center gap-2 pl-6">
+                          <input
+                            type="text"
+                            defaultValue={subtaskDescText}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim()
+                              if (val !== subtaskDescText) {
+                                handleUpdateSubtask(subtask.id, {
+                                  description: val ? buildSimpleLexicalJson(val) : null,
+                                })
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur()
+                              }
+                            }}
+                            placeholder="+ Descrição da subtarefa (Enter)..."
+                            className="flex-1 min-w-[140px] rounded border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/60 focus:border-[#7b68ee] focus:bg-background focus:outline-none"
+                          />
+
+                          <div className="flex items-center gap-1">
+                            <i className="fa-regular fa-calendar text-[10px] text-muted-foreground" />
+                            <input
+                              type="date"
+                              defaultValue={subtask.due_date ?? ''}
+                              onChange={(e) => {
+                                handleUpdateSubtask(subtask.id, {
+                                  due_date: e.target.value || null,
+                                })
+                              }}
+                              className="rounded border border-border/60 bg-muted/20 px-1.5 py-0.5 text-[11px] text-foreground focus:border-[#7b68ee] focus:bg-background focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Add New Subtask Form */}
+                <div className="rounded-md border border-border bg-card p-3 space-y-2 shadow-2xs">
+                  <span className="text-xs font-semibold text-foreground">
+                    Nova Subtarefa
+                  </span>
                   <input
                     type="text"
-                    value={newSubtask}
-                    onChange={(e) => setNewSubtask(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void handleCreateSubtask()
-                    }}
-                    placeholder="Adicionar subtarefa (Enter)..."
-                    className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                    value={newSubtaskTitle}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    placeholder="Título da nova subtarefa..."
+                    className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-md border border-border text-xs"
-                    onPress={() => void handleCreateSubtask()}
-                    isDisabled={!newSubtask.trim()}
-                  >
-                    <i className="fa-solid fa-plus mr-1" />
-                    Adicionar
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      type="text"
+                      value={newSubtaskDesc}
+                      onChange={(e) => setNewSubtaskDesc(e.target.value)}
+                      placeholder="Descrição (opcional)..."
+                      className="flex-1 min-w-[140px] rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                    />
+                    <input
+                      type="date"
+                      value={newSubtaskDue}
+                      onChange={(e) => setNewSubtaskDue(e.target.value)}
+                      className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
+                    />
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      size="sm"
+                      className="rounded-md bg-[#7b68ee] text-xs font-semibold text-white hover:bg-[#6c5ce7]"
+                      onPress={() => void handleCreateSubtask()}
+                      isDisabled={!newSubtaskTitle.trim()}
+                    >
+                      <i className="fa-solid fa-plus mr-1" />
+                      Adicionar Subtarefa
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -748,7 +938,7 @@ export default function TaskDrawer({
         </div>
 
         {/* Drawer Sticky Footer with explicit Salvar button */}
-        {task && !isNew && (
+        {currentTask && !isNew && (
           <div className="flex shrink-0 items-center justify-between border-t border-border bg-card/95 px-5 py-3 backdrop-blur">
             <Button
               variant="danger"

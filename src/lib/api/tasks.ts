@@ -106,21 +106,47 @@ export async function moveTaskStatus(
       if (subError) throw new Error(subError.message)
     }
 
-    // 2. Mark parent done if ALL sibling subtasks are now done
+    // 2. Subtask completed: update parent task status
     if (currentTask?.parent_id) {
-      const { data: siblings, error: sibError } = await supabase
+      const { data: parent } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .eq('id', currentTask.parent_id)
+        .single()
+
+      const { data: siblings } = await supabase
         .from('tasks')
         .select('id, status')
         .eq('parent_id', currentTask.parent_id)
-      if (!sibError && siblings && siblings.length > 0) {
+
+      if (siblings && siblings.length > 0) {
         const allDone = siblings.every((s) => s.status === 'done')
         if (allDone) {
           await supabase
             .from('tasks')
             .update({ status: 'done' })
             .eq('id', currentTask.parent_id)
+        } else if (parent && (parent.status === 'todo' || parent.status === 'backlog')) {
+          await supabase
+            .from('tasks')
+            .update({ status: 'in_progress' })
+            .eq('id', currentTask.parent_id)
         }
       }
+    }
+  } else if (currentTask?.parent_id) {
+    // If subtask moved away from done, check if parent was done and reopen to in_progress
+    const { data: parent } = await supabase
+      .from('tasks')
+      .select('id, status')
+      .eq('id', currentTask.parent_id)
+      .single()
+
+    if (parent && parent.status === 'done') {
+      await supabase
+        .from('tasks')
+        .update({ status: 'in_progress' })
+        .eq('id', currentTask.parent_id)
     }
   }
 }

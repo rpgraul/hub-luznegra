@@ -1,11 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import {
-  toast,
-  Button,
-  Checkbox,
-  AlertDialog,
-} from '@heroui/react'
-import { userColor, userRowColor } from '@/utils/colors'
+import { toast, Button } from '@heroui/react'
+import { userColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
 import {
   STATUS_COLORS,
@@ -124,17 +119,16 @@ function AssigneeCell({ member }: { member: ProjectMember | null }) {
       >
         {initials}
       </span>
-      <span className="max-w-28 truncate text-xs font-medium">{name}</span>
+      <span className="max-w-28 truncate text-xs font-medium text-foreground">{name}</span>
     </span>
   )
 }
 
 interface TaskRowProps {
   task: Task
-  selected: boolean
+  depth: number
   childrenCount: number
   memberOf: (id: string | null) => ProjectMember | null
-  onToggle: (checked: boolean) => void
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
   onCommitField: (taskId: string, field: EditableField, value: string) => void
@@ -145,10 +139,9 @@ interface TaskRowProps {
 
 function TaskRow({
   task,
-  selected,
+  depth,
   childrenCount,
   memberOf: memberLookup,
-  onToggle,
   onToggleDone,
   onChangeStatus,
   onCommitField,
@@ -156,13 +149,21 @@ function TaskRow({
   projectName,
   projectColor,
 }: TaskRowProps) {
-  const isChild = !!task.parent_id
+  const isChild = depth > 0
   const isDone = task.status === 'done'
   const overdue =
     !!task.due_date && !isDone && task.due_date < todayIso()
-  const rowStyle = task.assigned_to
-    ? { backgroundColor: userRowColor(task.assigned_to) }
-    : undefined
+
+  // Status-based background colors (subtle and readable)
+  const rowBgClass = isDone
+    ? 'bg-emerald-500/10 dark:bg-emerald-950/20'
+    : overdue
+      ? 'bg-rose-500/10 dark:bg-rose-950/25'
+      : task.status === 'in_progress'
+        ? 'bg-[#7b68ee]/6 dark:bg-[#7b68ee]/10'
+        : task.status === 'review'
+          ? 'bg-amber-500/8 dark:bg-amber-950/20'
+          : 'bg-transparent hover:bg-muted/40'
 
   const descriptionText = extractDescriptionText(task.description)
 
@@ -206,24 +207,11 @@ function TaskRow({
 
   return (
     <tr
-      style={rowStyle}
       onDoubleClick={onOpen}
-      className={`group border-b border-border/60 transition-colors select-none ${
-        selected ? 'bg-primary/5' : isDone ? 'bg-emerald-500/5' : 'hover:bg-muted/30'
-      }`}
+      className={`group border-b border-border/60 transition-colors select-none ${rowBgClass}`}
     >
-      {/* Selection Checkbox */}
-      <td onClick={(e) => e.stopPropagation()} className="w-8 px-2 py-2 text-center">
-        <Checkbox
-          isSelected={selected}
-          onChange={(checked) => onToggle(checked)}
-          aria-label={`Selecionar ${task.title}`}
-          className="cursor-pointer"
-        />
-      </td>
-
       {/* Quick Done Checkbox */}
-      <td onClick={(e) => e.stopPropagation()} className="w-8 px-1 py-2 text-center">
+      <td onClick={(e) => e.stopPropagation()} className="w-8 px-2 py-2 text-center">
         <button
           type="button"
           onClick={() => onToggleDone(task)}
@@ -238,16 +226,19 @@ function TaskRow({
         </button>
       </td>
 
-      {/* Task Title & Inline Description */}
+      {/* Task Title & Inline Description with recursive indentation */}
       <td className="px-3 py-2">
         <div
-          className="flex flex-col gap-1"
-          style={{ paddingLeft: isChild ? 22 : 0 }}
+          className="flex flex-col gap-0.5"
+          style={{ paddingLeft: depth * 22 }}
         >
           {/* Title Row */}
           <div className="flex items-center gap-2 text-xs font-semibold">
             {isChild && (
-              <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
+              <span className="inline-flex items-center text-muted-foreground/70" title={`Subtarefa nível ${depth}`}>
+                <i className="fa-solid fa-turn-down text-[11px]" />
+                {depth > 1 && <span className="ml-0.5 text-[9px] font-mono font-bold">{depth}</span>}
+              </span>
             )}
 
             {editingField === 'title' ? (
@@ -264,7 +255,7 @@ function TaskRow({
             ) : (
               <span
                 onDoubleClick={(e) => startEdit('title', task.title, e)}
-                title="2 cliques para editar o título inline"
+                title="2 cliques para editar o título"
                 className={`cursor-pointer transition hover:text-[#7b68ee] ${
                   isDone
                     ? 'text-muted-foreground line-through'
@@ -284,8 +275,8 @@ function TaskRow({
                 e.stopPropagation()
                 onOpen()
               }}
-              title="Abrir modal de detalhes"
-              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-[#7b68ee] group-hover:opacity-100"
+              title="Abrir painel de detalhes"
+              className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/40 opacity-0 transition hover:bg-muted hover:text-[#7b68ee] group-hover:opacity-100"
             >
               <i className="fa-regular fa-pen-to-square text-[11px]" />
             </button>
@@ -307,7 +298,7 @@ function TaskRow({
           ) : (
             <p
               onDoubleClick={(e) => startEdit('description', descriptionText, e)}
-              title="2 cliques para editar a descrição inline"
+              title="2 cliques para editar a descrição"
               className={`line-clamp-1 cursor-pointer text-[11px] font-normal transition hover:text-foreground ${
                 descriptionText
                   ? 'text-muted-foreground/80'
@@ -319,7 +310,7 @@ function TaskRow({
           )}
 
           {/* Project & Tags metadata */}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
             {projectName && (
               <span
                 className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.2 text-[9px] font-semibold"
@@ -401,8 +392,8 @@ function TaskRow({
         ) : (
           <span
             onDoubleClick={(e) => startEdit('due_date', task.due_date ?? '', e)}
-            title="2 cliques para editar data inline"
-            className={`cursor-pointer transition hover:text-[#7b68ee] text-xs ${
+            title="2 cliques para editar data"
+            className={`cursor-pointer transition hover:text-[#7b68ee] text-xs font-medium ${
               overdue
                 ? 'font-bold text-rose-600'
                 : task.due_date
@@ -431,15 +422,12 @@ function TaskRow({
 }
 
 interface TasksTableProps {
-  rows: Task[]
-  selected: Set<string>
+  rows: Array<{ task: Task; depth: number }>
   emptyMessage: string
-  onToggle: (taskId: string, checked: boolean) => void
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
   onCommitField: (taskId: string, field: EditableField, value: string) => void
   onOpen: (task: Task) => void
-  toggleAll: (checked: boolean) => void
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
   projectById?: Map<string, Project>
@@ -450,14 +438,11 @@ interface TasksTableProps {
 
 function TasksTable({
   rows,
-  selected,
   emptyMessage,
-  onToggle,
   onToggleDone,
   onChangeStatus,
   onCommitField,
   onOpen,
-  toggleAll,
   memberOf,
   countSubtasks,
   projectById,
@@ -465,10 +450,6 @@ function TasksTable({
   currentSortField,
   currentSortDir,
 }: TasksTableProps) {
-  const allSelected =
-    rows.length > 0 && rows.every((task) => selected.has(task.id))
-  const partialSelected = selected.size > 0 && !allSelected
-
   function renderSortIcon(field: SortField) {
     if (currentSortField !== field) {
       return <i className="fa-solid fa-sort ml-1 text-[10px] opacity-40 group-hover:opacity-100" />
@@ -482,33 +463,18 @@ function TasksTable({
 
   return (
     <div className="overflow-x-auto">
-      {/* Table Top Header Bar */}
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-card/60 px-3 py-2">
-        <label className="flex cursor-pointer items-center gap-2">
-          <Checkbox
-            isSelected={allSelected}
-            isIndeterminate={partialSelected}
-            onChange={(checked) => toggleAll(checked)}
-            aria-label="Selecionar todas"
-            className="cursor-pointer"
-          />
-          <span className="text-xs font-bold text-foreground">
-            Selecionar todas
-          </span>
-        </label>
-        <span className="text-xs font-semibold text-muted-foreground">
-          {rows.length} tarefa(s) • <span className="font-normal opacity-90">2 cliques em qualquer texto para editar inline</span>
+      {/* Table Top Counter Bar */}
+      <div className="flex items-center justify-between border-b border-border bg-card/60 px-4 py-2">
+        <span className="text-xs font-bold text-foreground">
+          {rows.length} tarefa{rows.length !== 1 ? 's' : ''}
         </span>
       </div>
 
-      {/* High-contrast, crystal-clear ClickUp table header */}
+      {/* Crystal-Clear, High-Contrast Table Header */}
       <table className="w-full border-collapse text-xs">
-        <thead className="border-b border-border bg-slate-100 dark:bg-slate-850">
+        <thead className="border-b border-border bg-slate-100 dark:bg-slate-800">
           <tr className="text-slate-800 dark:text-slate-100">
             <th className="w-8 px-2 py-2.5 text-center font-bold">
-              <span className="sr-only">Selecionar</span>
-            </th>
-            <th className="w-8 px-1 py-2.5 text-center font-bold">
               <span className="sr-only">Concluir</span>
             </th>
             <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
@@ -563,14 +529,14 @@ function TasksTable({
           {rows.length === 0 && (
             <tr>
               <td
-                colSpan={8}
+                colSpan={7}
                 className="py-10 text-center text-sm text-muted-foreground"
               >
                 {emptyMessage}
               </td>
             </tr>
           )}
-          {rows.map((task) => {
+          {rows.map(({ task, depth }) => {
             const project =
               task.project_id && projectById
                 ? projectById.get(task.project_id)
@@ -579,10 +545,9 @@ function TasksTable({
               <TaskRow
                 key={task.id}
                 task={task}
-                selected={selected.has(task.id)}
+                depth={depth}
                 childrenCount={countSubtasks(task)}
                 memberOf={memberOf}
-                onToggle={(checked) => onToggle(task.id, checked)}
                 onToggleDone={onToggleDone}
                 onChangeStatus={onChangeStatus}
                 onCommitField={onCommitField}
@@ -606,10 +571,7 @@ export default function ListView({
   memberOf,
   moveTaskStatus,
   updateTask,
-  deleteTask,
 }: ListViewProps) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
 
@@ -646,10 +608,11 @@ export default function ListView({
       .catch(() => toast.danger('Erro ao salvar alteração.'))
   }
 
+  // Recursive multi-level hierarchy builder
   const rows = useMemo(() => {
-    const parents = tasks.filter((task) => !task.parent_id)
+    const rootParents = tasks.filter((task) => !task.parent_id)
 
-    parents.sort((a, b) => {
+    rootParents.sort((a, b) => {
       let cmp = 0
       if (sortField === 'status') {
         cmp = STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
@@ -669,14 +632,32 @@ export default function ListView({
       return sortDirection === 'asc' ? cmp : -cmp
     })
 
-    const all: Task[] = []
-    for (const parent of parents) {
-      all.push(parent)
-      const subtasks = tasks
-        .filter((task) => task.parent_id === parent.id)
+    const all: Array<{ task: Task; depth: number }> = []
+
+    function appendChildren(parentId: string, depth: number) {
+      const children = tasks
+        .filter((task) => task.parent_id === parentId)
         .sort((a, b) => a.order_index - b.order_index)
-      all.push(...subtasks)
+      for (const child of children) {
+        all.push({ task: child, depth })
+        appendChildren(child.id, depth + 1)
+      }
     }
+
+    for (const parent of rootParents) {
+      all.push({ task: parent, depth: 0 })
+      appendChildren(parent.id, 1)
+    }
+
+    // Capture any orphan subtasks
+    const addedIds = new Set(all.map((item) => item.task.id))
+    for (const task of tasks) {
+      if (!addedIds.has(task.id)) {
+        all.push({ task, depth: 0 })
+        appendChildren(task.id, 1)
+      }
+    }
+
     return all
   }, [tasks, sortField, sortDirection])
 
@@ -687,20 +668,20 @@ export default function ListView({
     )
     const list: Array<{
       project: Project | null
-      sectionTasks: Task[]
+      sectionTasks: Array<{ task: Task; depth: number }>
     }> = projects
       .filter((project) => ids.has(project.id))
       .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
       .map((project) => ({
         project,
-        sectionTasks: tasks.filter((task) => task.project_id === project.id),
+        sectionTasks: rows.filter((item) => item.task.project_id === project.id),
       }))
-    const orphan = tasks.filter((task) => !task.project_id)
+    const orphan = rows.filter((item) => !item.task.project_id)
     if (orphan.length > 0) {
       list.push({ project: null, sectionTasks: orphan })
     }
     return list
-  }, [tasks, projects, grouped])
+  }, [tasks, projects, grouped, rows])
 
   function handleToggleDone(task: Task) {
     const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done'
@@ -720,59 +701,6 @@ export default function ListView({
         toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`),
       )
       .catch(() => toast.danger('Erro ao alterar status.'))
-  }
-
-  function toggleAll(checked: boolean) {
-    if (checked) {
-      setSelected(new Set(rows.map((task) => task.id)))
-    } else {
-      setSelected(new Set())
-    }
-  }
-
-  function toggleOne(taskId: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (checked) {
-        next.add(taskId)
-      } else {
-        next.delete(taskId)
-      }
-      return next
-    })
-  }
-
-  async function moveSelected(status: TaskStatus) {
-    const ids = [...selected]
-    try {
-      await Promise.all(ids.map((id) => moveTaskStatus({ id, status })))
-      setSelected(new Set())
-      toast.success(
-        `${ids.length} tarefa(s) movida(s) para ${STATUS_LABELS[status]}.`,
-      )
-    } catch (error) {
-      toast.danger(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível mover as tarefas.',
-      )
-    }
-  }
-
-  async function deleteSelected() {
-    const ids = [...selected]
-    try {
-      await Promise.all(ids.map((id) => deleteTask(id)))
-      setSelected(new Set())
-      setConfirmDelete(false)
-      toast.success(`${ids.length} tarefa(s) excluída(s).`)
-    } catch (error) {
-      toast.danger(
-        error instanceof Error
-          ? error.message
-          : 'Não foi possível excluir as tarefas.',
-      )
-    }
   }
 
   function countSubtasks(task: Task) {
@@ -843,59 +771,48 @@ export default function ListView({
                 {emptyMessage}
               </div>
             )}
-            {sections.map(({ project, sectionTasks }) => {
-              const sectionRows = rows.filter((task) =>
-                sectionTasks.some((t) => t.id === task.id),
-              )
-              return (
-                <section key={project?.id ?? '__sem_projeto__'}>
-                  <header className="mb-2 flex items-center gap-2 px-1">
-                    <span
-                      className="size-2.5 rounded-full shadow-2xs"
-                      style={{ backgroundColor: project?.color ?? '#94A3B8' }}
-                    />
-                    <h2 className="text-xs font-bold text-foreground">
-                      {project?.name ?? 'Sem projeto'}
-                    </h2>
-                    <span className="text-xs text-muted-foreground">
-                      {sectionRows.length} tarefa(s)
-                    </span>
-                  </header>
-                  <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
-                    <TasksTable
-                      rows={sectionRows}
-                      selected={selected}
-                      emptyMessage={emptyMessage}
-                      onToggle={toggleOne}
-                      onToggleDone={handleToggleDone}
-                      onChangeStatus={handleChangeStatus}
-                      onCommitField={handleCommitField}
-                      onOpen={onOpenTask}
-                      toggleAll={toggleAll}
-                      memberOf={memberOf}
-                      countSubtasks={countSubtasks}
-                      projectById={projectById}
-                      onSortBy={handleSortBy}
-                      currentSortField={sortField}
-                      currentSortDir={sortDirection}
-                    />
-                  </div>
-                </section>
-              )
-            })}
+            {sections.map(({ project, sectionTasks }) => (
+              <section key={project?.id ?? '__sem_projeto__'}>
+                <header className="mb-2 flex items-center gap-2 px-1">
+                  <span
+                    className="size-2.5 rounded-full shadow-2xs"
+                    style={{ backgroundColor: project?.color ?? '#94A3B8' }}
+                  />
+                  <h2 className="text-xs font-bold text-foreground">
+                    {project?.name ?? 'Sem projeto'}
+                  </h2>
+                  <span className="text-xs text-muted-foreground">
+                    {sectionTasks.length} tarefa(s)
+                  </span>
+                </header>
+                <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
+                  <TasksTable
+                    rows={sectionTasks}
+                    emptyMessage={emptyMessage}
+                    onToggleDone={handleToggleDone}
+                    onChangeStatus={handleChangeStatus}
+                    onCommitField={handleCommitField}
+                    onOpen={onOpenTask}
+                    memberOf={memberOf}
+                    countSubtasks={countSubtasks}
+                    projectById={projectById}
+                    onSortBy={handleSortBy}
+                    currentSortField={sortField}
+                    currentSortDir={sortDirection}
+                  />
+                </div>
+              </section>
+            ))}
           </div>
         ) : (
           <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
             <TasksTable
               rows={rows}
-              selected={selected}
               emptyMessage={emptyMessage}
-              onToggle={toggleOne}
               onToggleDone={handleToggleDone}
               onChangeStatus={handleChangeStatus}
               onCommitField={handleCommitField}
               onOpen={onOpenTask}
-              toggleAll={toggleAll}
               memberOf={memberOf}
               countSubtasks={countSubtasks}
               projectById={projectById}
@@ -903,55 +820,6 @@ export default function ListView({
               currentSortField={sortField}
               currentSortDir={sortDirection}
             />
-          </div>
-        )}
-
-        {/* Bulk Action Bar */}
-        {selected.size > 0 && (
-          <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
-            <span className="text-xs font-bold">
-              {selected.size} selecionada(s)
-            </span>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Mover para:</span>
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    void moveSelected(e.target.value as TaskStatus)
-                    e.target.value = ''
-                  }
-                }}
-                aria-label="Mover selecionadas"
-                className="w-40 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold"
-              >
-                <option value="" disabled>Escolher status...</option>
-                {TASK_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {STATUS_LABELS[status]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="danger"
-                size="sm"
-                className="rounded-md"
-                onPress={() => setConfirmDelete(true)}
-              >
-                <i className="fa-solid fa-trash mr-1" />
-                Excluir
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-md"
-                onPress={() => setSelected(new Set())}
-              >
-                Limpar
-              </Button>
-            </div>
           </div>
         )}
       </div>
@@ -987,32 +855,6 @@ export default function ListView({
           </span>
         </div>
       </div>
-
-      <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialog.Backdrop />
-        <AlertDialog.Container>
-          <AlertDialog.Dialog className="rounded-md border border-border bg-card sm:max-w-md">
-            <AlertDialog.Header>
-              <AlertDialog.Heading>Excluir tarefas selecionadas?</AlertDialog.Heading>
-              <p className="text-sm text-muted-foreground">
-                Esta ação é definitiva. As {selected.size} tarefa(s) selecionadas
-                serão excluídas (junto com suas subtarefas).
-              </p>
-            </AlertDialog.Header>
-            <AlertDialog.Body />
-            <AlertDialog.Footer>
-              <Button variant="outline" className="rounded-md" onPress={() => setConfirmDelete(false)}>
-                Cancelar
-              </Button>
-              <Button variant="danger" className="rounded-md" onPress={() => void deleteSelected()}>
-                <i className="fa-solid fa-trash mr-1" />
-                Excluir
-              </Button>
-            </AlertDialog.Footer>
-            <AlertDialog.CloseTrigger />
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Root>
     </div>
   )
 }

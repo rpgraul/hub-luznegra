@@ -12,7 +12,7 @@ export function hashString(input: string): number {
 
 export const USER_COLOR_SATURATION = 70
 export const USER_COLOR_LIGHTNESS = 50
-export const USER_ROW_ALPHA = 0.15
+export const USER_ROW_ALPHA = 0.04
 
 export function userHue(userId: string): number {
   return hashString(userId) % 360
