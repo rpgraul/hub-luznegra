@@ -26,6 +26,7 @@ interface AIAction {
     | 'break_down_subtasks'
     | 'list_overdue'
     | 'bulk_status_update'
+    | 'create_user'
     | 'draft_email'
     | 'none'
   params?: Record<string, unknown>
@@ -98,46 +99,38 @@ Deno.serve(async (req) => {
     const membersMap = (members ?? []).map((m) => `@${m.username} (${m.full_name || m.username}, id: ${m.id})`).join(', ')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
     const tasksSnippet = currentProjectTasks
-      .slice(0, 20)
-      .map(
-        (t) =>
-          `[ID: ${t.id}] "${t.title}" | Status: ${t.status} | Prioridade: ${t.priority} | Vence: ${t.due_date || 'sem data'}`,
-      )
+      .slice(0, 10)
+      .map((t) => `[${t.id}] "${t.title}" (${t.status}, ${t.priority})`)
       .join('\n')
 
-    // 2. Monta o system prompt para o DeepSeek
-    const systemPrompt = `Você é o "Lord Camarão" (🦐), o assistente de inteligência artificial do Hub da Editora Luz Negra, especialista em gestão ágil de tarefas, organização editorial e produtividade.
-Hoje é: ${new Date().toISOString().slice(0, 10)}.
-Usuário atual ID: ${userId}
-Projeto ativo ID: ${context.projectId || 'Nenhum'}
+    // 2. Monta o system prompt ultra-enxuto para economia máxima de tokens
+    const systemPrompt = `Você é o Lord Camarão, assistente de IA do Hub da Editora Luz Negra.
+Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
-Projetos disponíveis:
-${projectsMap || 'Nenhum'}
+Projetos: ${projectsMap || 'Nenhum'}
+Membros: ${membersMap || 'Nenhum'}
+Tarefas recentes no projeto:
+${tasksSnippet || 'Nenhuma'}
 
-Membros da equipe (para atribuição @username):
-${membersMap || 'Nenhum'}
+DIRETRIZES DE RESPOSTA:
+- Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
+- Vá direto ao ponto, sem introduções longas.
+- NÃO use emojis em nenhuma hipótese.
+- Máximo de 1 a 2 frases curtas ao confirmar ações.
 
-Tarefas recentes no projeto ativo:
-${tasksSnippet || 'Nenhuma tarefa'}
-
-Seu objetivo é responder em Português do Brasil (pt-BR) de forma amigável, clara e objetiva, e quando o usuário solicitar uma ação no sistema, retornar um JSON estruturado.
-
-FORMATO OBRIGATÓRIO DE RESPOSTA (JSON):
-Sua resposta DEVE ser um objeto JSON válido no formato:
+FORMATO OBRIGATÓRIO (JSON puro):
 {
-  "reply": "Sua mensagem explicativa ou resumo amigável em Markdown em pt-BR",
+  "reply": "Mensagem curta, direta e sem emojis",
   "action": {
     "type": "create_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "draft_email" | "none",
     "params": {
-      // parâmetros específicos da ação:
-      // Para create_task: { "title": string, "project_id": string, "priority": "low"|"medium"|"high"|"urgent", "assigned_to": string (UUID do membro), "due_date": "YYYY-MM-DD"|null, "start_date": "YYYY-MM-DD"|null }
-      // Para duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
-      // Para break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
-      // Para bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
+      // create_task: { "title": string, "project_id": string, "priority": "low"|"medium"|"high"|"urgent", "assigned_to": string, "due_date": "YYYY-MM-DD"|null, "start_date": "YYYY-MM-DD"|null }
+      // duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
+      // break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
+      // bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
     }
   }
-}
-Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depois se possível.`
+}`
 
     // 3. Chamada ao DeepSeek / OpenAI
     const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
@@ -158,7 +151,7 @@ Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depo
 
       const apiMessages = [
         { role: 'system', content: systemPrompt },
-        ...history.slice(-6).map((h) => ({ role: h.role, content: h.content })),
+        ...history.slice(-3).map((h) => ({ role: h.role, content: h.content })),
         { role: 'user', content: message },
       ]
 
@@ -172,7 +165,8 @@ Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depo
           model,
           messages: apiMessages,
           response_format: { type: 'json_object' },
-          temperature: 0.3,
+          temperature: 0.1,
+          max_tokens: 300,
         }),
       })
 

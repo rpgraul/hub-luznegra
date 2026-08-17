@@ -304,14 +304,16 @@ export default function Sidebar({
             type="button"
             onClick={onOpenAi}
             title="Abrir Lord Camarão"
-            className="group flex w-full items-center gap-2.5 rounded-md border border-[#7b68ee]/30 bg-linear-to-r from-[#7b68ee]/15 via-purple-500/10 to-pink-500/15 p-2 text-xs font-semibold text-foreground transition hover:border-[#7b68ee] hover:shadow-xs cursor-pointer"
+            className="group flex w-full items-center gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2 text-xs font-semibold text-foreground transition hover:bg-muted hover:border-border cursor-pointer shadow-2xs"
           >
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-linear-to-br from-[#7b68ee] to-pink-500 text-white shadow-2xs text-xs">
-              🦐
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-xs">
+              <i className="fa-solid fa-wand-magic-sparkles text-[11px]" />
             </div>
             <div className="flex flex-1 items-center justify-between min-w-0">
               <span className="truncate font-bold text-foreground">Lord Camarão</span>
-              <span className="text-[9px] font-bold text-[#7b68ee] bg-[#7b68ee]/15 px-1.5 py-0.2 rounded uppercase">DeepSeek</span>
+              <span className="text-[9px] font-semibold text-muted-foreground bg-background px-1.5 py-0.5 rounded border border-border/60">
+                Assistente IA
+              </span>
             </div>
           </button>
         </div>

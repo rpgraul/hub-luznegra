@@ -99,7 +99,7 @@ export default function AIAssistantModal({
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Olá! Sou o **Lord Camarão**, o assistente inteligente da Editora Luz Negra 🦐. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
+      content: `Olá! Sou o **Lord Camarão**, assistente do Hub da Editora Luz Negra. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
     },
   ])
   const [input, setInput] = useState('')
@@ -136,7 +136,7 @@ export default function AIAssistantModal({
     try {
       const historyPayload = messages
         .filter((m) => m.id !== 'welcome')
-        .slice(-6)
+        .slice(-3)
         .map((m) => ({ role: m.role, content: m.content }))
 
       const response = await sendAIMessage({
@@ -201,14 +201,14 @@ export default function AIAssistantModal({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-card/70 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xs text-sm">
-            🦐
+          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-xs">
+            <i className="fa-solid fa-wand-magic-sparkles text-xs" />
           </div>
           <div>
             <h2 className="flex items-center gap-1.5 text-xs font-semibold leading-none">
               <span>Lord Camarão</span>
-              <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
-                DeepSeek
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground border border-border/60">
+                Assistente IA
               </span>
             </h2>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
