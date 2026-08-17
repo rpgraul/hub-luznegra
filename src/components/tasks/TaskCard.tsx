@@ -56,13 +56,8 @@ export default function TaskCard({
   return (
     <div
       style={rowStyle}
-      role="button"
-      tabIndex={0}
-      onClick={() => onOpen(task)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onOpen(task)
-      }}
-      className={`group relative w-full cursor-pointer rounded-lg border border-border/80 bg-card p-3 text-left shadow-2xs transition-all hover:border-primary/50 hover:shadow-xs select-none ${
+      onDoubleClick={() => onOpen(task)}
+      className={`group relative w-full select-none rounded-md border border-border bg-card p-3 text-left shadow-2xs transition-all hover:border-[#7b68ee]/60 hover:shadow-xs ${
         task.status === 'done' ? 'opacity-75' : ''
       }`}
     >
@@ -74,9 +69,9 @@ export default function TaskCard({
         </div>
       )}
 
-      {/* Title & Priority */}
+      {/* Title, Quick Check & Edit Button */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0">
+        <div className="flex min-w-0 items-start gap-2">
           {onToggleDone && (
             <button
               type="button"
@@ -84,11 +79,11 @@ export default function TaskCard({
                 e.stopPropagation()
                 onToggleDone(task)
               }}
-              title={task.status === 'done' ? 'Reabrir' : 'Concluir'}
-              className="mt-0.5 shrink-0 text-muted-foreground/60 hover:text-emerald-600 transition"
+              title={task.status === 'done' ? 'Reabrir tarefa' : 'Marcar como concluída'}
+              className="mt-0.5 shrink-0 cursor-pointer text-muted-foreground/60 transition hover:text-emerald-600"
             >
               {task.status === 'done' ? (
-                <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
+                <i className="fa-solid fa-circle-check text-sm text-emerald-500" />
               ) : (
                 <i className="fa-regular fa-circle text-xs hover:scale-110" />
               )}
@@ -96,7 +91,7 @@ export default function TaskCard({
           )}
 
           <p
-            className={`line-clamp-2 font-medium text-xs leading-snug text-foreground ${
+            className={`line-clamp-2 text-xs font-semibold leading-snug text-foreground ${
               task.status === 'done' ? 'text-muted-foreground line-through' : ''
             }`}
           >
@@ -104,16 +99,29 @@ export default function TaskCard({
           </p>
         </div>
 
-        <i
-          className={`fa-solid ${PRIORITY_ICONS[task.priority]} shrink-0 text-xs ${
-            task.priority === 'urgent'
-              ? 'text-rose-500'
-              : task.priority === 'high'
-                ? 'text-amber-500'
-                : 'text-muted-foreground/60'
-          }`}
-          aria-label={`Prioridade ${task.priority}`}
-        />
+        <div className="flex shrink-0 items-center gap-1.5">
+          <i
+            className={`fa-solid ${PRIORITY_ICONS[task.priority]} text-xs ${
+              task.priority === 'urgent'
+                ? 'text-rose-500'
+                : task.priority === 'high'
+                  ? 'text-amber-500'
+                  : 'text-muted-foreground/60'
+            }`}
+            aria-label={`Prioridade ${task.priority}`}
+          />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpen(task)
+            }}
+            title="Abrir detalhes da tarefa"
+            className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-foreground group-hover:opacity-100"
+          >
+            <i className="fa-regular fa-pen-to-square text-[11px]" />
+          </button>
+        </div>
       </div>
 
       {/* Project & Tags */}
@@ -137,7 +145,7 @@ export default function TaskCard({
         {(task.tags ?? []).map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center rounded-md bg-[#7b68ee]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#7b68ee] border border-[#7b68ee]/20"
+            className="inline-flex items-center rounded-md border border-[#7b68ee]/30 bg-[#7b68ee]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#7b68ee]"
           >
             #{tag}
           </span>
@@ -146,7 +154,7 @@ export default function TaskCard({
 
       {/* Details Row: Dates, Hours, Subtasks */}
       {!compact && (
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-y-1 text-[11px] text-muted-foreground border-t border-border/40 pt-2">
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-y-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
           {task.start_date || task.due_date ? (
             <span
               className={`flex items-center gap-1 ${
@@ -167,8 +175,8 @@ export default function TaskCard({
                 e.stopPropagation()
                 setSubtasksExpanded(!subtasksExpanded)
               }}
-              title="Expandir subtarefas"
-              className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition"
+              title="Expandir checklist de subtarefas"
+              className="flex cursor-pointer items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
               <i className="fa-solid fa-list-check text-[10px]" />
               <span>
@@ -187,12 +195,12 @@ export default function TaskCard({
       {/* Subtasks Expandable Checklist */}
       {subtasksExpanded && totalSubtasks > 0 && (
         <div
-          className="mt-2 space-y-1 rounded-md border border-border/80 bg-background/90 p-2 text-xs"
+          className="mt-2 space-y-1 rounded-md border border-border bg-background/95 p-2 text-xs shadow-2xs"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Progress bar */}
           <div className="mb-2 flex items-center gap-2 text-[10px] text-muted-foreground">
-            <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-emerald-500 transition-all"
                 style={{ width: `${subtaskPct}%` }}
@@ -201,50 +209,63 @@ export default function TaskCard({
             <span>{subtaskPct}%</span>
           </div>
 
-          {/* Subtasks List */}
-          <div className="space-y-1 max-h-36 overflow-y-auto">
+          {/* Subtasks List - Clicking anywhere on the row toggles completion */}
+          <div className="max-h-36 space-y-1 overflow-y-auto">
             {subtasks.map((subtask) => (
               <div
                 key={subtask.id}
-                className="flex items-center gap-2 rounded px-1.5 py-0.5 hover:bg-muted/50 transition"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleSubtask?.(subtask, subtask.status !== 'done')
+                }}
+                className="flex cursor-pointer items-center gap-2 rounded-md border border-border/50 px-2 py-1 transition hover:bg-muted/60"
               >
                 <button
                   type="button"
-                  onClick={() =>
-                    onToggleSubtask?.(subtask, subtask.status !== 'done')
-                  }
-                  className="text-muted-foreground hover:text-emerald-600"
+                  tabIndex={-1}
+                  className="cursor-pointer text-muted-foreground hover:text-emerald-600"
                 >
                   {subtask.status === 'done' ? (
-                    <i className="fa-solid fa-square-check text-emerald-500 text-xs" />
+                    <i className="fa-solid fa-square-check text-xs text-emerald-500" />
                   ) : (
                     <i className="fa-regular fa-square text-xs" />
                   )}
                 </button>
                 <span
-                  onClick={() => onOpen(subtask)}
-                  className={`flex-1 truncate cursor-pointer text-[11px] ${
+                  className={`flex-1 truncate text-[11px] ${
                     subtask.status === 'done'
                       ? 'text-muted-foreground line-through'
-                      : 'text-foreground'
+                      : 'text-foreground font-medium'
                   }`}
                 >
                   {subtask.title}
                 </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpen(subtask)
+                  }}
+                  title="Abrir subtarefa"
+                  className="cursor-pointer text-muted-foreground/40 hover:text-foreground"
+                >
+                  <i className="fa-solid fa-arrow-up-right-from-square text-[9px]" />
+                </button>
               </div>
             ))}
           </div>
 
           {/* Quick Add Subtask Input */}
           {onCreateSubtask && (
-            <div className="mt-1 pt-1 border-t border-border/40">
+            <div className="mt-1.5 border-t border-border/50 pt-1.5">
               <input
                 type="text"
                 placeholder="+ Adicionar subtarefa (Enter)..."
                 value={newSubtaskTitle}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => setNewSubtaskTitle(e.target.value)}
                 onKeyDown={handleCreateSubtaskSubmit}
-                className="w-full bg-transparent px-1 py-0.5 text-[11px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+                className="w-full rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-foreground placeholder:text-muted-foreground/70 focus:border-[#7b68ee] focus:outline-none"
               />
             </div>
           )}

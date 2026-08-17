@@ -44,6 +44,28 @@ const PRIORITY_LABELS_SHORT: Record<Task['priority'], string> = {
   urgent: 'Urgente',
 }
 
+function extractDescriptionText(description: unknown): string {
+  if (!description) return ''
+  if (typeof description === 'string') return description
+  try {
+    const root = (description as { root?: { children?: unknown[] } })?.root
+    if (!root) return ''
+    const texts: string[] = []
+    function traverse(node: unknown) {
+      if (!node || typeof node !== 'object') return
+      const n = node as { text?: string; children?: unknown[] }
+      if (n.text) texts.push(n.text)
+      if (Array.isArray(n.children)) {
+        n.children.forEach(traverse)
+      }
+    }
+    traverse(root)
+    return texts.join(' ').trim()
+  } catch {
+    return ''
+  }
+}
+
 function PriorityBadge({ priority }: { priority: Task['priority'] }) {
   const tone =
     priority === 'urgent'
@@ -114,20 +136,26 @@ function TaskRow({
     ? { backgroundColor: userRowColor(task.assigned_to) }
     : undefined
 
+  const descriptionPreview = extractDescriptionText(task.description)
+  const hoverTooltip = descriptionPreview
+    ? `${task.title}\n\nDescrição:\n${descriptionPreview}`
+    : `${task.title}\n(Dê 2 cliques para abrir detalhes)`
+
   return (
     <Table.Row
       style={rowStyle}
-      className={`group cursor-pointer transition-colors ${
+      onDoubleClick={onOpen}
+      className={`group cursor-default transition-colors select-none ${
         selected ? 'bg-primary/5' : isDone ? 'bg-emerald-500/5' : ''
       }`}
-      onClick={onOpen}
     >
       {/* Selection Checkbox */}
-      <Table.Cell onClick={(e) => e.stopPropagation()}>
+      <Table.Cell onClick={(e) => e.stopPropagation()} className="w-8">
         <Checkbox
           isSelected={selected}
           onChange={(checked) => onToggle(checked)}
           aria-label={`Selecionar ${task.title}`}
+          className="cursor-pointer"
         />
       </Table.Cell>
 
@@ -137,7 +165,7 @@ function TaskRow({
           type="button"
           onClick={() => onToggleDone(task)}
           title={isDone ? 'Reabrir tarefa' : 'Marcar como concluída'}
-          className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none"
+          className="flex size-5 mx-auto cursor-pointer items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none"
         >
           {isDone ? (
             <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
@@ -147,9 +175,10 @@ function TaskRow({
         </button>
       </Table.Cell>
 
-      {/* Task Title, Project & Tags */}
+      {/* Task Title, Description Preview & Tags */}
       <Table.Cell>
         <div
+          title={hoverTooltip}
           className="flex flex-col gap-1 py-1"
           style={{ paddingLeft: isChild ? 22 : 0 }}
         >
@@ -168,7 +197,27 @@ function TaskRow({
             >
               {task.title}
             </span>
+
+            {/* Explicit Edit Icon Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onOpen()
+              }}
+              title="Editar tarefa (2 cliques)"
+              className="cursor-pointer text-muted-foreground/40 opacity-0 transition hover:text-[#7b68ee] group-hover:opacity-100"
+            >
+              <i className="fa-regular fa-pen-to-square text-[11px]" />
+            </button>
           </div>
+
+          {/* Description snippet on hover/preview */}
+          {descriptionPreview && (
+            <p className="line-clamp-1 text-[11px] font-normal text-muted-foreground/80">
+              {descriptionPreview}
+            </p>
+          )}
 
           {/* Project & Tags metadata */}
           <div className="flex flex-wrap items-center gap-1.5">
@@ -190,7 +239,7 @@ function TaskRow({
             {(task.tags ?? []).map((tag) => (
               <span
                 key={tag}
-                className="inline-flex items-center rounded-md bg-[#7b68ee]/10 px-1.5 py-0.2 text-[9px] font-semibold text-[#7b68ee] border border-[#7b68ee]/20"
+                className="inline-flex items-center rounded-md border border-[#7b68ee]/30 bg-[#7b68ee]/10 px-1.5 py-0.2 text-[9px] font-semibold text-[#7b68ee]"
               >
                 #{tag}
               </span>
@@ -210,7 +259,7 @@ function TaskRow({
           value={task.status}
           onChange={(e) => onChangeStatus(task, e.target.value as TaskStatus)}
           aria-label={`Status de ${task.title}`}
-          className="cursor-pointer rounded border border-transparent bg-transparent py-0.5 text-xs font-semibold transition hover:border-border focus:border-primary focus:bg-background"
+          className="cursor-pointer rounded-md border border-border/60 bg-background px-2 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary"
           style={{ color: STATUS_COLORS[task.status] }}
         >
           {TASK_STATUSES.map((s) => (
@@ -253,7 +302,6 @@ function TaskRow({
 interface TasksTableProps {
   rows: Task[]
   selected: Set<string>
-  grouped?: boolean
   emptyMessage: string
   onToggle: (taskId: string, checked: boolean) => void
   onToggleDone: (task: Task) => void
@@ -291,13 +339,14 @@ function TasksTable({
             isIndeterminate={partialSelected}
             onChange={(checked) => toggleAll(checked)}
             aria-label="Selecionar todas"
+            className="cursor-pointer"
           />
           <span className="text-xs font-semibold text-muted-foreground">
             Selecionar todas
           </span>
         </label>
         <span className="text-xs font-semibold text-muted-foreground">
-          {rows.length} tarefa(s)
+          {rows.length} tarefa(s) • <span className="font-normal opacity-80">2 cliques para editar</span>
         </span>
       </div>
       <Table.Root className="w-full text-xs">
@@ -309,7 +358,7 @@ function TasksTable({
             <Table.Column className="w-8 text-center">
               <span className="sr-only">Concluir</span>
             </Table.Column>
-            <Table.Column>Título & Tags</Table.Column>
+            <Table.Column>Título & Descrição</Table.Column>
             <Table.Column>Responsável</Table.Column>
             <Table.Column>Status</Table.Column>
             <Table.Column>Prioridade</Table.Column>
@@ -501,7 +550,7 @@ export default function ListView({
       {grouped ? (
         <div className="space-y-6">
           {sections.length === 0 && (
-            <div className="rounded-xl border bg-background px-4 py-10 text-center text-sm text-muted-foreground">
+            <div className="rounded-md border border-border bg-background px-4 py-10 text-center text-sm text-muted-foreground shadow-2xs">
               {emptyMessage}
             </div>
           )}
@@ -523,7 +572,7 @@ export default function ListView({
                     {sectionRows.length} tarefa(s)
                   </span>
                 </header>
-                <div className="rounded-xl border border-border bg-background shadow-2xs">
+                <div className="rounded-md border border-border bg-background shadow-2xs">
                   <TasksTable
                     rows={sectionRows}
                     selected={selected}
@@ -543,7 +592,7 @@ export default function ListView({
           })}
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-background shadow-2xs">
+        <div className="rounded-md border border-border bg-background shadow-2xs">
           <TasksTable
             rows={rows}
             selected={selected}
@@ -562,7 +611,7 @@ export default function ListView({
 
       {/* Bulk Action Bar */}
       {selected.size > 0 && (
-        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
+        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-md border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
           <span className="text-xs font-bold">
             {selected.size} selecionada(s)
           </span>
@@ -577,11 +626,11 @@ export default function ListView({
               className="w-40"
               placeholder="Escolher status"
             >
-              <Select.Trigger>
+              <Select.Trigger className="rounded-md border border-border bg-background">
                 <Select.Value />
               </Select.Trigger>
               <Select.Popover>
-                <ListBox.Root>
+                <ListBox.Root className="rounded-md border border-border bg-card">
                   {TASK_STATUSES.map((status) => (
                     <ListBox.Item
                       key={status}
@@ -599,6 +648,7 @@ export default function ListView({
             <Button
               variant="danger"
               size="sm"
+              className="rounded-md"
               onPress={() => setConfirmDelete(true)}
             >
               <i className="fa-solid fa-trash mr-1" />
@@ -607,6 +657,7 @@ export default function ListView({
             <Button
               variant="outline"
               size="sm"
+              className="rounded-md"
               onPress={() => setSelected(new Set())}
             >
               Limpar
@@ -618,7 +669,7 @@ export default function ListView({
       <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialog.Backdrop />
         <AlertDialog.Container>
-          <AlertDialog.Dialog className="sm:max-w-md">
+          <AlertDialog.Dialog className="rounded-md border border-border bg-card sm:max-w-md">
             <AlertDialog.Header>
               <AlertDialog.Heading>Excluir tarefas selecionadas?</AlertDialog.Heading>
               <p className="text-sm text-muted-foreground">
@@ -628,10 +679,10 @@ export default function ListView({
             </AlertDialog.Header>
             <AlertDialog.Body />
             <AlertDialog.Footer>
-              <Button variant="outline" onPress={() => setConfirmDelete(false)}>
+              <Button variant="outline" className="rounded-md" onPress={() => setConfirmDelete(false)}>
                 Cancelar
               </Button>
-              <Button variant="danger" onPress={() => void deleteSelected()}>
+              <Button variant="danger" className="rounded-md" onPress={() => void deleteSelected()}>
                 <i className="fa-solid fa-trash mr-1" />
                 Excluir
               </Button>

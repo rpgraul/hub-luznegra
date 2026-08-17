@@ -191,11 +191,11 @@ export default function KanbanView({
               return (
                 <div
                   key={status}
-                  className="flex h-full w-72 shrink-0 flex-col rounded-xl border border-border bg-muted/30 shadow-2xs"
+                  className="flex h-full w-72 shrink-0 flex-col rounded-md border border-border bg-muted/30 shadow-2xs"
                 >
                   {/* Column Header */}
                   <div
-                    className="flex items-center gap-2 border-b border-border/80 bg-card/70 px-3 py-2.5 rounded-t-xl"
+                    className="flex items-center gap-2 border-b border-border/80 bg-card/70 px-3 py-2.5 rounded-t-md"
                     style={{ borderTop: `3px solid ${STATUS_COLORS[status]}` }}
                   >
                     <span
@@ -217,11 +217,11 @@ export default function KanbanView({
                         ref={provided.innerRef}
                         {...provided.droppableProps}
                         className={`flex-1 space-y-2.5 overflow-y-auto p-2.5 transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-primary/5 rounded-lg' : ''
+                          snapshot.isDraggingOver ? 'bg-primary/5 rounded-md' : ''
                         }`}
                       >
                         {columnTasks.length === 0 && (
-                          <div className="flex h-28 items-center justify-center rounded-lg border border-dashed border-border/60 text-[11px] text-muted-foreground/70">
+                          <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-border/60 text-[11px] text-muted-foreground/70">
                             Arraste tarefas aqui
                           </div>
                         )}
@@ -272,7 +272,7 @@ export default function KanbanView({
                   </Droppable>
 
                   {/* Quick Add at bottom of column */}
-                  <div className="flex gap-1.5 border-t border-border/80 bg-card/40 p-2 rounded-b-xl">
+                  <div className="flex gap-1.5 border-t border-border/80 bg-card/40 p-2 rounded-b-md">
                     <Input
                       value={quickAdd[status]}
                       onChange={(e) =>
@@ -285,13 +285,13 @@ export default function KanbanView({
                         if (e.key === 'Enter') void addQuick(status)
                       }}
                       placeholder="+ Nova tarefa..."
-                      className="h-7 text-xs"
+                      className="h-7 text-xs rounded-md border border-border bg-background"
                     />
                     <Button
                       variant="outline"
                       isIconOnly
                       size="sm"
-                      className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                      className="h-7 w-7 shrink-0 rounded-md border border-border text-muted-foreground hover:text-foreground"
                       onPress={() => void addQuick(status)}
                       aria-label={`Adicionar tarefa em ${STATUS_LABELS[status]}`}
                     >
