@@ -133,7 +133,8 @@ FORMATO OBRIGATÓRIO (JSON puro):
   "action": {
     "type": "create_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
     "params": {
-      // create_task: { "title": string, "project_id": string, "priority": "low"|"medium"|"high"|"urgent", "assigned_to": string, "due_date": "YYYY-MM-DD"|null, "start_date": "YYYY-MM-DD"|null }
+      // create_task para 1 tarefa: { "title": string, "project_id"?: string, "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] | Array<{ "title": string, "due_date"?: string }> }
+      // create_task para múltiplas tarefas: { "tasks": Array<{ "title": string, "priority"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] }> }
       // duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
       // break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
       // bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
@@ -261,27 +262,61 @@ FORMATO OBRIGATÓRIO (JSON puro):
     if (aiParsed.action && aiParsed.action.type !== 'none') {
       const { type, params = {} } = aiParsed.action
 
-      if (type === 'create_task' && params.title) {
+      if (type === 'create_task') {
         const projectIdToUse = (params.project_id as string) || context.projectId || projects?.[0]?.id
         if (projectIdToUse) {
-          const { data: created, error: createError } = await admin
-            .from('tasks')
-            .insert({
-              title: params.title as string,
-              project_id: projectIdToUse,
-              priority: (params.priority as string) || 'medium',
-              status: 'todo',
-              assigned_to: (params.assigned_to as string) || userId,
-              due_date: (params.due_date as string) || null,
-              start_date: (params.start_date as string) || null,
-              created_by: userId,
-            })
-            .select()
-            .single()
+          const taskList = Array.isArray(params.tasks)
+            ? (params.tasks as Array<Record<string, unknown>>)
+            : params.title
+              ? [params]
+              : []
 
-          if (!createError && created) {
-            actionResult = { success: true, createdTask: created }
+          const createdTasks: unknown[] = []
+
+          for (const item of taskList) {
+            if (!item.title) continue
+            const { data: created, error: createError } = await admin
+              .from('tasks')
+              .insert({
+                title: item.title as string,
+                project_id: (item.project_id as string) || projectIdToUse,
+                priority: (item.priority as string) || (params.priority as string) || 'medium',
+                status: (item.status as string) || 'todo',
+                assigned_to: (item.assigned_to as string) || (params.assigned_to as string) || userId,
+                due_date: (item.due_date as string) || null,
+                start_date: (item.start_date as string) || null,
+                created_by: userId,
+              })
+              .select()
+              .single()
+
+            if (!createError && created) {
+              createdTasks.push(created)
+
+              const subtasks = (item.subtasks || (taskList.length === 1 ? params.subtasks : null)) as Array<string | Record<string, unknown>>
+              if (Array.isArray(subtasks) && subtasks.length > 0) {
+                const subtaskInserts = subtasks.map((st, idx) => {
+                  const isObj = typeof st === 'object' && st !== null
+                  return {
+                    title: isObj ? ((st as Record<string, unknown>).title as string) : String(st),
+                    project_id: created.project_id,
+                    parent_id: created.id,
+                    assigned_to: (isObj ? (st as Record<string, unknown>).assigned_to : null) || created.assigned_to,
+                    due_date: isObj ? ((st as Record<string, unknown>).due_date as string) || null : null,
+                    start_date: isObj ? ((st as Record<string, unknown>).start_date as string) || null : null,
+                    priority: created.priority,
+                    status: 'todo',
+                    order_index: idx + 1,
+                    created_by: userId,
+                  }
+                })
+
+                await admin.from('tasks').insert(subtaskInserts)
+              }
+            }
           }
+
+          actionResult = { success: true, count: createdTasks.length, tasks: createdTasks }
         }
       } else if (type === 'break_down_subtasks' && params.parent_task_title && Array.isArray(params.subtasks)) {
         // Encontra tarefa pai
@@ -380,8 +415,16 @@ FORMATO OBRIGATÓRIO (JSON puro):
       }
     }
 
+    const finalReply =
+      aiParsed.reply ||
+      (aiParsed.action?.type === 'create_task'
+        ? 'Tarefa criada com sucesso.'
+        : aiParsed.action?.type === 'create_user'
+          ? 'Usuário criado com sucesso.'
+          : 'Comando processado com sucesso.')
+
     return json({
-      reply: aiParsed.reply,
+      reply: finalReply,
       action: aiParsed.action,
       actionResult,
     })

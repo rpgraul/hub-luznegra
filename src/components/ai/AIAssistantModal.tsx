@@ -17,13 +17,17 @@ const DEFAULT_SUGGESTIONS = [
   'Escreva um resumo do status do projeto',
 ]
 
-function MarkdownMessage({ content }: { content: string }) {
+function MarkdownMessage({ content }: { content?: string | null }) {
+  if (!content || typeof content !== 'string') {
+    return <div className="text-xs text-foreground">Comando processado com sucesso.</div>
+  }
+
   const lines = content.split('\n')
 
   return (
     <div className="space-y-1.5 leading-relaxed text-xs">
       {lines.map((line, idx) => {
-        const trimmed = line.trim()
+        const trimmed = (line || '').trim()
         if (!trimmed) {
           return <div key={idx} className="h-1" />
         }
@@ -55,11 +59,12 @@ function MarkdownMessage({ content }: { content: string }) {
   )
 }
 
-function formatInlineMarkdown(text: string) {
-  // Regex splitting by bold, italic, code
+function formatInlineMarkdown(text?: string | null) {
+  if (!text || typeof text !== 'string') return ''
   const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g)
 
   return parts.map((part, i) => {
+    if (!part) return null
     if (part.startsWith('**') && part.endsWith('**')) {
       return (
         <strong key={i} className="font-bold text-foreground">
@@ -137,7 +142,7 @@ export default function AIAssistantModal({
       const historyPayload = messages
         .filter((m) => m.id !== 'welcome')
         .slice(-3)
-        .map((m) => ({ role: m.role, content: m.content }))
+        .map((m) => ({ role: m.role, content: m.content || '' }))
 
       const response = await sendAIMessage({
         message: query,
@@ -145,18 +150,27 @@ export default function AIAssistantModal({
         projectId,
       })
 
+      const replyContent =
+        typeof response?.reply === 'string' && response.reply.trim()
+          ? response.reply
+          : response?.action?.type === 'create_task'
+            ? 'Tarefa criada com sucesso.'
+            : response?.action?.type === 'create_user'
+              ? 'Usuário criado com sucesso.'
+              : 'Comando processado com sucesso.'
+
       const assistantMsg: AIMessage = {
         id: `ai-${Date.now()}`,
         role: 'assistant',
-        content: response.reply,
-        action: response.action,
-        actionResult: response.actionResult,
+        content: replyContent,
+        action: response?.action,
+        actionResult: response?.actionResult,
       }
 
       setMessages((prev) => [...prev, assistantMsg])
 
       // Invalida dados se alguma mutação ocorreu
-      if (response.action && response.action.type !== 'none') {
+      if (response?.action && response.action.type !== 'none') {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
         toast.success('Ação executada com sucesso pelo Lord Camarão!')
