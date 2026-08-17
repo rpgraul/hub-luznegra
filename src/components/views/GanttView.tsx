@@ -128,6 +128,7 @@ export default function GanttView({
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const ganttInstanceRef = useRef<Gantt | null>(null)
+  const lastZoomRef = useRef<string | null>(null)
   const isSyncingScroll = useRef(false)
   const isInteractingRef = useRef(false)
   const pendingChangeRef = useRef<{
@@ -136,7 +137,8 @@ export default function GanttView({
     due: string
   } | null>(null)
 
-  const [zoomIndex, setZoomIndex] = useState(1)
+  // Default zoom is Week (Semana)
+  const [zoomIndex, setZoomIndex] = useState(2)
   const [showTable, setShowTable] = useState(true)
 
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
@@ -284,7 +286,7 @@ export default function GanttView({
       .catch(() => toast.danger('Erro ao salvar as alterações de prazo.'))
   }, [tasks, today, updateTask])
 
-  // Mouse up listener on window to commit drag
+  // Global mouse up listener on window
   useEffect(() => {
     function handleWindowMouseUp() {
       if (isInteractingRef.current) {
@@ -405,7 +407,7 @@ export default function GanttView({
     [moveTaskStatus, updateTask],
   )
 
-  // Initialize and update Gantt
+  // Initialize and update Gantt smoothly
   useEffect(() => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
@@ -413,10 +415,11 @@ export default function GanttView({
     if (ganttTasks.length === 0) {
       wrapper.innerHTML = ''
       ganttInstanceRef.current = null
+      lastZoomRef.current = null
       return
     }
 
-    // If user is actively dragging, do not destroy/refresh Gantt instance
+    // If user is actively dragging, do not refresh or destroy Gantt
     if (isInteractingRef.current) return
 
     const tasksById = new Map(rows.map(({ task }) => [task.id, task]))
@@ -424,7 +427,19 @@ export default function GanttView({
       rows.map(({ task, undated }) => [task.id, undated]),
     )
 
-    // Recreate gantt instance
+    const isZoomChange = lastZoomRef.current !== currentZoom.name
+
+    // If instance exists and zoom didn't change, perform in-place refresh without destroying DOM
+    if (ganttInstanceRef.current && !isZoomChange) {
+      try {
+        ganttInstanceRef.current.refresh(ganttTasks)
+        return
+      } catch {
+        // fallback to full recreate if refresh fails
+      }
+    }
+
+    lastZoomRef.current = currentZoom.name
     wrapper.innerHTML = ''
 
     const gantt = new Gantt(wrapper, ganttTasks, {
@@ -475,6 +490,10 @@ export default function GanttView({
           }
         }
 
+        const tagsHtml = (task.tags ?? []).length > 0
+          ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${task.tags!.map((tag) => `<span style="padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;background-color:#7b68ee18;color:#7b68ee;border:1px solid #7b68ee30;">#${tag}</span>`).join('')}</div>`
+          : ''
+
         return `
           <div class="gantt-popup" style="font-family: inherit; min-width: 220px; line-height: 1.4;">
             <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:var(--g-text-dark);">${task.title}</div>
@@ -490,6 +509,7 @@ export default function GanttView({
               ${dateRange}
             </div>
             ${durationHtml}
+            ${tagsHtml}
             <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--g-border-color);font-size:10px;color:var(--g-text-muted);display:flex;align-items:center;justify-content:space-between;">
               <span><i class="fa-solid fa-arrow-pointer" style="margin-right:3px;"></i> Duplo clique para detalhes</span>
             </div>
@@ -510,7 +530,6 @@ export default function GanttView({
 
     ganttInstanceRef.current = gantt
 
-    // Mark interaction on mousedown inside timeline
     function handleTimelineMouseDown(e: MouseEvent) {
       const target = e.target as HTMLElement | null
       if (target?.closest('.bar-wrapper, .handle')) {
@@ -544,6 +563,7 @@ export default function GanttView({
       }
       wrapper.innerHTML = ''
       ganttInstanceRef.current = null
+      lastZoomRef.current = null
     }
   }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today])
 
@@ -748,7 +768,7 @@ export default function GanttView({
                       <i className="fa-solid fa-check text-[11px]" title="Concluir" />
                     </th>
                     <th className="px-2 text-left font-semibold text-muted-foreground">
-                      Tarefa
+                      Tarefa & Tags
                     </th>
                     <th className="w-24 px-2 text-left font-semibold text-muted-foreground">
                       Status
@@ -800,45 +820,61 @@ export default function GanttView({
                             </button>
                           </td>
 
-                          {/* Title */}
+                          {/* Title & Tags */}
                           <td className="max-w-[140px] px-2">
                             <button
                               type="button"
                               onClick={() => onOpenTask(task)}
-                              className="flex w-full items-center gap-1.5 text-left transition hover:text-primary"
+                              className="flex flex-col w-full text-left transition hover:text-primary"
                             >
-                              <span
-                                className="h-2 w-2 shrink-0 rounded-full"
-                                style={{
-                                  backgroundColor: isDone
-                                    ? '#10b981'
-                                    : isOverdue
-                                      ? '#f43f5e'
-                                      : task.assigned_to
-                                        ? userColor(task.assigned_to)
-                                        : STATUS_COLORS[task.status],
-                                }}
-                              />
-                              <span
-                                className={`truncate font-medium ${
-                                  isDone
-                                    ? 'line-through text-muted-foreground'
-                                    : isOverdue
-                                      ? 'text-rose-600 font-semibold'
-                                      : 'text-foreground'
-                                }`}
-                              >
-                                {task.title}
-                              </span>
-                              {undated && (
-                                <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[9px] font-medium leading-tight text-amber-500">
-                                  sem prazo
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className="h-2 w-2 shrink-0 rounded-full shadow-2xs"
+                                  style={{
+                                    backgroundColor: isDone
+                                      ? '#10b981'
+                                      : isOverdue
+                                        ? '#f43f5e'
+                                        : task.assigned_to
+                                          ? userColor(task.assigned_to)
+                                          : STATUS_COLORS[task.status],
+                                  }}
+                                />
+                                <span
+                                  className={`truncate font-medium ${
+                                    isDone
+                                      ? 'line-through text-muted-foreground'
+                                      : isOverdue
+                                        ? 'text-rose-600 font-semibold'
+                                        : 'text-foreground'
+                                  }`}
+                                >
+                                  {task.title}
                                 </span>
-                              )}
-                              {isOverdue && (
-                                <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[9px] font-bold leading-tight text-rose-600">
-                                  atrasada
-                                </span>
+                                {undated && (
+                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[9px] font-medium leading-tight text-amber-500">
+                                    sem prazo
+                                  </span>
+                                )}
+                                {isOverdue && (
+                                  <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[9px] font-bold leading-tight text-rose-600">
+                                    atrasada
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Tags under title */}
+                              {(task.tags ?? []).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-0.5 pl-3.5">
+                                  {task.tags!.map((tag) => (
+                                    <span
+                                      key={tag}
+                                      className="rounded bg-[#7b68ee]/10 px-1 text-[8px] font-semibold text-[#7b68ee]"
+                                    >
+                                      #{tag}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
                             </button>
                           </td>

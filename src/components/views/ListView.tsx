@@ -1,8 +1,21 @@
 import { useMemo, useState } from 'react'
-import { toast, Button, Checkbox, Table, Select, ListBox, Chip, AlertDialog } from '@heroui/react'
+import {
+  toast,
+  Button,
+  Checkbox,
+  Table,
+  Select,
+  ListBox,
+  AlertDialog,
+} from '@heroui/react'
 import { userColor, userRowColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
-import { PRIORITY_ICONS, STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from '@/utils/status'
+import {
+  PRIORITY_ICONS,
+  STATUS_COLORS,
+  STATUS_LABELS,
+  TASK_STATUSES,
+} from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
 import type { Project, Task, TaskStatus } from '@/types/database'
 
@@ -24,32 +37,17 @@ const STATUS_ORDER: Record<Task['status'], number> = {
   done: 4,
 }
 
-const STATUS_CHIP_COLOR: Record<Task['status'], string> = {
-  backlog: 'default',
-  todo: 'secondary',
-  in_progress: 'primary',
-  review: 'warning',
-  done: 'success',
-}
-
-function StatusPill({ status }: { status: Task['status'] }) {
-  return (
-    <Chip size="sm" color={STATUS_CHIP_COLOR[status] as 'default'} variant="soft">
-      <span className="flex items-center gap-1.5">
-        <span
-          className="size-1.5 rounded-full"
-          style={{ backgroundColor: STATUS_COLORS[status] }}
-        />
-        {STATUS_LABELS[status]}
-      </span>
-    </Chip>
-  )
+const PRIORITY_LABELS_SHORT: Record<Task['priority'], string> = {
+  low: 'Baixa',
+  medium: 'Média',
+  high: 'Alta',
+  urgent: 'Urgente',
 }
 
 function PriorityBadge({ priority }: { priority: Task['priority'] }) {
   const tone =
     priority === 'urgent'
-      ? 'text-red-600'
+      ? 'text-rose-600'
       : priority === 'high'
         ? 'text-amber-600'
         : 'text-muted-foreground'
@@ -61,29 +59,24 @@ function PriorityBadge({ priority }: { priority: Task['priority'] }) {
   )
 }
 
-const PRIORITY_LABELS_SHORT: Record<Task['priority'], string> = {
-  low: 'Baixa',
-  medium: 'Média',
-  high: 'Alta',
-  urgent: 'Urgente',
-}
-
 function AssigneeCell({ member }: { member: ProjectMember | null }) {
   if (!member) {
-    return <span className="text-xs text-muted-foreground">— sem responsável —</span>
+    return (
+      <span className="text-xs text-muted-foreground">— sem responsável —</span>
+    )
   }
   const name = member.full_name ?? member.username
   const initials = name.slice(0, 2).toUpperCase()
   return (
     <span className="inline-flex items-center gap-1.5">
       <span
-        className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+        className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-2xs"
         style={{ backgroundColor: userColor(member.id) }}
         title={name}
       >
         {initials}
       </span>
-      <span className="max-w-28 truncate text-xs">{name}</span>
+      <span className="max-w-28 truncate text-xs font-medium">{name}</span>
     </span>
   )
 }
@@ -94,7 +87,11 @@ interface TaskRowProps {
   childrenCount: number
   memberOf: (id: string | null) => ProjectMember | null
   onToggle: (checked: boolean) => void
+  onToggleDone: (task: Task) => void
+  onChangeStatus: (task: Task, status: TaskStatus) => void
   onOpen: () => void
+  projectName?: string | null
+  projectColor?: string | null
 }
 
 function TaskRow({
@@ -103,13 +100,16 @@ function TaskRow({
   childrenCount,
   memberOf: memberLookup,
   onToggle,
+  onToggleDone,
+  onChangeStatus,
   onOpen,
+  projectName,
+  projectColor,
 }: TaskRowProps) {
   const isChild = !!task.parent_id
+  const isDone = task.status === 'done'
   const overdue =
-    !!task.due_date &&
-    task.status !== 'done' &&
-    task.due_date < todayIso()
+    !!task.due_date && !isDone && task.due_date < todayIso()
   const rowStyle = task.assigned_to
     ? { backgroundColor: userRowColor(task.assigned_to) }
     : undefined
@@ -117,9 +117,12 @@ function TaskRow({
   return (
     <Table.Row
       style={rowStyle}
-      className={selected ? 'cursor-pointer bg-primary/5' : 'cursor-pointer'}
+      className={`group cursor-pointer transition-colors ${
+        selected ? 'bg-primary/5' : isDone ? 'bg-emerald-500/5' : ''
+      }`}
       onClick={onOpen}
     >
+      {/* Selection Checkbox */}
       <Table.Cell onClick={(e) => e.stopPropagation()}>
         <Checkbox
           isSelected={selected}
@@ -127,41 +130,116 @@ function TaskRow({
           aria-label={`Selecionar ${task.title}`}
         />
       </Table.Cell>
+
+      {/* Quick Done Checkbox */}
+      <Table.Cell onClick={(e) => e.stopPropagation()} className="w-8 px-1 text-center">
+        <button
+          type="button"
+          onClick={() => onToggleDone(task)}
+          title={isDone ? 'Reabrir tarefa' : 'Marcar como concluída'}
+          className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none"
+        >
+          {isDone ? (
+            <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
+          ) : (
+            <i className="fa-regular fa-circle text-muted-foreground/60 group-hover:text-foreground text-xs" />
+          )}
+        </button>
+      </Table.Cell>
+
+      {/* Task Title, Project & Tags */}
       <Table.Cell>
         <div
-          className="flex items-center gap-2 text-sm font-medium"
-          style={{ paddingLeft: isChild ? 20 : 0 }}
+          className="flex flex-col gap-1 py-1"
+          style={{ paddingLeft: isChild ? 22 : 0 }}
         >
-          {isChild && (
-            <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
-          )}
-          <span
-            className={
-              task.status === 'done'
-                ? 'text-muted-foreground line-through'
-                : ''
-            }
-          >
-            {task.title}
-          </span>
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            {isChild && (
+              <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
+            )}
+            <span
+              className={
+                isDone
+                  ? 'text-muted-foreground line-through'
+                  : overdue
+                    ? 'text-rose-600 font-bold'
+                    : 'text-foreground'
+              }
+            >
+              {task.title}
+            </span>
+          </div>
+
+          {/* Project & Tags metadata */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {projectName && (
+              <span
+                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.2 text-[9px] font-semibold"
+                style={{
+                  color: projectColor || '#7b68ee',
+                  backgroundColor: `${projectColor || '#7b68ee'}15`,
+                }}
+              >
+                <span
+                  className="size-1.5 rounded-full"
+                  style={{ backgroundColor: projectColor || '#7b68ee' }}
+                />
+                {projectName}
+              </span>
+            )}
+            {(task.tags ?? []).map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center rounded-md bg-[#7b68ee]/10 px-1.5 py-0.2 text-[9px] font-semibold text-[#7b68ee] border border-[#7b68ee]/20"
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
         </div>
       </Table.Cell>
+
+      {/* Assignee */}
       <Table.Cell>
         <AssigneeCell member={memberLookup(task.assigned_to)} />
       </Table.Cell>
-      <Table.Cell>
-        <StatusPill status={task.status} />
+
+      {/* Quick Status Select */}
+      <Table.Cell onClick={(e) => e.stopPropagation()}>
+        <select
+          value={task.status}
+          onChange={(e) => onChangeStatus(task, e.target.value as TaskStatus)}
+          aria-label={`Status de ${task.title}`}
+          className="cursor-pointer rounded border border-transparent bg-transparent py-0.5 text-xs font-semibold transition hover:border-border focus:border-primary focus:bg-background"
+          style={{ color: STATUS_COLORS[task.status] }}
+        >
+          {TASK_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {STATUS_LABELS[s]}
+            </option>
+          ))}
+        </select>
       </Table.Cell>
+
+      {/* Priority */}
       <Table.Cell>
         <PriorityBadge priority={task.priority} />
       </Table.Cell>
-      <Table.Cell className={`text-xs ${overdue ? 'font-medium text-red-600' : ''}`}>
+
+      {/* Due Date */}
+      <Table.Cell
+        className={`text-xs ${
+          overdue ? 'font-bold text-rose-600' : 'text-muted-foreground'
+        }`}
+      >
         {task.due_date ? formatDate(task.due_date) : '—'}
       </Table.Cell>
+
+      {/* Subtasks Count */}
       <Table.Cell className="text-center text-xs text-muted-foreground">
         {childrenCount > 0 ? (
-          <span>
-            <i className="fa-regular fa-sitemap mr-1" />
+          <span className="inline-flex items-center gap-1 font-semibold">
+            <i className="fa-solid fa-list-check text-[10px]" />
             {childrenCount}
           </span>
         ) : (
@@ -178,10 +256,13 @@ interface TasksTableProps {
   grouped?: boolean
   emptyMessage: string
   onToggle: (taskId: string, checked: boolean) => void
+  onToggleDone: (task: Task) => void
+  onChangeStatus: (task: Task, status: TaskStatus) => void
   onOpen: (task: Task) => void
   toggleAll: (checked: boolean) => void
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
+  projectById?: Map<string, Project>
 }
 
 function TasksTable({
@@ -189,17 +270,21 @@ function TasksTable({
   selected,
   emptyMessage,
   onToggle,
+  onToggleDone,
+  onChangeStatus,
   onOpen,
   toggleAll,
   memberOf,
   countSubtasks,
+  projectById,
 }: TasksTableProps) {
-  const allSelected = rows.length > 0 && rows.every((task) => selected.has(task.id))
+  const allSelected =
+    rows.length > 0 && rows.every((task) => selected.has(task.id))
   const partialSelected = selected.size > 0 && !allSelected
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-card/40 px-3 py-2">
         <label className="flex cursor-pointer items-center gap-2">
           <Checkbox
             isSelected={allSelected}
@@ -207,47 +292,63 @@ function TasksTable({
             onChange={(checked) => toggleAll(checked)}
             aria-label="Selecionar todas"
           />
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             Selecionar todas
           </span>
         </label>
-        <span className="text-xs text-muted-foreground">
+        <span className="text-xs font-semibold text-muted-foreground">
           {rows.length} tarefa(s)
         </span>
       </div>
-      <Table.Root className="w-full">
-        <Table.Content aria-label="Tarefas">
+      <Table.Root className="w-full text-xs">
+        <Table.Content aria-label="Lista de tarefas">
           <Table.Header>
-            <Table.Column className="w-10">
+            <Table.Column className="w-8">
               <span className="sr-only">Selecionar</span>
             </Table.Column>
-            <Table.Column>Título</Table.Column>
+            <Table.Column className="w-8 text-center">
+              <span className="sr-only">Concluir</span>
+            </Table.Column>
+            <Table.Column>Título & Tags</Table.Column>
             <Table.Column>Responsável</Table.Column>
             <Table.Column>Status</Table.Column>
             <Table.Column>Prioridade</Table.Column>
             <Table.Column>Vencimento</Table.Column>
             <Table.Column className="text-center">Subtarefas</Table.Column>
           </Table.Header>
-        <Table.Body>
-          {rows.length === 0 && (
-            <Table.Row className="hover:bg-transparent">
-              <Table.Cell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                {emptyMessage}
-              </Table.Cell>
-            </Table.Row>
-          )}
-          {rows.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              selected={selected.has(task.id)}
-              childrenCount={countSubtasks(task)}
-              memberOf={memberOf}
-              onToggle={(checked) => onToggle(task.id, checked)}
-              onOpen={() => onOpen(task)}
-            />
-          ))}
-        </Table.Body>
+          <Table.Body>
+            {rows.length === 0 && (
+              <Table.Row className="hover:bg-transparent">
+                <Table.Cell
+                  colSpan={8}
+                  className="py-10 text-center text-sm text-muted-foreground"
+                >
+                  {emptyMessage}
+                </Table.Cell>
+              </Table.Row>
+            )}
+            {rows.map((task) => {
+              const project =
+                task.project_id && projectById
+                  ? projectById.get(task.project_id)
+                  : null
+              return (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  selected={selected.has(task.id)}
+                  childrenCount={countSubtasks(task)}
+                  memberOf={memberOf}
+                  onToggle={(checked) => onToggle(task.id, checked)}
+                  onToggleDone={onToggleDone}
+                  onChangeStatus={onChangeStatus}
+                  onOpen={() => onOpen(task)}
+                  projectName={project?.name}
+                  projectColor={project?.color}
+                />
+              )
+            })}
+          </Table.Body>
         </Table.Content>
       </Table.Root>
     </div>
@@ -265,6 +366,11 @@ export default function ListView({
 }: ListViewProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const projectById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p])),
+    [projects],
+  )
 
   const rows = useMemo(() => {
     const parents = tasks
@@ -308,6 +414,26 @@ export default function ListView({
     }
     return list
   }, [tasks, projects, grouped])
+
+  function handleToggleDone(task: Task) {
+    const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done'
+    void moveTaskStatus({ id: task.id, status: nextStatus })
+      .then(() =>
+        toast.success(
+          task.status === 'done' ? 'Tarefa reaberta.' : 'Tarefa concluída!',
+        ),
+      )
+      .catch(() => toast.danger('Erro ao alterar status.'))
+  }
+
+  function handleChangeStatus(task: Task, nextStatus: TaskStatus) {
+    if (task.status === nextStatus) return
+    void moveTaskStatus({ id: task.id, status: nextStatus })
+      .then(() =>
+        toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`),
+      )
+      .catch(() => toast.danger('Erro ao alterar status.'))
+  }
 
   function toggleAll(checked: boolean) {
     if (checked) {
@@ -366,7 +492,9 @@ export default function ListView({
     return tasks.filter((t) => t.parent_id === task.id).length
   }
 
-  const emptyMessage = grouped ? 'Nenhuma tarefa por aqui.' : 'Nenhuma tarefa neste projeto.'
+  const emptyMessage = grouped
+    ? 'Nenhuma tarefa por aqui.'
+    : 'Nenhuma tarefa neste projeto.'
 
   return (
     <div className="p-4">
@@ -385,26 +513,29 @@ export default function ListView({
               <section key={project?.id ?? '__sem_projeto__'}>
                 <header className="mb-2 flex items-center gap-2 px-1">
                   <span
-                    className="size-2.5 rounded-full"
+                    className="size-2.5 rounded-full shadow-2xs"
                     style={{ backgroundColor: project?.color ?? '#94A3B8' }}
                   />
-                  <h2 className="text-sm font-semibold">
+                  <h2 className="text-xs font-bold text-foreground">
                     {project?.name ?? 'Sem projeto'}
                   </h2>
                   <span className="text-xs text-muted-foreground">
                     {sectionRows.length} tarefa(s)
                   </span>
                 </header>
-                <div className="rounded-xl border bg-background">
+                <div className="rounded-xl border border-border bg-background shadow-2xs">
                   <TasksTable
                     rows={sectionRows}
                     selected={selected}
                     emptyMessage={emptyMessage}
                     onToggle={toggleOne}
+                    onToggleDone={handleToggleDone}
+                    onChangeStatus={handleChangeStatus}
                     onOpen={onOpenTask}
                     toggleAll={toggleAll}
                     memberOf={memberOf}
                     countSubtasks={countSubtasks}
+                    projectById={projectById}
                   />
                 </div>
               </section>
@@ -412,30 +543,36 @@ export default function ListView({
           })}
         </div>
       ) : (
-        <div className="rounded-xl border bg-background">
+        <div className="rounded-xl border border-border bg-background shadow-2xs">
           <TasksTable
             rows={rows}
             selected={selected}
             emptyMessage={emptyMessage}
             onToggle={toggleOne}
+            onToggleDone={handleToggleDone}
+            onChangeStatus={handleChangeStatus}
             onOpen={onOpenTask}
             toggleAll={toggleAll}
             memberOf={memberOf}
             countSubtasks={countSubtasks}
+            projectById={projectById}
           />
         </div>
       )}
 
+      {/* Bulk Action Bar */}
       {selected.size > 0 && (
-        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border bg-popover px-4 py-2.5 shadow-lg">
-          <span className="text-sm font-medium">
+        <div className="sticky bottom-4 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-border bg-popover px-4 py-2.5 shadow-lg animate-in slide-in-from-bottom-2">
+          <span className="text-xs font-bold">
             {selected.size} selecionada(s)
           </span>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Mover para:</span>
             <Select.Root
               selectedKey={null}
-              onSelectionChange={(value) => void moveSelected(value as TaskStatus)}
+              onSelectionChange={(value) =>
+                void moveSelected(value as TaskStatus)
+              }
               aria-label="Mover selecionadas"
               className="w-40"
               placeholder="Escolher status"
@@ -446,7 +583,11 @@ export default function ListView({
               <Select.Popover>
                 <ListBox.Root>
                   {TASK_STATUSES.map((status) => (
-                    <ListBox.Item key={status} id={status} textValue={STATUS_LABELS[status]}>
+                    <ListBox.Item
+                      key={status}
+                      id={status}
+                      textValue={STATUS_LABELS[status]}
+                    >
                       {STATUS_LABELS[status]}
                     </ListBox.Item>
                   ))}

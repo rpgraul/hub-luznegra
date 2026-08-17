@@ -107,7 +107,7 @@ html[data-theme='dark'],
 
 .gantt-container .upper-text {
   position: absolute;
-  top: 5px !important;
+  top: 3px !important;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -116,7 +116,11 @@ html[data-theme='dark'],
   user-select: none;
   pointer-events: none;
   white-space: nowrap;
-  padding: 0 4px;
+  padding: 1px 8px;
+  border-radius: 6px;
+  background-color: var(--g-actions-background);
+  border: 1px solid var(--g-border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .gantt-container .lower-text {

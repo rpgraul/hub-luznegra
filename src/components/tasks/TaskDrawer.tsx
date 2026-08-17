@@ -1,5 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { toast, Button, TextField, Label, Input, TextArea, Checkbox, Separator, Drawer, Select, ListBox, AlertDialog } from '@heroui/react'
+import {
+  toast,
+  Button,
+  TextField,
+  Label,
+  Input,
+  TextArea,
+  Checkbox,
+  Separator,
+  Drawer,
+  Select,
+  ListBox,
+  AlertDialog,
+} from '@heroui/react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useTaskComments } from '@/hooks/useTaskComments'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
@@ -29,6 +42,7 @@ interface TaskDrawerProps {
       status?: TaskStatus
       start_date?: string | null
       due_date?: string | null
+      tags?: string[] | null
     }) => Promise<Task>
     updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
     deleteTask: (id: string) => Promise<unknown>
@@ -61,17 +75,17 @@ export default function TaskDrawer({
   const [titleDraft, setTitleDraft] = useState('')
   const [descriptionDraft, setDescriptionDraft] =
     useState<SerializedEditorState>(EMPTY_DESCRIPTION)
-  const [lastSavedDescription, setLastSavedDescription] =
-    useState<string>('')
+  const [lastSavedDescription, setLastSavedDescription] = useState<string>('')
   const [newSubtask, setNewSubtask] = useState('')
   const [newComment, setNewComment] = useState('')
+  const [tagInput, setTagInput] = useState('')
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const isNew = !task?.id
 
   const commentScrollRef = useRef<HTMLDivElement>(null)
   const comments = useTaskComments(task?.id ?? null)
-  const { members, memberOf } = useProjectMembers(projectId)
+  const { members } = useProjectMembers(projectId)
 
   const titleTimer = useRef<number | undefined>(undefined)
   const descriptionTimer = useRef<number | undefined>(undefined)
@@ -86,6 +100,7 @@ export default function TaskDrawer({
       setLastSavedDescription('')
       setNewSubtask('')
       setNewComment('')
+      setTagInput('')
       setCreateProjectId(projectId ?? projects[0]?.id ?? null)
       return
     }
@@ -169,6 +184,27 @@ export default function TaskDrawer({
     }
   }
 
+  function handleAddTag() {
+    if (!task) return
+    const cleanTag = tagInput.trim().replace(/^#/, '').toLowerCase()
+    if (!cleanTag) return
+    const currentTags = task.tags ?? []
+    if (currentTags.includes(cleanTag)) {
+      setTagInput('')
+      return
+    }
+    const nextTags = [...currentTags, cleanTag]
+    commitTaskPatch({ tags: nextTags })
+    setTagInput('')
+  }
+
+  function handleRemoveTag(tagToRemove: string) {
+    if (!task) return
+    const currentTags = task.tags ?? []
+    const nextTags = currentTags.filter((t) => t !== tagToRemove)
+    commitTaskPatch({ tags: nextTags })
+  }
+
   async function handleCreate() {
     const title = titleDraft.trim()
     if (!title || !createProjectId) return
@@ -242,22 +278,34 @@ export default function TaskDrawer({
       <Drawer.Root isOpen={open} onOpenChange={onOpenChange}>
         <Drawer.Backdrop
           isDismissable={false}
-          className="bg-transparent"
-          style={{ pointerEvents: 'none' }}
+          className="bg-black/30 backdrop-blur-xs transition-opacity"
         />
-        <Drawer.Content placement="right" className="w-full overflow-hidden sm:max-w-[60%]">
-          <Drawer.Dialog className="w-full">
-            <Drawer.Header className="border-b px-4 py-3">
-              <div className="flex w-full items-center justify-between gap-2">
-                <Drawer.Heading className="text-base">
-                  {isNew ? 'Nova tarefa' : 'Detalhes da tarefa'}
+        <Drawer.Content
+          placement="right"
+          className="fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col border-l border-border bg-card shadow-2xl sm:max-w-[55%] animate-in slide-in-from-right duration-300"
+        >
+          <Drawer.Dialog className="flex h-full w-full flex-col">
+            <Drawer.Header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <i className="fa-regular fa-rectangle-list text-primary text-sm" />
+                <Drawer.Heading className="text-sm font-bold text-foreground">
+                  {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
                 </Drawer.Heading>
-                <Drawer.CloseTrigger className="rounded-md p-1 sm:hidden" aria-label="Fechar" />
               </div>
+              <Button
+                variant="ghost"
+                isIconOnly
+                size="sm"
+                onPress={() => onOpenChange(false)}
+                aria-label="Fechar painel"
+                className="h-7 w-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
             </Drawer.Header>
 
-            <Drawer.Body className="h-[calc(100vh-4.5rem)] overflow-y-auto">
-              <div className="space-y-5 p-4">
+            <Drawer.Body className="flex-1 overflow-y-auto p-5">
+              <div className="space-y-5">
                 {isNew ? (
                   <div className="space-y-3">
                     <div className="space-y-2">
@@ -282,14 +330,10 @@ export default function TaskDrawer({
                               </ListBox.Item>
                             ) : (
                               projects.map((project) => (
-                                <ListBox.Item
-                                  key={project.id}
-                                  id={project.id}
-                                  textValue={project.name}
-                                >
+                                <ListBox.Item key={project.id} id={project.id} textValue={project.name}>
                                   <span className="inline-flex items-center gap-2">
                                     <span
-                                      className="size-2.5 rounded-full"
+                                      className="size-2 rounded-full"
                                       style={{ backgroundColor: project.color }}
                                     />
                                     {project.name}
@@ -301,46 +345,55 @@ export default function TaskDrawer({
                         </Select.Popover>
                       </Select.Root>
                     </div>
+
                     <div className="space-y-2">
-                      <Label>Título</Label>
-                      <TextField.Root autoFocus value={titleDraft} onChange={setTitleDraft}>
+                      <Label>Título da Tarefa</Label>
+                      <TextField.Root
+                        value={titleDraft}
+                        onChange={setTitleDraft}
+                        isRequired
+                      >
                         <Input
+                          placeholder="Digite o título da tarefa..."
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') void handleCreate()
                           }}
-                          placeholder="O que precisa ser feito?"
                         />
                       </TextField.Root>
                     </div>
-                    <div className="flex justify-end">
-                      <Button
-                        size="sm"
-                        isDisabled={!createProjectId}
-                        onPress={() => void handleCreate()}
-                      >
-                        <i className="fa-solid fa-plus mr-1" />
-                        Criar tarefa
-                      </Button>
-                    </div>
+
+                    <Button
+                      variant="primary"
+                      className="w-full"
+                      onPress={() => void handleCreate()}
+                      isDisabled={!titleDraft.trim() || !createProjectId}
+                    >
+                      <i className="fa-solid fa-plus mr-1.5" />
+                      Criar Tarefa
+                    </Button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <Label>Título</Label>
-                    <TextField.Root value={titleDraft} onChange={handleTitleChange}>
-                      <Input />
-                    </TextField.Root>
-                  </div>
-                )}
-
-                {task && !isNew && (
-                  <div className="space-y-2">
-                    <Label>Descrição</Label>
-                    <div className="rounded-lg border">
-                      <LexicalEditor
-                        key={task.id}
-                        initialValue={descriptionDraft}
-                        onChange={handleDescriptionChange}
+                  <div className="space-y-4">
+                    <TextField.Root
+                      value={titleDraft}
+                      onChange={handleTitleChange}
+                      className="w-full"
+                    >
+                      <Input
+                        className="text-base font-bold tracking-tight border-transparent px-1 focus:border-border hover:border-border"
+                        placeholder="Título da tarefa"
                       />
+                    </TextField.Root>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground">Descrição</Label>
+                      <div className="rounded-lg border border-border bg-background p-1">
+                        <LexicalEditor
+                          key={task.id}
+                          initialValue={descriptionDraft}
+                          onChange={handleDescriptionChange}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -349,9 +402,45 @@ export default function TaskDrawer({
                   <>
                     <Separator />
 
+                    {/* Tags / Etiquetas Section */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-muted-foreground">Etiquetas / Tags</Label>
+                      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2">
+                        {(task.tags ?? []).map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 rounded-md bg-[#7b68ee]/15 px-2 py-0.5 text-xs font-semibold text-[#7b68ee]"
+                          >
+                            <span>#{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              className="hover:text-destructive text-[#7b68ee]/70 transition"
+                              title="Remover tag"
+                            >
+                              <i className="fa-solid fa-xmark text-[10px]" />
+                            </button>
+                          </span>
+                        ))}
+                        <input
+                          type="text"
+                          placeholder="Adicionar tag (Enter)..."
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ',') {
+                              e.preventDefault()
+                              handleAddTag()
+                            }
+                          }}
+                          className="min-w-[130px] flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label>Status</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Status</Label>
                         <Select.Root
                           selectedKey={task.status}
                           onSelectionChange={(value) =>
@@ -382,8 +471,8 @@ export default function TaskDrawer({
                         </Select.Root>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Prioridade</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Prioridade</Label>
                         <Select.Root
                           selectedKey={task.priority}
                           onSelectionChange={(value) =>
@@ -407,8 +496,8 @@ export default function TaskDrawer({
                         </Select.Root>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Responsável</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Responsável</Label>
                         <Select.Root
                           selectedKey={task.assigned_to ?? NO_ASSIGNEE}
                           onSelectionChange={(value) =>
@@ -439,8 +528,8 @@ export default function TaskDrawer({
                         </Select.Root>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Horas estimadas</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Horas Estimadas</Label>
                         <TextField.Root
                           type="number"
                           value={
@@ -455,12 +544,12 @@ export default function TaskDrawer({
                             }
                           }}
                         >
-                          <Input />
+                          <Input placeholder="0" />
                         </TextField.Root>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Início</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Início</Label>
                         <TextField.Root
                           type="date"
                           value={task.start_date ?? ''}
@@ -470,8 +559,8 @@ export default function TaskDrawer({
                         </TextField.Root>
                       </div>
 
-                      <div className="space-y-2">
-                        <Label>Conclusão</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground">Conclusão</Label>
                         <TextField.Root
                           type="date"
                           value={task.due_date ?? ''}
@@ -492,23 +581,24 @@ export default function TaskDrawer({
 
                     <Separator />
 
+                    {/* Subtasks Section */}
                     <div className="space-y-2">
-                      <Label>
+                      <Label className="text-xs font-semibold text-muted-foreground">
                         Subtarefas{' '}
-                        <span className="font-normal text-muted-foreground">
+                        <span className="font-normal">
                           ({subtasks.length})
                         </span>
                       </Label>
                       <ul className="space-y-1.5">
                         {subtasks.length === 0 && (
-                          <li className="text-sm text-muted-foreground">
-                            Nenhuma subtarefa ainda.
+                          <li className="text-xs text-muted-foreground">
+                            Nenhuma subtarefa adicionada.
                           </li>
                         )}
                         {subtasks.map((subtask) => (
                           <li
                             key={subtask.id}
-                            className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm"
+                            className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs"
                           >
                             <Checkbox
                               isSelected={subtask.status === 'done'}
@@ -526,11 +616,11 @@ export default function TaskDrawer({
                               }
                             />
                             <span
-                              className={
+                              className={`flex-1 truncate ${
                                 subtask.status === 'done'
                                   ? 'text-muted-foreground line-through'
-                                  : ''
-                              }
+                                  : 'text-foreground font-medium'
+                              }`}
                             >
                               {subtask.title}
                             </span>
@@ -543,63 +633,54 @@ export default function TaskDrawer({
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') void handleCreateSubtask()
                             }}
-                            placeholder="Nova subtarefa..."
+                            placeholder="Adicionar subtarefa..."
+                            className="text-xs"
                           />
                         </TextField.Root>
                         <Button
                           variant="outline"
+                          size="sm"
                           onPress={() => void handleCreateSubtask()}
-                          aria-label="Adicionar subtarefa"
+                          isDisabled={!newSubtask.trim()}
                         >
-                          <i className="fa-solid fa-plus" />
+                          <i className="fa-solid fa-plus mr-1" />
+                          Adicionar
                         </Button>
                       </div>
                     </div>
 
                     <Separator />
 
-                    <div className="space-y-2">
-                      <Label>
-                        Comentários{' '}
-                        <span className="font-normal text-muted-foreground">
-                          ({comments.comments.length})
-                        </span>
-                      </Label>
+                    {/* Comments Section */}
+                    <div className="space-y-3">
+                      <Label className="text-xs font-semibold text-muted-foreground">Comentários e Atividades</Label>
                       <div
                         ref={commentScrollRef}
-                        className="max-h-64 overflow-y-auto rounded-lg border"
+                        className="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/20 p-2.5 text-xs"
                       >
-                        <div className="space-y-3 p-3">
-                          {comments.comments.length === 0 && (
-                            <p className="text-sm text-muted-foreground">
-                              Sem comentários. Inicie a conversa abaixo.
-                            </p>
-                          )}
-                          {comments.comments.map((comment) => {
-                            const isMine = comment.author_id === creator.currentUserId
-                            const author = isMine
-                              ? 'Você'
-                              : (memberOf(comment.author_id)?.full_name ??
-                                memberOf(comment.author_id)?.username ??
-                                'Membro da equipe')
-                            return (
-                              <div key={comment.id}>
-                                <div
-                                  className={`rounded-lg px-3 py-2 text-sm ${
-                                    isMine
-                                      ? 'ml-8 bg-primary/10'
-                                      : 'mr-8 bg-accent'
-                                  }`}
-                                >
-                                  <div className="mb-0.5 flex items-center justify-between text-xs">
-                                    <span className="font-medium">{author}</span>
-                                    <span className="text-muted-foreground">
-                                      {formatDateTime(comment.created_at)}
-                                    </span>
-                                  </div>
-                                  <p className="whitespace-pre-wrap">{comment.content}</p>
-                                </div>
-                                {isMine && (
+                        {comments.comments.length === 0 && (
+                          <p className="text-center text-xs text-muted-foreground py-2">
+                            Nenhum comentário ainda.
+                          </p>
+                        )}
+                        {comments.comments.map((comment) => {
+                          const isMine = comment.author_id === creator.currentUserId
+                          const authorMember = members.find((m) => m.id === comment.author_id)
+                          const authorName = authorMember?.full_name ?? authorMember?.username ?? 'Usuário'
+                          return (
+                            <div
+                              key={comment.id}
+                              className="rounded-md border border-border/60 bg-background p-2 shadow-2xs"
+                            >
+                              <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                                <span className="font-semibold text-foreground">
+                                  {authorName}
+                                </span>
+                                <span>{formatDateTime(comment.created_at)}</span>
+                              </div>
+                              <p className="whitespace-pre-wrap text-xs text-foreground">{comment.content}</p>
+                              {isMine && (
+                                <div className="mt-1 flex justify-end">
                                   <button
                                     type="button"
                                     onClick={() =>
@@ -611,16 +692,17 @@ export default function TaskDrawer({
                                           ),
                                         )
                                     }
-                                    className="mt-0.5 ml-1 text-xs text-muted-foreground hover:text-red-600"
+                                    className="text-[10px] text-muted-foreground hover:text-red-600 transition"
                                   >
                                     Excluir
                                   </button>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
+
                       <TextField.Root value={newComment} onChange={setNewComment}>
                         <TextArea
                           onKeyDown={(e) => {
@@ -630,7 +712,7 @@ export default function TaskDrawer({
                             }
                           }}
                           placeholder="Escreva um comentário..."
-                          className="resize-none text-sm"
+                          className="resize-none text-xs"
                           rows={2}
                         />
                       </TextField.Root>
@@ -639,25 +721,24 @@ export default function TaskDrawer({
                           size="sm"
                           variant="outline"
                           onPress={() => void handleAddComment()}
+                          isDisabled={!newComment.trim()}
                         >
+                          <i className="fa-regular fa-paper-plane mr-1" />
                           Comentar
                         </Button>
                       </div>
                     </div>
-                  </>
-                )}
 
-                {task && !isNew && (
-                  <>
                     <Separator />
-                    <div className="flex justify-between">
+
+                    <div className="flex justify-between pt-1">
                       <Button
                         variant="danger"
                         size="sm"
                         onPress={() => setConfirmDelete(true)}
                       >
                         <i className="fa-solid fa-trash mr-1" />
-                        Excluir tarefa
+                        Excluir Tarefa
                       </Button>
                     </div>
                   </>
@@ -681,16 +762,10 @@ export default function TaskDrawer({
             </AlertDialog.Header>
             <AlertDialog.Body />
             <AlertDialog.Footer>
-              <Button
-                variant="outline"
-                onPress={() => setConfirmDelete(false)}
-              >
+              <Button variant="outline" onPress={() => setConfirmDelete(false)}>
                 Cancelar
               </Button>
-              <Button
-                variant="danger"
-                onPress={() => void handleDelete()}
-              >
+              <Button variant="danger" onPress={() => void handleDelete()}>
                 <i className="fa-solid fa-trash mr-1" />
                 Excluir
               </Button>
