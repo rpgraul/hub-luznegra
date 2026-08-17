@@ -1,23 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import {
   toast,
   Button,
   Checkbox,
-  Table,
-  Select,
-  ListBox,
   AlertDialog,
 } from '@heroui/react'
 import { userColor, userRowColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
 import {
-  PRIORITY_ICONS,
   STATUS_COLORS,
   STATUS_LABELS,
+  TASK_PRIORITIES,
   TASK_STATUSES,
 } from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
-import type { Project, Task, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
 
 interface ListViewProps {
   tasks: Task[]
@@ -26,11 +23,13 @@ interface ListViewProps {
   onOpenTask: (task: Task) => void
   memberOf: (id: string | null) => ProjectMember | null
   moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+  updateTask?: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
   deleteTask: (id: string) => Promise<unknown>
 }
 
 type SortField = 'status' | 'due_date' | 'priority' | 'title'
 type SortDirection = 'asc' | 'desc'
+type EditableField = 'title' | 'description' | 'due_date' | 'priority'
 
 const STATUS_ORDER: Record<Task['status'], number> = {
   backlog: 0,
@@ -76,19 +75,36 @@ function extractDescriptionText(description: unknown): string {
   }
 }
 
-function PriorityBadge({ priority }: { priority: Task['priority'] }) {
-  const tone =
-    priority === 'urgent'
-      ? 'text-rose-600'
-      : priority === 'high'
-        ? 'text-amber-600'
-        : 'text-muted-foreground'
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs ${tone}`}>
-      <i className={`fa-solid ${PRIORITY_ICONS[priority]}`} />
-      {PRIORITY_LABELS_SHORT[priority]}
-    </span>
-  )
+function buildSimpleLexicalJson(text: string): Json {
+  return {
+    root: {
+      type: 'root',
+      format: '',
+      indent: 0,
+      version: 1,
+      children: [
+        {
+          type: 'paragraph',
+          format: '',
+          indent: 0,
+          version: 1,
+          children: [
+            {
+              type: 'text',
+              text,
+              format: 0,
+              detail: 0,
+              mode: 'normal',
+              style: '',
+              version: 1,
+            },
+          ],
+          direction: 'ltr',
+        },
+      ],
+      direction: 'ltr',
+    },
+  } as unknown as Json
 }
 
 function AssigneeCell({ member }: { member: ProjectMember | null }) {
@@ -121,6 +137,7 @@ interface TaskRowProps {
   onToggle: (checked: boolean) => void
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
+  onCommitField: (taskId: string, field: EditableField, value: string) => void
   onOpen: () => void
   projectName?: string | null
   projectColor?: string | null
@@ -134,6 +151,7 @@ function TaskRow({
   onToggle,
   onToggleDone,
   onChangeStatus,
+  onCommitField,
   onOpen,
   projectName,
   projectColor,
@@ -146,31 +164,66 @@ function TaskRow({
     ? { backgroundColor: userRowColor(task.assigned_to) }
     : undefined
 
-  const descriptionPreview = extractDescriptionText(task.description)
-  const hoverTooltip = descriptionPreview
-    ? `${task.title}\n\nDescrição:\n${descriptionPreview}`
-    : `${task.title}\n(Clique ou dê 2 cliques para abrir detalhes)`
+  const descriptionText = extractDescriptionText(task.description)
+
+  // Inline editing local state
+  const [editingField, setEditingField] = useState<EditableField | null>(null)
+  const [draftValue, setDraftValue] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingField) {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }
+  }, [editingField])
+
+  function startEdit(field: EditableField, initial: string, e?: React.MouseEvent) {
+    e?.stopPropagation()
+    setEditingField(field)
+    setDraftValue(initial)
+  }
+
+  function commitEdit() {
+    if (!editingField) return
+    const field = editingField
+    const val = draftValue.trim()
+    setEditingField(null)
+    onCommitField(task.id, field, val)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      commitEdit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      setEditingField(null)
+    }
+  }
 
   return (
-    <Table.Row
+    <tr
       style={rowStyle}
       onDoubleClick={onOpen}
-      className={`group cursor-default transition-colors select-none ${
-        selected ? 'bg-primary/5' : isDone ? 'bg-emerald-500/5' : ''
+      className={`group border-b border-border/60 transition-colors select-none ${
+        selected ? 'bg-primary/5' : isDone ? 'bg-emerald-500/5' : 'hover:bg-muted/30'
       }`}
     >
       {/* Selection Checkbox */}
-      <Table.Cell onClick={(e) => e.stopPropagation()} className="w-8">
+      <td onClick={(e) => e.stopPropagation()} className="w-8 px-2 py-2 text-center">
         <Checkbox
           isSelected={selected}
           onChange={(checked) => onToggle(checked)}
           aria-label={`Selecionar ${task.title}`}
           className="cursor-pointer"
         />
-      </Table.Cell>
+      </td>
 
       {/* Quick Done Checkbox */}
-      <Table.Cell onClick={(e) => e.stopPropagation()} className="w-8 px-1 text-center">
+      <td onClick={(e) => e.stopPropagation()} className="w-8 px-1 py-2 text-center">
         <button
           type="button"
           onClick={() => onToggleDone(task)}
@@ -183,32 +236,46 @@ function TaskRow({
             <i className="fa-regular fa-circle text-muted-foreground/60 group-hover:text-foreground text-xs" />
           )}
         </button>
-      </Table.Cell>
+      </td>
 
-      {/* Task Title, Description Preview & Tags */}
-      <Table.Cell>
+      {/* Task Title & Inline Description */}
+      <td className="px-3 py-2">
         <div
-          title={hoverTooltip}
-          onDoubleClick={onOpen}
-          className="flex flex-col gap-1 py-1"
+          className="flex flex-col gap-1"
           style={{ paddingLeft: isChild ? 22 : 0 }}
         >
+          {/* Title Row */}
           <div className="flex items-center gap-2 text-xs font-semibold">
             {isChild && (
               <i className="fa-solid fa-turn-down text-xs text-muted-foreground" />
             )}
-            <span
-              onClick={onOpen}
-              className={`cursor-pointer transition hover:text-[#7b68ee] ${
-                isDone
-                  ? 'text-muted-foreground line-through'
-                  : overdue
-                    ? 'text-rose-600 font-bold'
-                    : 'text-foreground'
-              }`}
-            >
-              {task.title}
-            </span>
+
+            {editingField === 'title' ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={draftValue}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => setDraftValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={commitEdit}
+                className="w-full rounded-md border border-[#7b68ee] bg-background px-1.5 py-0.5 text-xs font-bold text-foreground focus:outline-none shadow-xs"
+              />
+            ) : (
+              <span
+                onDoubleClick={(e) => startEdit('title', task.title, e)}
+                title="2 cliques para editar o título inline"
+                className={`cursor-pointer transition hover:text-[#7b68ee] ${
+                  isDone
+                    ? 'text-muted-foreground line-through'
+                    : overdue
+                      ? 'text-rose-600 font-bold'
+                      : 'text-foreground'
+                }`}
+              >
+                {task.title}
+              </span>
+            )}
 
             {/* Explicit Edit Icon Button */}
             <button
@@ -217,17 +284,37 @@ function TaskRow({
                 e.stopPropagation()
                 onOpen()
               }}
-              title="Abrir detalhes da tarefa"
+              title="Abrir modal de detalhes"
               className="flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/50 opacity-0 transition hover:bg-muted hover:text-[#7b68ee] group-hover:opacity-100"
             >
               <i className="fa-regular fa-pen-to-square text-[11px]" />
             </button>
           </div>
 
-          {/* Description snippet on hover/preview */}
-          {descriptionPreview && (
-            <p className="line-clamp-1 text-[11px] font-normal text-muted-foreground/80">
-              {descriptionPreview}
+          {/* Description Row (Inline Editable on 2 Clicks) */}
+          {editingField === 'description' ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={draftValue}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setDraftValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={commitEdit}
+              placeholder="Digite a descrição (Enter salva)..."
+              className="w-full rounded-md border border-[#7b68ee] bg-background px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none shadow-xs"
+            />
+          ) : (
+            <p
+              onDoubleClick={(e) => startEdit('description', descriptionText, e)}
+              title="2 cliques para editar a descrição inline"
+              className={`line-clamp-1 cursor-pointer text-[11px] font-normal transition hover:text-foreground ${
+                descriptionText
+                  ? 'text-muted-foreground/80'
+                  : 'text-muted-foreground/40 italic hover:text-muted-foreground'
+              }`}
+            >
+              {descriptionText || '+ Adicionar descrição (2 cliques)...'}
             </p>
           )}
 
@@ -258,15 +345,15 @@ function TaskRow({
             ))}
           </div>
         </div>
-      </Table.Cell>
+      </td>
 
       {/* Assignee */}
-      <Table.Cell>
+      <td className="px-3 py-2">
         <AssigneeCell member={memberLookup(task.assigned_to)} />
-      </Table.Cell>
+      </td>
 
-      {/* Quick Status Select */}
-      <Table.Cell onClick={(e) => e.stopPropagation()}>
+      {/* Status (Clickable Dropdown) */}
+      <td onClick={(e) => e.stopPropagation()} className="px-3 py-2">
         <select
           value={task.status}
           onChange={(e) => onChangeStatus(task, e.target.value as TaskStatus)}
@@ -280,24 +367,56 @@ function TaskRow({
             </option>
           ))}
         </select>
-      </Table.Cell>
+      </td>
 
-      {/* Priority */}
-      <Table.Cell>
-        <PriorityBadge priority={task.priority} />
-      </Table.Cell>
+      {/* Priority (Editable on Click or Select) */}
+      <td onClick={(e) => e.stopPropagation()} className="px-3 py-2">
+        <select
+          value={task.priority}
+          onChange={(e) => onCommitField(task.id, 'priority', e.target.value)}
+          aria-label={`Prioridade de ${task.title}`}
+          className="cursor-pointer rounded-md border border-border/60 bg-background px-2 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary"
+        >
+          {TASK_PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {PRIORITY_LABELS_SHORT[p]}
+            </option>
+          ))}
+        </select>
+      </td>
 
-      {/* Due Date */}
-      <Table.Cell
-        className={`text-xs ${
-          overdue ? 'font-bold text-rose-600' : 'text-muted-foreground'
-        }`}
-      >
-        {task.due_date ? formatDate(task.due_date) : '—'}
-      </Table.Cell>
+      {/* Due Date (Inline Editable on 2 Clicks / Date Input) */}
+      <td className="px-3 py-2">
+        {editingField === 'due_date' ? (
+          <input
+            ref={inputRef}
+            type="date"
+            value={draftValue}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => setDraftValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={commitEdit}
+            className="rounded-md border border-[#7b68ee] bg-background px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none shadow-xs"
+          />
+        ) : (
+          <span
+            onDoubleClick={(e) => startEdit('due_date', task.due_date ?? '', e)}
+            title="2 cliques para editar data inline"
+            className={`cursor-pointer transition hover:text-[#7b68ee] text-xs ${
+              overdue
+                ? 'font-bold text-rose-600'
+                : task.due_date
+                  ? 'text-muted-foreground'
+                  : 'text-muted-foreground/40 italic'
+            }`}
+          >
+            {task.due_date ? formatDate(task.due_date) : '— definir data —'}
+          </span>
+        )}
+      </td>
 
       {/* Subtasks Count */}
-      <Table.Cell className="text-center text-xs text-muted-foreground">
+      <td className="px-3 py-2 text-center text-xs text-muted-foreground">
         {childrenCount > 0 ? (
           <span className="inline-flex items-center gap-1 font-semibold">
             <i className="fa-solid fa-list-check text-[10px]" />
@@ -306,8 +425,8 @@ function TaskRow({
         ) : (
           '—'
         )}
-      </Table.Cell>
-    </Table.Row>
+      </td>
+    </tr>
   )
 }
 
@@ -318,6 +437,7 @@ interface TasksTableProps {
   onToggle: (taskId: string, checked: boolean) => void
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
+  onCommitField: (taskId: string, field: EditableField, value: string) => void
   onOpen: (task: Task) => void
   toggleAll: (checked: boolean) => void
   memberOf: (id: string | null) => ProjectMember | null
@@ -335,6 +455,7 @@ function TasksTable({
   onToggle,
   onToggleDone,
   onChangeStatus,
+  onCommitField,
   onOpen,
   toggleAll,
   memberOf,
@@ -360,8 +481,9 @@ function TasksTable({
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-card/40 px-3 py-2">
+    <div className="overflow-x-auto">
+      {/* Table Top Header Bar */}
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-card/60 px-3 py-2">
         <label className="flex cursor-pointer items-center gap-2">
           <Checkbox
             isSelected={allSelected}
@@ -370,101 +492,108 @@ function TasksTable({
             aria-label="Selecionar todas"
             className="cursor-pointer"
           />
-          <span className="text-xs font-semibold text-muted-foreground">
+          <span className="text-xs font-bold text-foreground">
             Selecionar todas
           </span>
         </label>
         <span className="text-xs font-semibold text-muted-foreground">
-          {rows.length} tarefa(s)
+          {rows.length} tarefa(s) • <span className="font-normal opacity-90">2 cliques em qualquer texto para editar inline</span>
         </span>
       </div>
-      <Table.Root className="w-full text-xs">
-        <Table.Content aria-label="Lista de tarefas">
-          <Table.Header>
-            <Table.Column className="w-8">
+
+      {/* High-contrast, crystal-clear ClickUp table header */}
+      <table className="w-full border-collapse text-xs">
+        <thead className="border-b border-border bg-slate-100 dark:bg-slate-850">
+          <tr className="text-slate-800 dark:text-slate-100">
+            <th className="w-8 px-2 py-2.5 text-center font-bold">
               <span className="sr-only">Selecionar</span>
-            </Table.Column>
-            <Table.Column className="w-8 text-center">
+            </th>
+            <th className="w-8 px-1 py-2.5 text-center font-bold">
               <span className="sr-only">Concluir</span>
-            </Table.Column>
-            <Table.Column>
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
               <button
                 type="button"
                 onClick={() => onSortBy('title')}
-                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="group flex items-center font-bold text-slate-800 dark:text-slate-100 hover:text-[#7b68ee] cursor-pointer"
               >
                 <span>Título & Descrição</span>
                 {renderSortIcon('title')}
               </button>
-            </Table.Column>
-            <Table.Column>Responsável</Table.Column>
-            <Table.Column>
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
+              Responsável
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
               <button
                 type="button"
                 onClick={() => onSortBy('status')}
-                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="group flex items-center font-bold text-slate-800 dark:text-slate-100 hover:text-[#7b68ee] cursor-pointer"
               >
                 <span>Status</span>
                 {renderSortIcon('status')}
               </button>
-            </Table.Column>
-            <Table.Column>
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
               <button
                 type="button"
                 onClick={() => onSortBy('priority')}
-                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="group flex items-center font-bold text-slate-800 dark:text-slate-100 hover:text-[#7b68ee] cursor-pointer"
               >
                 <span>Prioridade</span>
                 {renderSortIcon('priority')}
               </button>
-            </Table.Column>
-            <Table.Column>
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
               <button
                 type="button"
                 onClick={() => onSortBy('due_date')}
-                className="group flex items-center font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                className="group flex items-center font-bold text-slate-800 dark:text-slate-100 hover:text-[#7b68ee] cursor-pointer"
               >
                 <span>Vencimento</span>
                 {renderSortIcon('due_date')}
               </button>
-            </Table.Column>
-            <Table.Column className="text-center">Subtarefas</Table.Column>
-          </Table.Header>
-          <Table.Body>
-            {rows.length === 0 && (
-              <Table.Row className="hover:bg-transparent">
-                <Table.Cell
-                  colSpan={8}
-                  className="py-10 text-center text-sm text-muted-foreground"
-                >
-                  {emptyMessage}
-                </Table.Cell>
-              </Table.Row>
-            )}
-            {rows.map((task) => {
-              const project =
-                task.project_id && projectById
-                  ? projectById.get(task.project_id)
-                  : null
-              return (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  selected={selected.has(task.id)}
-                  childrenCount={countSubtasks(task)}
-                  memberOf={memberOf}
-                  onToggle={(checked) => onToggle(task.id, checked)}
-                  onToggleDone={onToggleDone}
-                  onChangeStatus={onChangeStatus}
-                  onOpen={() => onOpen(task)}
-                  projectName={project?.name}
-                  projectColor={project?.color}
-                />
-              )
-            })}
-          </Table.Body>
-        </Table.Content>
-      </Table.Root>
+            </th>
+            <th className="px-3 py-2.5 text-center font-bold text-slate-800 dark:text-slate-100">
+              Subtarefas
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td
+                colSpan={8}
+                className="py-10 text-center text-sm text-muted-foreground"
+              >
+                {emptyMessage}
+              </td>
+            </tr>
+          )}
+          {rows.map((task) => {
+            const project =
+              task.project_id && projectById
+                ? projectById.get(task.project_id)
+                : null
+            return (
+              <TaskRow
+                key={task.id}
+                task={task}
+                selected={selected.has(task.id)}
+                childrenCount={countSubtasks(task)}
+                memberOf={memberOf}
+                onToggle={(checked) => onToggle(task.id, checked)}
+                onToggleDone={onToggleDone}
+                onChangeStatus={onChangeStatus}
+                onCommitField={onCommitField}
+                onOpen={() => onOpen(task)}
+                projectName={project?.name}
+                projectColor={project?.color}
+              />
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -476,6 +605,7 @@ export default function ListView({
   onOpenTask,
   memberOf,
   moveTaskStatus,
+  updateTask,
   deleteTask,
 }: ListViewProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -495,6 +625,25 @@ export default function ListView({
       setSortField(field)
       setSortDirection('asc')
     }
+  }
+
+  function handleCommitField(taskId: string, field: EditableField, value: string) {
+    if (!updateTask) return
+    const patch: Partial<Task> = {}
+    if (field === 'title') {
+      if (!value) return
+      patch.title = value
+    } else if (field === 'description') {
+      patch.description = buildSimpleLexicalJson(value)
+    } else if (field === 'due_date') {
+      patch.due_date = value || null
+    } else if (field === 'priority') {
+      patch.priority = value as TaskPriority
+    }
+
+    void updateTask({ id: taskId, patch })
+      .then(() => toast.success('Campo atualizado!'))
+      .catch(() => toast.danger('Erro ao salvar alteração.'))
   }
 
   const rows = useMemo(() => {
@@ -639,14 +788,14 @@ export default function ListView({
       {/* Top Filter & Sort Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">
+          <span className="text-xs font-bold text-foreground">
             Ordenar por:
           </span>
           <div className="flex items-center gap-1">
             <Button
               size="sm"
               variant={sortField === 'status' ? 'secondary' : 'outline'}
-              className="h-7 px-2 text-xs rounded-md"
+              className="h-7 px-2 text-xs rounded-md font-semibold"
               onPress={() => handleSortBy('status')}
             >
               Status
@@ -654,7 +803,7 @@ export default function ListView({
             <Button
               size="sm"
               variant={sortField === 'due_date' ? 'secondary' : 'outline'}
-              className="h-7 px-2 text-xs rounded-md"
+              className="h-7 px-2 text-xs rounded-md font-semibold"
               onPress={() => handleSortBy('due_date')}
             >
               Data
@@ -662,7 +811,7 @@ export default function ListView({
             <Button
               size="sm"
               variant={sortField === 'priority' ? 'secondary' : 'outline'}
-              className="h-7 px-2 text-xs rounded-md"
+              className="h-7 px-2 text-xs rounded-md font-semibold"
               onPress={() => handleSortBy('priority')}
             >
               Prioridade
@@ -670,7 +819,7 @@ export default function ListView({
             <Button
               size="sm"
               variant={sortField === 'title' ? 'secondary' : 'outline'}
-              className="h-7 px-2 text-xs rounded-md"
+              className="h-7 px-2 text-xs rounded-md font-semibold"
               onPress={() => handleSortBy('title')}
             >
               Título
@@ -679,7 +828,7 @@ export default function ListView({
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             {rows.length} tarefa(s) no total
           </span>
         </div>
@@ -712,7 +861,7 @@ export default function ListView({
                       {sectionRows.length} tarefa(s)
                     </span>
                   </header>
-                  <div className="rounded-md border border-border bg-background shadow-2xs">
+                  <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
                     <TasksTable
                       rows={sectionRows}
                       selected={selected}
@@ -720,6 +869,7 @@ export default function ListView({
                       onToggle={toggleOne}
                       onToggleDone={handleToggleDone}
                       onChangeStatus={handleChangeStatus}
+                      onCommitField={handleCommitField}
                       onOpen={onOpenTask}
                       toggleAll={toggleAll}
                       memberOf={memberOf}
@@ -735,7 +885,7 @@ export default function ListView({
             })}
           </div>
         ) : (
-          <div className="rounded-md border border-border bg-background shadow-2xs">
+          <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
             <TasksTable
               rows={rows}
               selected={selected}
@@ -743,6 +893,7 @@ export default function ListView({
               onToggle={toggleOne}
               onToggleDone={handleToggleDone}
               onChangeStatus={handleChangeStatus}
+              onCommitField={handleCommitField}
               onOpen={onOpenTask}
               toggleAll={toggleAll}
               memberOf={memberOf}
@@ -763,32 +914,24 @@ export default function ListView({
             </span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Mover para:</span>
-              <Select.Root
-                selectedKey={null}
-                onSelectionChange={(value) =>
-                  void moveSelected(value as TaskStatus)
-                }
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    void moveSelected(e.target.value as TaskStatus)
+                    e.target.value = ''
+                  }
+                }}
                 aria-label="Mover selecionadas"
-                className="w-40"
-                placeholder="Escolher status"
+                className="w-40 rounded-md border border-border bg-background px-2 py-1 text-xs font-semibold"
               >
-                <Select.Trigger className="rounded-md border border-border bg-background">
-                  <Select.Value />
-                </Select.Trigger>
-                <Select.Popover>
-                  <ListBox.Root className="rounded-md border border-border bg-card">
-                    {TASK_STATUSES.map((status) => (
-                      <ListBox.Item
-                        key={status}
-                        id={status}
-                        textValue={STATUS_LABELS[status]}
-                      >
-                        {STATUS_LABELS[status]}
-                      </ListBox.Item>
-                    ))}
-                  </ListBox.Root>
-                </Select.Popover>
-              </Select.Root>
+                <option value="" disabled>Escolher status...</option>
+                {TASK_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {STATUS_LABELS[status]}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Button
@@ -813,32 +956,26 @@ export default function ListView({
         )}
       </div>
 
-      {/* Shortcuts & Quick Commands Footer (same as Gantt) */}
+      {/* Shortcuts & Quick Commands Footer */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-muted-foreground select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Clique / Duplo clique
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs font-bold text-foreground">
+              2 cliques no texto
             </kbd>
-            <span>Abrir detalhes</span>
+            <span>Editar inline (Enter salva, Esc cancela)</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Hover no título
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs font-bold text-foreground">
+              2 cliques na linha / Lápis
             </kbd>
-            <span>Ver descrição</span>
+            <span>Abrir painel de detalhes</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs font-bold text-foreground">
               Círculo
             </kbd>
             <span>Concluir / Reabrir</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Menu Status
-            </kbd>
-            <span>Troca rápida</span>
           </span>
         </div>
 

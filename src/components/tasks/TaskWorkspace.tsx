@@ -8,7 +8,7 @@ import {
   type RefObject,
 } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { toast, Button } from '@heroui/react'
+import { toast } from '@heroui/react'
 import TaskDrawer from '@/components/tasks/TaskDrawer'
 import NewTaskModal, {
   type NewTaskInput,
@@ -238,6 +238,7 @@ export default function TaskWorkspace({
             onOpenTask={openTask}
             memberOf={memberOf}
             moveTaskStatus={tasksApi.moveTaskStatus}
+            updateTask={tasksApi.updateTask}
             deleteTask={tasksApi.deleteTask}
           />
         )
@@ -297,16 +298,6 @@ export default function TaskWorkspace({
           </Fragment>
         ))}
       </div>
-
-      {!drawerOpen && (
-        <Button
-          className="absolute bottom-6 right-20 z-10 gap-2 shadow-lg"
-          onPress={() => openNewTask()}
-        >
-          <i className="fa-solid fa-plus" />
-          Nova tarefa
-        </Button>
-      )}
 
       {selectedTask && (
         <TaskDrawer
