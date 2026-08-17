@@ -102,25 +102,52 @@ function buildSimpleLexicalJson(text: string): Json {
   } as unknown as Json
 }
 
-function AssigneeCell({ member }: { member: ProjectMember | null }) {
-  if (!member) {
+function AssigneesCell({
+  task,
+  memberLookup,
+}: {
+  task: Task
+  memberLookup: (id: string | null) => ProjectMember | null
+}) {
+  const assigneeIds =
+    task.assignees && task.assignees.length > 0
+      ? task.assignees
+      : task.assigned_to
+        ? [task.assigned_to]
+        : []
+
+  if (assigneeIds.length === 0) {
     return (
       <span className="text-xs text-muted-foreground">— sem responsável —</span>
     )
   }
-  const name = member.full_name ?? member.username
-  const initials = name.slice(0, 2).toUpperCase()
+
+  const members = assigneeIds
+    .map((id) => memberLookup(id))
+    .filter((m): m is ProjectMember => !!m)
+
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white shadow-2xs"
-        style={{ backgroundColor: userColor(member.id) }}
-        title={name}
-      >
-        {initials}
-      </span>
-      <span className="max-w-28 truncate text-xs font-medium text-foreground">{name}</span>
-    </span>
+    <div className="flex items-center -space-x-1.5 transition-all">
+      {members.map((member) => {
+        const name = member.full_name ?? member.username
+        const initials = name.slice(0, 2).toUpperCase()
+        return (
+          <span
+            key={member.id}
+            className="flex size-5 shrink-0 items-center justify-center rounded-full ring-2 ring-background text-[9px] font-bold text-white shadow-2xs cursor-pointer"
+            style={{ backgroundColor: userColor(member.id) }}
+            title={name}
+          >
+            {initials}
+          </span>
+        )
+      })}
+      {members.length === 1 && (
+        <span className="ml-2 max-w-24 truncate text-xs font-medium text-foreground">
+          {members[0].full_name ?? members[0].username}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -338,9 +365,9 @@ function TaskRow({
         </div>
       </td>
 
-      {/* Assignee */}
+      {/* Assignees */}
       <td className="px-3 py-2">
-        <AssigneeCell member={memberLookup(task.assigned_to)} />
+        <AssigneesCell task={task} memberLookup={memberLookup} />
       </td>
 
       {/* Status (Clickable Dropdown) */}

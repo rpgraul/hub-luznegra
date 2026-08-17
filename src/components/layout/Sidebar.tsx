@@ -297,11 +297,31 @@ export default function Sidebar({
         </div>
       </div>
 
+      {/* AI Assistant Button right above user name */}
+      {onOpenAi && (
+        <div className="border-t border-border p-2 pb-1">
+          <button
+            type="button"
+            onClick={onOpenAi}
+            title="Abrir Assistente IA"
+            className="group flex w-full items-center gap-2.5 rounded-md border border-[#7b68ee]/30 bg-linear-to-r from-[#7b68ee]/15 via-purple-500/10 to-pink-500/15 p-2 text-xs font-semibold text-foreground transition hover:border-[#7b68ee] hover:shadow-xs cursor-pointer"
+          >
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-linear-to-br from-[#7b68ee] to-pink-500 text-white shadow-2xs">
+              <i className="fa-solid fa-wand-magic-sparkles text-[11px] animate-pulse" />
+            </div>
+            <div className="flex flex-1 items-center justify-between min-w-0">
+              <span className="truncate font-bold text-foreground">Assistente IA</span>
+              <span className="text-[9px] font-bold text-[#7b68ee] bg-[#7b68ee]/15 px-1.5 py-0.2 rounded uppercase">DeepSeek</span>
+            </div>
+          </button>
+        </div>
+      )}
+
       {/* User info at bottom */}
-      <div className="border-t border-border p-2">
-        <div className="flex items-center justify-between rounded-md bg-muted/40 p-1.5">
+      <div className="p-2 pt-1">
+        <div className="flex items-center justify-between rounded-md bg-muted/40 p-1.5 border border-border/50">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-[11px] text-primary-foreground">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary font-bold text-[11px] text-primary-foreground shadow-2xs">
               {initial}
             </div>
             <div className="min-w-0">

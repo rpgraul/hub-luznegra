@@ -55,6 +55,7 @@ export type Task = {
   actual_hours: number | null
   order_index: number
   assigned_to: string | null
+  assignees?: string[] | null
   created_by: string | null
   tags?: string[] | null
   created_at: string
@@ -163,6 +164,7 @@ export interface Database {
           actual_hours?: number | null
           order_index?: number
           assigned_to?: string | null
+          assignees?: string[] | null
           created_by?: string | null
           tags?: string[] | null
           created_at?: string
@@ -182,6 +184,7 @@ export interface Database {
           actual_hours?: number | null
           order_index?: number
           assigned_to?: string | null
+          assignees?: string[] | null
           created_by?: string | null
           tags?: string[] | null
           created_at?: string

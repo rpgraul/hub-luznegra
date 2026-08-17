@@ -12,6 +12,7 @@ import {
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useTaskComments } from '@/hooks/useTaskComments'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
 import { formatDateTime, todayIso } from '@/utils/format'
 import {
   PRIORITY_LABELS,
@@ -35,6 +36,7 @@ interface TaskDrawerProps {
       project_id: string
       parent_id?: string | null
       assigned_to?: string | null
+      assignees?: string[] | null
       status?: TaskStatus
       start_date?: string | null
       due_date?: string | null
@@ -49,7 +51,6 @@ interface TaskDrawerProps {
   }
 }
 
-const NO_ASSIGNEE = '__none__'
 const EMPTY_DESCRIPTION: SerializedEditorState = {
   root: {
     type: 'root',
@@ -253,15 +254,26 @@ export default function TaskDrawer({
     commitTaskPatch({ due_date: next })
   }
 
-  function handleAssignee(value: string | null) {
+  function handleToggleAssignee(userId: string) {
     if (!currentTask) return
-    const next = value === NO_ASSIGNEE ? null : value
-    if (next !== currentTask.assigned_to) {
-      commitTaskPatch({ assigned_to: next })
-      if (next !== creator.currentUserId) {
-        toast.info('Tarefa transferida.')
-      }
+    const currentAssignees =
+      currentTask.assignees && currentTask.assignees.length > 0
+        ? currentTask.assignees
+        : currentTask.assigned_to
+          ? [currentTask.assigned_to]
+          : []
+
+    let nextAssignees: string[]
+    if (currentAssignees.includes(userId)) {
+      nextAssignees = currentAssignees.filter((id) => id !== userId)
+    } else {
+      nextAssignees = [...currentAssignees, userId]
     }
+
+    commitTaskPatch({
+      assignees: nextAssignees,
+      assigned_to: nextAssignees[0] ?? null,
+    })
   }
 
   function handleAddTag() {
@@ -610,36 +622,81 @@ export default function TaskDrawer({
                   </Select.Root>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-foreground">Responsável</Label>
-                  <Select.Root
-                    selectedKey={currentTask.assigned_to ?? NO_ASSIGNEE}
-                    onSelectionChange={(value) =>
-                      handleAssignee(typeof value === 'string' ? value : null)
-                    }
-                    aria-label="Alterar responsável"
-                    className="w-full"
-                  >
-                    <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
-                      <Select.Value />
-                    </Select.Trigger>
-                    <Select.Popover>
-                      <ListBox.Root className="rounded-md border border-border bg-card">
-                        <ListBox.Item id={NO_ASSIGNEE} textValue="sem responsável">
-                          — sem responsável —
-                        </ListBox.Item>
-                        {members.map((member) => (
-                          <ListBox.Item
-                            key={member.id}
-                            id={member.id}
-                            textValue={member.full_name ?? member.username}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label className="text-xs font-semibold text-foreground">Responsáveis</Label>
+                  <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background p-2 shadow-2xs">
+                    {(() => {
+                      const currentAssignees =
+                        currentTask.assignees && currentTask.assignees.length > 0
+                          ? currentTask.assignees
+                          : currentTask.assigned_to
+                            ? [currentTask.assigned_to]
+                            : []
+
+                      return (
+                        <>
+                          {currentAssignees.length === 0 && (
+                            <span className="text-xs text-muted-foreground italic mr-2">
+                              — nenhum responsável —
+                            </span>
+                          )}
+                          {currentAssignees.map((userId) => {
+                            const member = members.find((m) => m.id === userId)
+                            const name =
+                              member?.full_name ?? member?.username ?? 'Usuário'
+                            const initials = name.slice(0, 2).toUpperCase()
+                            return (
+                              <span
+                                key={userId}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground"
+                              >
+                                <span
+                                  className="flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs"
+                                  style={{ backgroundColor: userColor(userId) }}
+                                >
+                                  {initials}
+                                </span>
+                                <span>{name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAssignee(userId)}
+                                  className="cursor-pointer text-muted-foreground hover:text-red-500"
+                                  title="Remover responsável"
+                                >
+                                  <i className="fa-solid fa-xmark text-[10px]" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handleToggleAssignee(e.target.value)
+                                e.target.value = ''
+                              }
+                            }}
+                            aria-label="Adicionar responsável"
+                            className="cursor-pointer rounded-md border border-border/80 bg-background px-2 py-1 text-xs font-semibold text-[#7b68ee] hover:bg-muted/50"
                           >
-                            {member.full_name ?? member.username}
-                          </ListBox.Item>
-                        ))}
-                      </ListBox.Root>
-                    </Select.Popover>
-                  </Select.Root>
+                            <option value="" disabled>
+                              + Adicionar responsável...
+                            </option>
+                            {members.map((member) => (
+                              <option
+                                key={member.id}
+                                value={member.id}
+                                disabled={currentAssignees.includes(member.id)}
+                              >
+                                {member.full_name ?? member.username}{' '}
+                                {currentAssignees.includes(member.id) ? '✓' : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )
+                    })()}
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">

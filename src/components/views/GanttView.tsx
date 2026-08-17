@@ -766,11 +766,11 @@ export default function GanttView({
       {/* Main Content Area: Left Table + Gantt SVG */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
-          {/* Collapsible Left Table */}
+          {/* Collapsible Left Table with comfortable min-width */}
           {showTable && (
             <div
               ref={tableRef}
-              className="w-[410px] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8"
+              className="w-[580px] min-w-[560px] max-w-[50vw] shrink-0 overflow-y-auto overflow-x-auto border-r border-border bg-background select-text pb-8"
             >
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -778,19 +778,19 @@ export default function GanttView({
                     className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur"
                     style={{ height: HEADER_HEIGHT }}
                   >
-                    <th className="w-8 px-2 text-center font-semibold text-muted-foreground">
+                    <th className="w-9 min-w-[36px] px-2 text-center font-bold text-muted-foreground">
                       <i className="fa-solid fa-check text-[11px]" title="Concluir" />
                     </th>
-                    <th className="px-2 text-left font-semibold text-muted-foreground">
+                    <th className="min-w-[170px] px-3 text-left font-bold text-muted-foreground">
                       Tarefa & Tags
                     </th>
-                    <th className="w-24 px-2 text-left font-semibold text-muted-foreground">
+                    <th className="w-28 min-w-[110px] px-2 text-left font-bold text-muted-foreground">
                       Status
                     </th>
-                    <th className="w-24 px-2 text-left font-semibold text-muted-foreground">
+                    <th className="w-32 min-w-[125px] px-2 text-left font-bold text-muted-foreground">
                       Início
                     </th>
-                    <th className="w-24 px-2 pr-3 text-left font-semibold text-muted-foreground">
+                    <th className="w-32 min-w-[125px] px-2 pr-3 text-left font-bold text-muted-foreground">
                       Fim
                     </th>
                   </tr>
@@ -905,7 +905,7 @@ export default function GanttView({
                                   e.target.value as TaskStatus,
                                 )
                               }
-                              className="w-full cursor-pointer rounded border border-transparent bg-transparent py-0.5 text-[11px] font-medium transition hover:border-border focus:border-primary focus:bg-background"
+                              className="w-full min-w-[100px] cursor-pointer rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary focus:outline-none"
                               style={{
                                 color: STATUS_COLORS[task.status],
                               }}
@@ -931,12 +931,12 @@ export default function GanttView({
                                   e.target.value,
                                 )
                               }
-                              className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] outline-none transition hover:border-border focus:border-primary focus:bg-background"
+                              className="w-full min-w-[115px] rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary"
                             />
                           </td>
 
                           {/* Due Date */}
-                          <td className="px-1.5 pr-2">
+                          <td className="px-1.5 pr-3">
                             <input
                               type="date"
                               value={task.due_date ?? ''}
@@ -944,8 +944,8 @@ export default function GanttView({
                               onChange={(e) =>
                                 handleDateChange(task, 'due_date', e.target.value)
                               }
-                              className={`w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-[11px] outline-none transition hover:border-border focus:border-primary focus:bg-background ${
-                                isOverdue ? 'text-rose-600 font-semibold' : ''
+                              className={`w-full min-w-[115px] rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${
+                                isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''
                               }`}
                             />
                           </td>

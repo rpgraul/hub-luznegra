@@ -11,6 +11,7 @@ export interface NewTaskInput {
   project_id: string
   parent_id?: string | null
   assigned_to?: string | null
+  assignees?: string[] | null
   status?: TaskStatus
   priority?: TaskPriority
   start_date?: string | null
@@ -40,7 +41,7 @@ export async function fetchTasks(
     .order('order_index', { ascending: true })
 
   if (!showAll) {
-    query = query.eq('assigned_to', userId)
+    query = query.or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
   }
 
   const { data, error } = await query

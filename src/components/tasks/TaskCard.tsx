@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { PRIORITY_ICONS } from '@/utils/status'
 import { formatDateRange, todayIso } from '@/utils/format'
-import { userRowColor } from '@/utils/colors'
+import { userColor, userRowColor } from '@/utils/colors'
 import type { Task } from '@/types/database'
 
 interface TaskCardProps {
@@ -152,21 +152,43 @@ export default function TaskCard({
         ))}
       </div>
 
-      {/* Details Row: Dates, Hours, Subtasks */}
+      {/* Details Row: Dates, Hours, Subtasks, Assignees */}
       {!compact && (
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-y-1 border-t border-border/60 pt-2 text-[11px] text-muted-foreground">
-          {task.start_date || task.due_date ? (
-            <span
-              className={`flex items-center gap-1 ${
-                overdue ? 'font-semibold text-rose-600' : ''
-              }`}
-            >
-              <i className="fa-regular fa-calendar text-[10px]" />
-              {formatDateRange(task.start_date, task.due_date)}
-            </span>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-2">
+            {task.start_date || task.due_date ? (
+              <span
+                className={`flex items-center gap-1 ${
+                  overdue ? 'font-semibold text-rose-600' : ''
+                }`}
+              >
+                <i className="fa-regular fa-calendar text-[10px]" />
+                {formatDateRange(task.start_date, task.due_date)}
+              </span>
+            ) : null}
+
+            {/* Multiple Assignees Avatars */}
+            {(() => {
+              const assigneeIds =
+                task.assignees && task.assignees.length > 0
+                  ? task.assignees
+                  : task.assigned_to
+                    ? [task.assigned_to]
+                    : []
+              if (assigneeIds.length === 0) return null
+              return (
+                <div className="flex items-center -space-x-1">
+                  {assigneeIds.map((id) => (
+                    <span
+                      key={id}
+                      className="flex size-4.5 shrink-0 items-center justify-center rounded-full ring-1 ring-card text-[8px] font-bold text-white shadow-2xs"
+                      style={{ backgroundColor: userColor(id) }}
+                    />
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
 
           {totalSubtasks > 0 && (
             <button

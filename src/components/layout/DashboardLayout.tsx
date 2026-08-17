@@ -21,7 +21,6 @@ import TopBar from '@/components/layout/TopBar'
 import Sidebar from '@/components/layout/Sidebar'
 import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 import ProjectModal from '@/components/projects/ProjectModal'
-import AIAssistantFloatingButton from '@/components/ai/AIAssistantFloatingButton'
 import AIAssistantModal from '@/components/ai/AIAssistantModal'
 import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
 import { toast } from '@heroui/react'
@@ -190,11 +189,6 @@ export default function DashboardLayout({
         initialProjectId={preferences?.active_project_id ?? null}
         currentUserId={user.id}
         onCreate={handleCreateNewTask}
-      />
-
-      <AIAssistantFloatingButton
-        isOpen={aiModalOpen}
-        onClick={() => setAiModalOpen(!aiModalOpen)}
       />
 
       <AIAssistantModal
