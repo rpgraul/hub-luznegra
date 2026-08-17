@@ -144,18 +144,53 @@ export default function GanttView({
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
 
-  const rows = useMemo(
-    () =>
-      tasks.map((task) => {
+  const rows = useMemo(() => {
+    const byParent = new Map<string | null, Task[]>()
+    const allIds = new Set(tasks.map((t) => t.id))
+
+    // Group tasks by parent_id
+    for (const t of tasks) {
+      const pId = t.parent_id && allIds.has(t.parent_id) ? t.parent_id : null
+      const list = byParent.get(pId) || []
+      list.push(t)
+      byParent.set(pId, list)
+    }
+
+    const result: Array<{
+      task: Task
+      undated: boolean
+      depth: number
+      hasChildren: boolean
+      isSubtask: boolean
+    }> = []
+
+    function traverse(pId: string | null, depth: number) {
+      const children = byParent.get(pId) || []
+      for (const task of children) {
         const undated = !task.start_date && !task.due_date
-        return { task, undated }
-      }),
-    [tasks],
-  )
+        const childList = byParent.get(task.id) || []
+        const hasChildren = childList.length > 0
+        const isSubtask = depth > 0
+
+        result.push({
+          task,
+          undated,
+          depth,
+          hasChildren,
+          isSubtask,
+        })
+
+        traverse(task.id, depth + 1)
+      }
+    }
+
+    traverse(null, 0)
+    return result
+  }, [tasks])
 
   const ganttTasks = useMemo(
     () =>
-      rows.map(({ task, undated }) => {
+      rows.map(({ task, undated, isSubtask }) => {
         const start = task.start_date ?? today
         const end = task.due_date
           ? addDaysLocal(task.due_date, 1)
@@ -177,25 +212,29 @@ export default function GanttView({
           }
         }
 
-        let customClass = ''
+        let customClass = isSubtask ? 'gantt-subtask-bar' : ''
         if (task.status === 'done') {
-          customClass = 'gantt-done'
+          customClass += ' gantt-done'
         } else if (isOverdue) {
-          customClass = 'gantt-overdue'
+          customClass += ' gantt-overdue'
         } else if (undated) {
-          customClass = 'gantt-undated'
+          customClass += ' gantt-undated'
         }
 
-        const taskTitle = task.status === 'done' ? `✓ ${task.title}` : task.title
+        const taskTitle = isSubtask
+          ? `↳ ${task.title}`
+          : task.status === 'done'
+            ? `✓ ${task.title}`
+            : task.title
 
         return {
           id: task.id,
-          name: taskTitle.length > 32 ? `${taskTitle.slice(0, 31)}…` : taskTitle,
+          name: taskTitle.length > 35 ? `${taskTitle.slice(0, 34)}…` : taskTitle,
           start,
           end,
           progress,
           dependencies: task.parent_id ? [task.parent_id] : undefined,
-          custom_class: customClass,
+          custom_class: customClass.trim(),
           color:
             task.status === 'done'
               ? '#10b981'
@@ -806,7 +845,7 @@ export default function GanttView({
                       </td>
                     </tr>
                   ) : (
-                    rows.map(({ task, undated }) => {
+                    rows.map(({ task, undated, depth, hasChildren, isSubtask }) => {
                       const isDone = task.status === 'done'
                       const isOverdue = !isDone && task.due_date && today > task.due_date
 
@@ -815,6 +854,8 @@ export default function GanttView({
                           key={task.id}
                           onDoubleClick={() => onOpenTask(task)}
                           className={`group cursor-default border-b border-border/50 transition hover:bg-muted/40 ${
+                            isSubtask ? 'bg-muted/15' : ''
+                          } ${
                             isDone ? 'bg-emerald-500/5' : isOverdue ? 'bg-rose-500/5' : ''
                           }`}
                           style={{ height: ROW_HEIGHT }}
@@ -836,43 +877,59 @@ export default function GanttView({
                           </td>
 
                           {/* Title & Tags (2 clicks to open) */}
-                          <td className="max-w-[140px] px-2">
+                          <td className="max-w-[200px] px-2">
                             <div
                               onDoubleClick={() => onOpenTask(task)}
                               title="2 cliques para abrir detalhes"
+                              style={{ paddingLeft: `${depth * 16}px` }}
                               className="flex flex-col w-full text-left transition select-none"
                             >
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {isSubtask ? (
+                                  <span className="text-muted-foreground/70 text-[11px] font-bold shrink-0 select-none">
+                                    ↳
+                                  </span>
+                                ) : hasChildren ? (
+                                  <i className="fa-solid fa-folder-tree text-[10px] text-primary shrink-0" />
+                                ) : (
+                                  <span
+                                    className="h-2 w-2 shrink-0 rounded-full shadow-2xs"
+                                    style={{
+                                      backgroundColor: isDone
+                                        ? '#10b981'
+                                        : isOverdue
+                                          ? '#f43f5e'
+                                          : task.assigned_to
+                                            ? userColor(task.assigned_to)
+                                            : STATUS_COLORS[task.status],
+                                    }}
+                                  />
+                                )}
                                 <span
-                                  className="h-2 w-2 shrink-0 rounded-full shadow-2xs"
-                                  style={{
-                                    backgroundColor: isDone
-                                      ? '#10b981'
-                                      : isOverdue
-                                        ? '#f43f5e'
-                                        : task.assigned_to
-                                          ? userColor(task.assigned_to)
-                                          : STATUS_COLORS[task.status],
-                                  }}
-                                />
-                                <span
-                                  className={`truncate font-medium ${
+                                  className={`truncate ${
+                                    isSubtask ? 'font-normal text-xs text-foreground/90' : 'font-semibold text-xs text-foreground'
+                                  } ${
                                     isDone
                                       ? 'line-through text-muted-foreground'
                                       : isOverdue
                                         ? 'text-rose-600 font-semibold'
-                                        : 'text-foreground'
+                                        : ''
                                   }`}
                                 >
                                   {task.title}
                                 </span>
+                                {isSubtask && (
+                                  <span className="shrink-0 rounded bg-muted/90 px-1 py-0.2 text-[8px] font-medium text-muted-foreground border border-border/50">
+                                    sub
+                                  </span>
+                                )}
                                 {undated && (
-                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[9px] font-medium leading-tight text-amber-500">
+                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-medium leading-tight text-amber-500">
                                     sem prazo
                                   </span>
                                 )}
                                 {isOverdue && (
-                                  <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[9px] font-bold leading-tight text-rose-600">
+                                  <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[8px] font-bold leading-tight text-rose-600">
                                     atrasada
                                   </span>
                                 )}
@@ -880,7 +937,10 @@ export default function GanttView({
 
                               {/* Tags under title */}
                               {(task.tags ?? []).length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-0.5 pl-3.5">
+                                <div
+                                  className="flex flex-wrap gap-1 mt-0.5"
+                                  style={{ paddingLeft: isSubtask ? '14px' : '10px' }}
+                                >
                                   {task.tags!.map((tag) => (
                                     <span
                                       key={tag}

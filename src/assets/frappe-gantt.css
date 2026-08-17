@@ -362,3 +362,15 @@ html[data-theme='dark'],
   stroke: #e11d48 !important;
   stroke-width: 1.5px !important;
 }
+
+/* Subtasks bar styling */
+.gantt .bar-wrapper.gantt-subtask-bar .bar {
+  opacity: 0.88;
+  stroke-dasharray: 5 2;
+  stroke-width: 1px !important;
+}
+
+.gantt .bar-wrapper.gantt-subtask-bar .bar-label {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+}
