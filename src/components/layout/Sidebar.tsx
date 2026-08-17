@@ -306,8 +306,8 @@ export default function Sidebar({
             title="Abrir Lord Camarão"
             className="group flex w-full items-center gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2 text-xs font-semibold text-foreground transition hover:bg-muted hover:border-border cursor-pointer shadow-2xs"
           >
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-xs">
-              <i className="fa-solid fa-wand-magic-sparkles text-[11px]" />
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs">
+              🦐
             </div>
             <div className="flex flex-1 items-center justify-between min-w-0">
               <span className="truncate font-bold text-foreground">Lord Camarão</span>

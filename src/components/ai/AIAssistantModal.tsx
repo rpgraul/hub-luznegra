@@ -201,8 +201,8 @@ export default function AIAssistantModal({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-card/70 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10 text-primary shadow-xs">
-            <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+          <div className="flex size-7 items-center justify-center rounded-lg bg-background border border-border/70 text-sm shadow-xs">
+            🦐
           </div>
           <div>
             <h2 className="flex items-center gap-1.5 text-xs font-semibold leading-none">
