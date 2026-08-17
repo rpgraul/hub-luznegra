@@ -68,6 +68,13 @@ Deno.serve(async (req) => {
     }
 
     // 1. Coleta contexto do banco de dados (projetos, membros, tarefas recentes)
+    const { data: requesterProfile } = await admin
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle()
+    const isUserAdmin = requesterProfile?.role === 'admin'
+
     const { data: projects } = await admin
       .from('projects')
       .select('id, name')
@@ -105,7 +112,7 @@ Deno.serve(async (req) => {
 
     // 2. Monta o system prompt ultra-enxuto para economia máxima de tokens
     const systemPrompt = `Você é o Lord Camarão, assistente de IA do Hub da Editora Luz Negra.
-Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
+Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
 Projetos: ${projectsMap || 'Nenhum'}
 Membros: ${membersMap || 'Nenhum'}
@@ -117,17 +124,20 @@ DIRETRIZES DE RESPOSTA:
 - Vá direto ao ponto, sem introduções longas.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 2 frases curtas ao confirmar ações.
+- Se o usuário for administrador e pedir para criar uma conta de usuário/membro:
+  action: create_user, params: { "email": string, "username": string, "full_name"?: string, "role"?: "admin"|"member", "password"?: string }
 
 FORMATO OBRIGATÓRIO (JSON puro):
 {
   "reply": "Mensagem curta, direta e sem emojis",
   "action": {
-    "type": "create_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "draft_email" | "none",
+    "type": "create_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
     "params": {
       // create_task: { "title": string, "project_id": string, "priority": "low"|"medium"|"high"|"urgent", "assigned_to": string, "due_date": "YYYY-MM-DD"|null, "start_date": "YYYY-MM-DD"|null }
       // duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
       // break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
       // bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
+      // create_user: { "email": string, "username": string, "full_name"?: string, "role"?: "admin"|"member", "password"?: string }
     }
   }
 }`
@@ -314,6 +324,58 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           const { data: updated } = await query.select('id')
           actionResult = { success: true, updatedCount: updated?.length ?? 0 }
+        }
+      } else if (type === 'create_user' && params.email && params.username) {
+        if (!isUserAdmin) {
+          return json({
+            reply: 'Apenas administradores têm permissão para criar contas de usuário.',
+            action: { type: 'none' },
+          })
+        }
+
+        const cleanUsername = String(params.username).replace(/^@/, '').toLowerCase().trim()
+        const defaultPassword = (params.password as string) || 'Hub@123456'
+
+        const { data: existing } = await admin
+          .from('profiles')
+          .select('id')
+          .ilike('username', cleanUsername)
+          .maybeSingle()
+
+        if (existing) {
+          return json({
+            reply: `O username @${cleanUsername} já está cadastrado.`,
+            action: { type: 'none' },
+          })
+        }
+
+        const { data: createdAuth, error: createAuthError } = await admin.auth.admin.createUser({
+          email: params.email as string,
+          password: defaultPassword,
+          email_confirm: true,
+          user_metadata: { full_name: params.full_name || cleanUsername },
+        })
+
+        if (createAuthError) {
+          return json({
+            reply: `Erro ao cadastrar usuário: ${createAuthError.message}`,
+            action: { type: 'none' },
+          })
+        }
+
+        if (createdAuth?.user) {
+          await admin.from('profiles').upsert({
+            id: createdAuth.user.id,
+            username: cleanUsername,
+            full_name: (params.full_name as string) || cleanUsername,
+            role: (params.role as 'admin' | 'member') || 'member',
+          })
+          actionResult = {
+            success: true,
+            username: cleanUsername,
+            email: params.email,
+            password: defaultPassword,
+          }
         }
       }
     }
