@@ -186,7 +186,7 @@ export default function Sidebar({
       </div>
 
       {/* Main Navigation Items */}
-      <div className="space-y-0.5 px-2 py-1 text-xs">
+      <div className="px-2 py-0.5 text-xs">
         <button
           type="button"
           onClick={() => onShowAllChange(!showAllTasks)}
@@ -195,31 +195,19 @@ export default function Sidebar({
               ? 'Exibindo apenas tarefas atribuídas a você. Clique para ver todas as tarefas.'
               : 'Exibindo todas as tarefas do projeto. Clique para filtrar apenas as suas.'
           }
-          className={`flex w-full items-center justify-between rounded-md px-2.5 py-2 font-medium transition border ${
-            !showAllTasks
-              ? 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/15'
-              : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/15'
-          }`}
+          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition text-muted-foreground hover:bg-muted hover:text-foreground"
         >
-          <span className="flex items-center gap-2 font-semibold">
+          <span className="flex items-center gap-2">
             <i
               className={`fa-solid ${
-                !showAllTasks ? 'fa-user-check text-blue-400' : 'fa-users text-amber-400'
-              } text-xs`}
+                !showAllTasks ? 'fa-user text-muted-foreground' : 'fa-users text-muted-foreground'
+              } text-[11px]`}
             />
-            <span>
-              Tarefas: <span className="underline decoration-1 underline-offset-2">{!showAllTasks ? 'Minhas' : 'Todas'}</span>
+            <span className="text-xs">
+              Tarefas: <span className="font-semibold text-foreground">{!showAllTasks ? 'Minhas' : 'Todas'}</span>
             </span>
           </span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${
-              !showAllTasks
-                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-            }`}
-          >
-            {!showAllTasks ? 'Filtro Ativo' : 'Visão Geral'}
-          </span>
+          <i className="fa-solid fa-arrow-right-arrow-left text-[10px] text-muted-foreground/50 transition-transform group-hover:text-muted-foreground" />
         </button>
       </div>
 

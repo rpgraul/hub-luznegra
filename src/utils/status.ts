@@ -11,7 +11,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 export const STATUS_COLORS: Record<TaskStatus, string> = {
   backlog: '#6B7280',
   todo: '#3B82F6',
-  in_progress: '#F59E0B',
+  in_progress: '#D97706',
   review: '#8B5CF6',
   done: '#10B981',
 }

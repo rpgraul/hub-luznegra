@@ -744,7 +744,7 @@ export default function GanttView({
           </span>
 
           {undatedCount > 0 && (
-            <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-500">
+            <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
               <i className="fa-regular fa-clock" />
               {undatedCount} sem prazo
             </span>
@@ -936,7 +936,7 @@ export default function GanttView({
                                   </span>
                                 )}
                                 {undated && (
-                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-medium leading-tight text-amber-500">
+                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-semibold leading-tight text-amber-600 dark:text-amber-400">
                                     sem prazo
                                   </span>
                                 )}
