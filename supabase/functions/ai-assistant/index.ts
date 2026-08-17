@@ -140,7 +140,8 @@ Sua resposta DEVE ser um objeto JSON válido no formato:
 Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depois se possível.`
 
     // 3. Chamada ao DeepSeek / OpenAI
-    const deepseekApiKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY')
+    const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
+    const deepseekApiKey = rawKey.trim().replace(/^["']|["']$/g, '')
     let aiParsed: AIResponseStructure = {
       reply: 'Comando processado.',
       action: { type: 'none' },
