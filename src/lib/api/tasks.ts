@@ -17,6 +17,7 @@ export interface NewTaskInput {
   due_date?: string | null
   estimated_hours?: number | null
   description?: Json | null
+  tags?: string[] | null
   order_index?: number
 }
 

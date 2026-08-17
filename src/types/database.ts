@@ -56,6 +56,7 @@ export type Task = {
   order_index: number
   assigned_to: string | null
   created_by: string | null
+  tags?: string[] | null
   created_at: string
   updated_at: string
 }
