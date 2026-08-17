@@ -11,10 +11,10 @@ interface AIAssistantModalProps {
 }
 
 const DEFAULT_SUGGESTIONS = [
+  'Criar projeto "Brava Gente" na cor amarelo',
   'Criar tarefa "Revisar texto" com prioridade alta',
   'Listar tarefas atrasadas',
   'Concluir tarefas de baixa prioridade',
-  'Escreva um resumo do status do projeto',
 ]
 
 function MarkdownMessage({ content }: { content?: string | null }) {

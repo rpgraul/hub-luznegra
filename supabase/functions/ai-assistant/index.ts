@@ -22,10 +22,14 @@ interface RequestPayload {
 interface AIAction {
   type:
     | 'create_task'
+    | 'create_tasks'
     | 'duplicate_task'
     | 'break_down_subtasks'
     | 'list_overdue'
     | 'bulk_status_update'
+    | 'create_project'
+    | 'update_task'
+    | 'delete_task'
     | 'create_user'
     | 'draft_email'
     | 'none'
@@ -124,6 +128,7 @@ DIRETRIZES DE RESPOSTA:
 - Vá direto ao ponto, sem introduções longas.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 2 frases curtas ao confirmar ações.
+- Cores válidas para projetos: amarelo (#f59e0b), azul (#3b82f6), roxo (#7b68ee), verde (#10b981), vermelho (#ef4444), rosa (#ec4899), laranja (#f97316), ciano (#0ea5e9), teal (#14b8a6). Se o usuário pedir uma cor por nome (ex: "Amarelo"), converta para o hex correspondente.
 - Se o usuário for administrador e pedir para criar uma conta de usuário/membro:
   action: create_user, params: { "email": string, "username": string, "full_name"?: string, "role"?: "admin"|"member", "password"?: string }
 
@@ -131,10 +136,13 @@ FORMATO OBRIGATÓRIO (JSON puro):
 {
   "reply": "Mensagem curta, direta e sem emojis",
   "action": {
-    "type": "create_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
+    "type": "create_task" | "create_project" | "update_task" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
     "params": {
+      // create_project: { "name": string, "color"?: string, "description"?: string }
       // create_task para 1 tarefa: { "title": string, "project_id"?: string, "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] | Array<{ "title": string, "due_date"?: string }> }
       // create_task para múltiplas tarefas: { "tasks": Array<{ "title": string, "priority"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] }> }
+      // update_task: { "task_id"?: string, "task_title"?: string, "status"?: "backlog"|"todo"|"in_progress"|"review"|"done", "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "title"?: string }
+      // delete_task: { "task_id"?: string, "task_title"?: string }
       // duplicate_task: { "source_task_title": string, "new_title"?: string, "assigned_to"?: string, "due_date"?: string }
       // break_down_subtasks: { "parent_task_title": string, "subtasks": [string] }
       // bulk_status_update: { "project_id": string, "from_priority"?: string, "target_status": "done"|"in_progress"|"todo"|"backlog"|"review" }
@@ -221,7 +229,28 @@ FORMATO OBRIGATÓRIO (JSON puro):
     } else {
       // Fallback inteligente para desenvolvimento local quando chave não estiver configurada
       const lower = message.toLowerCase()
-      if (lower.includes('crie uma tarefa') || lower.includes('criar tarefa') || lower.includes('nova tarefa')) {
+      if (lower.includes('crie um projeto') || lower.includes('criar projeto') || lower.includes('novo projeto')) {
+        const nameMatch = message.match(/["']([^"']+)["']/) || message.match(/projeto (?:chamado )?([^.,\n]+)/i)
+        const name = nameMatch ? nameMatch[1].trim() : 'Novo Projeto'
+        let color = '#7b68ee'
+        if (lower.includes('amarel') || lower.includes('yellow')) color = '#f59e0b'
+        else if (lower.includes('azul') || lower.includes('blue')) color = '#3b82f6'
+        else if (lower.includes('verde') || lower.includes('green')) color = '#10b981'
+        else if (lower.includes('vermelh') || lower.includes('red')) color = '#ef4444'
+        else if (lower.includes('rosa') || lower.includes('pink')) color = '#ec4899'
+        else if (lower.includes('laranja') || lower.includes('orange')) color = '#f97316'
+
+        aiParsed = {
+          reply: `Projeto **"${name}"** criado com sucesso.`,
+          action: {
+            type: 'create_project',
+            params: {
+              name,
+              color,
+            },
+          },
+        }
+      } else if (lower.includes('crie uma tarefa') || lower.includes('criar tarefa') || lower.includes('nova tarefa')) {
         const titleMatch = message.match(/["']([^"']+)["']/) || message.match(/tarefa (?:chamada )?([^.,\n]+)/i)
         const title = titleMatch ? titleMatch[1].trim() : 'Nova Tarefa'
         const isUrgent = lower.includes('urgente')
@@ -247,10 +276,10 @@ FORMATO OBRIGATÓRIO (JSON puro):
       } else {
         aiParsed = {
           reply: `Olá! Sou o Assistente IA do Hub. Você pode me pedir para:
-- *Criar tarefas com prioridade e responsável*
+- *Criar projetos ou tarefas*
 - *Quebrar tarefas em subtarefas*
-- *Duplicar tarefas alterando datas*
-- *Concluir tarefas em lote*`,
+- *Alterar responsáveis, prazos ou prioridades*
+- *Concluir ou atualizar tarefas em lote*`,
           action: { type: 'none' },
         }
       }
@@ -392,6 +421,127 @@ FORMATO OBRIGATÓRIO (JSON puro):
           const { data: updated } = await query.select('id')
           actionResult = { success: true, updatedCount: updated?.length ?? 0 }
         }
+      } else if (type === 'create_project' && params.name) {
+        let color = String(params.color || '#7b68ee').trim()
+        const colorNameMap: Record<string, string> = {
+          amarelo: '#f59e0b',
+          yellow: '#f59e0b',
+          azul: '#3b82f6',
+          blue: '#3b82f6',
+          roxo: '#7b68ee',
+          purple: '#7b68ee',
+          verde: '#10b981',
+          green: '#10b981',
+          vermelho: '#ef4444',
+          red: '#ef4444',
+          rosa: '#ec4899',
+          pink: '#ec4899',
+          laranja: '#f97316',
+          orange: '#f97316',
+          ciano: '#0ea5e9',
+          cyan: '#0ea5e9',
+          teal: '#14b8a6',
+        }
+        if (colorNameMap[color.toLowerCase()]) {
+          color = colorNameMap[color.toLowerCase()]
+        }
+
+        const { data: createdProj, error: projError } = await admin
+          .from('projects')
+          .insert({
+            name: String(params.name).trim(),
+            color,
+            description: (params.description as string) || null,
+            owner_id: userId,
+          })
+          .select()
+          .single()
+
+        if (projError) {
+          console.error('Project create error:', projError)
+          return json({
+            reply: `Erro ao criar projeto: ${projError.message}`,
+            action: { type: 'none' },
+          })
+        }
+
+        actionResult = { success: true, project: createdProj }
+      } else if (type === 'duplicate_task') {
+        const sourceTitle = params.source_task_title as string
+        if (sourceTitle) {
+          const { data: found } = await admin
+            .from('tasks')
+            .select('*')
+            .ilike('title', `%${sourceTitle}%`)
+            .limit(1)
+
+          const orig = found?.[0]
+          if (orig) {
+            const newTitle = (params.new_title as string) || `${orig.title} (Cópia)`
+            const assigned = params.assigned_to ? resolveMemberId(params.assigned_to) : orig.assigned_to
+            const due = params.due_date ? normalizeDate(params.due_date) : orig.due_date
+
+            const { data: dupTask } = await admin
+              .from('tasks')
+              .insert({
+                title: newTitle,
+                project_id: orig.project_id,
+                priority: orig.priority,
+                status: 'todo',
+                assigned_to: assigned,
+                due_date: due,
+                created_by: userId,
+              })
+              .select()
+              .single()
+
+            actionResult = { success: true, duplicatedTask: dupTask }
+          }
+        }
+      } else if (type === 'update_task') {
+        let taskId = params.task_id as string | undefined
+        if (!taskId && params.task_title) {
+          const { data: found } = await admin
+            .from('tasks')
+            .select('id')
+            .ilike('title', `%${params.task_title}%`)
+            .limit(1)
+          taskId = found?.[0]?.id
+        }
+
+        if (taskId) {
+          const patch: Record<string, unknown> = {}
+          if (params.status) patch.status = params.status
+          if (params.priority) patch.priority = params.priority
+          if (params.title) patch.title = params.title
+          if (params.assigned_to) patch.assigned_to = resolveMemberId(params.assigned_to)
+          if (params.due_date !== undefined) patch.due_date = normalizeDate(params.due_date)
+          if (params.start_date !== undefined) patch.start_date = normalizeDate(params.start_date)
+
+          const { data: updated } = await admin
+            .from('tasks')
+            .update(patch)
+            .eq('id', taskId)
+            .select()
+            .single()
+
+          actionResult = { success: true, task: updated }
+        }
+      } else if (type === 'delete_task') {
+        let taskId = params.task_id as string | undefined
+        if (!taskId && params.task_title) {
+          const { data: found } = await admin
+            .from('tasks')
+            .select('id')
+            .ilike('title', `%${params.task_title}%`)
+            .limit(1)
+          taskId = found?.[0]?.id
+        }
+
+        if (taskId) {
+          await admin.from('tasks').delete().eq('id', taskId)
+          actionResult = { success: true, deletedTaskId: taskId }
+        }
       } else if (type === 'create_user' && params.email && params.username) {
         if (!isUserAdmin) {
           return json({
@@ -449,11 +599,19 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
     const finalReply =
       aiParsed.reply ||
-      (aiParsed.action?.type === 'create_task'
-        ? 'Tarefa criada com sucesso.'
-        : aiParsed.action?.type === 'create_user'
-          ? 'Usuário criado com sucesso.'
-          : 'Comando processado com sucesso.')
+      (aiParsed.action?.type === 'create_project'
+        ? 'Projeto criado com sucesso.'
+        : aiParsed.action?.type === 'create_task'
+          ? 'Tarefa criada com sucesso.'
+          : aiParsed.action?.type === 'create_user'
+            ? 'Usuário criado com sucesso.'
+            : aiParsed.action?.type === 'update_task'
+              ? 'Tarefa atualizada com sucesso.'
+              : aiParsed.action?.type === 'delete_task'
+                ? 'Tarefa excluída com sucesso.'
+                : aiParsed.action?.type === 'duplicate_task'
+                  ? 'Tarefa duplicada com sucesso.'
+                  : 'Comando processado com sucesso.')
 
     return json({
       reply: finalReply,
