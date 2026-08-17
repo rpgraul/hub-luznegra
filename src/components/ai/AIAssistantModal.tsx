@@ -17,6 +17,77 @@ const DEFAULT_SUGGESTIONS = [
   'Escreva um resumo do status do projeto',
 ]
 
+function MarkdownMessage({ content }: { content: string }) {
+  const lines = content.split('\n')
+
+  return (
+    <div className="space-y-1.5 leading-relaxed text-xs">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim()
+        if (!trimmed) {
+          return <div key={idx} className="h-1" />
+        }
+
+        // Bullet list item
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          return (
+            <div key={idx} className="flex items-start gap-1.5 pl-1">
+              <span className="text-[#7b68ee] font-bold">•</span>
+              <span>{formatInlineMarkdown(trimmed.slice(2))}</span>
+            </div>
+          )
+        }
+
+        // Numbered list item
+        const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/)
+        if (numberedMatch) {
+          return (
+            <div key={idx} className="flex items-start gap-1.5 pl-1">
+              <span className="font-semibold text-[#7b68ee]">{numberedMatch[1]}.</span>
+              <span>{formatInlineMarkdown(numberedMatch[2])}</span>
+            </div>
+          )
+        }
+
+        return <div key={idx}>{formatInlineMarkdown(line)}</div>
+      })}
+    </div>
+  )
+}
+
+function formatInlineMarkdown(text: string) {
+  // Regex splitting by bold, italic, code
+  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g)
+
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-bold text-foreground">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return (
+        <em key={i} className="italic text-foreground/90">
+          {part.slice(1, -1)}
+        </em>
+      )
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={i}
+          className="rounded border border-border bg-muted/80 px-1 py-0.5 font-mono text-[11px] font-semibold text-[#7b68ee]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return part
+  })
+}
+
 export default function AIAssistantModal({
   open,
   onClose,
@@ -28,7 +99,7 @@ export default function AIAssistantModal({
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Olá! Sou o **Assistente IA do Hub**. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
+      content: `Olá! Sou o **Lord Camarão**, o assistente inteligente da Editora Luz Negra 🦐. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
     },
   ])
   const [input, setInput] = useState('')
@@ -88,7 +159,7 @@ export default function AIAssistantModal({
       if (response.action && response.action.type !== 'none') {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
-        toast.success('Ação executada com sucesso pela IA!')
+        toast.success('Ação executada com sucesso pelo Lord Camarão!')
       }
     } catch (error) {
       toast.danger(
@@ -130,12 +201,12 @@ export default function AIAssistantModal({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-card/70 px-4 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xs">
-            <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+          <div className="flex size-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xs text-sm">
+            🦐
           </div>
           <div>
             <h2 className="flex items-center gap-1.5 text-xs font-semibold leading-none">
-              <span>Assistente IA</span>
+              <span>Lord Camarão</span>
               <span className="rounded bg-primary/10 px-1 py-0.5 text-[9px] font-medium text-primary">
                 DeepSeek
               </span>
@@ -151,7 +222,7 @@ export default function AIAssistantModal({
             type="button"
             title="Limpar histórico"
             onClick={handleClear}
-            className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"
           >
             <i className="fa-solid fa-rotate-left text-[11px]" />
           </button>
@@ -159,7 +230,7 @@ export default function AIAssistantModal({
             type="button"
             aria-label="Fechar"
             onClick={onClose}
-            className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="flex size-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"
           >
             <i className="fa-solid fa-xmark text-xs" />
           </button>
@@ -179,12 +250,10 @@ export default function AIAssistantModal({
               className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${
                 msg.role === 'user'
                   ? 'bg-primary text-primary-foreground'
-                  : 'border border-border bg-muted/50 text-foreground'
+                  : 'border border-border bg-muted/50 text-foreground shadow-2xs'
               }`}
             >
-              <div className="whitespace-pre-wrap leading-relaxed">
-                {msg.content}
-              </div>
+              <MarkdownMessage content={msg.content} />
 
               {/* Action Result Badge */}
               {msg.action && msg.action.type !== 'none' && (

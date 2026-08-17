@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
       .join('\n')
 
     // 2. Monta o system prompt para o DeepSeek
-    const systemPrompt = `Você é o assistente inteligente do Hub da Editora Luz Negra, uma ferramenta de gestão de tarefas ágil.
+    const systemPrompt = `Você é o "Lord Camarão" (🦐), o assistente de inteligência artificial do Hub da Editora Luz Negra, especialista em gestão ágil de tarefas, organização editorial e produtividade.
 Hoje é: ${new Date().toISOString().slice(0, 10)}.
 Usuário atual ID: ${userId}
 Projeto ativo ID: ${context.projectId || 'Nenhum'}
@@ -175,14 +175,42 @@ Responda APENAS com o JSON válido, sem cercas de código markdown antes ou depo
         }),
       })
 
-      if (aiResponse.ok) {
-        const data = await aiResponse.json()
-        const rawContent = data.choices?.[0]?.message?.content || '{}'
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text()
+        console.error('DeepSeek API Error:', aiResponse.status, errorText)
+        let errorMsg = `Erro na API DeepSeek (${aiResponse.status})`
         try {
-          aiParsed = JSON.parse(rawContent)
+          const errJson = JSON.parse(errorText)
+          if (errJson.error?.message) {
+            errorMsg = errJson.error.message
+          }
         } catch {
-          aiParsed = { reply: rawContent, action: { type: 'none' } }
+          errorMsg = errorText || errorMsg
         }
+
+        if (aiResponse.status === 402 || errorMsg.toLowerCase().includes('balance')) {
+          errorMsg = 'Saldo insuficiente na conta da DeepSeek. É necessário recarregar créditos no portal platform.deepseek.com.'
+        }
+
+        return json({
+          reply: `⚠️ **Aviso da IA**: ${errorMsg}`,
+          action: { type: 'none' },
+        })
+      }
+
+      const data = await aiResponse.json()
+      const rawContent = data.choices?.[0]?.message?.content || '{}'
+      const cleanContent = rawContent
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim()
+
+      try {
+        aiParsed = JSON.parse(cleanContent)
+      } catch (err) {
+        console.error('Failed to parse AI JSON:', cleanContent, err)
+        aiParsed = { reply: cleanContent, action: { type: 'none' } }
       }
     } else {
       // Fallback inteligente para desenvolvimento local quando chave não estiver configurada
