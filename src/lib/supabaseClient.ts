@@ -116,6 +116,29 @@ export async function reactivateUser(userId: string): Promise<{ error: string | 
   return { error: res.error ?? null }
 }
 
+export async function sendPasswordResetEmail(email: string): Promise<{ error: string | null }> {
+  try {
+    const redirectTo = `${window.location.origin}/reset-password`
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    })
+    return { error: error?.message ?? null }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Erro ao enviar e-mail.' }
+  }
+}
+
+export async function generateRecoveryLink(email: string): Promise<{ link: string | null; error: string | null }> {
+  const redirectTo = `${window.location.origin}/reset-password`
+  const res = await invokeAdmin<{ link: string }>({
+    action: 'generate_recovery_link',
+    email,
+    redirect_to: redirectTo,
+  })
+  if (res.error) return { link: null, error: res.error }
+  return { link: res.data?.link ?? null, error: null }
+}
+
 // ============================================================
 // Perfil (próprio usuário)
 // ============================================================

@@ -7,13 +7,14 @@ import { json, handleOptions } from '../_shared/cors.ts'
 const ADMIN_BAN_DURATION = '876000h' // ~100 anos = conta desativada
 
 interface AdminUserPayload {
-  action: 'list' | 'create' | 'update' | 'deactivate' | 'reactivate'
+  action: 'list' | 'create' | 'update' | 'deactivate' | 'reactivate' | 'generate_recovery_link'
   email?: string
   password?: string
   username?: string
   full_name?: string
   role?: 'admin' | 'member'
   user_id?: string
+  redirect_to?: string
 }
 
 const admin = createClient(
@@ -203,6 +204,22 @@ Deno.serve(async (req) => {
         if (error) return json({ error: error.message }, 400)
 
         return json({ data: { id: user_id } })
+      }
+
+      case 'generate_recovery_link': {
+        const { email, redirect_to } = body
+        if (!email) return json({ error: 'email é obrigatório.' }, 400)
+
+        const { data, error } = await admin.auth.admin.generateLink({
+          type: 'recovery',
+          email,
+          options: {
+            redirectTo: redirect_to || 'https://hub.luznegra.com.br/reset-password',
+          },
+        })
+
+        if (error) return json({ error: error.message }, 400)
+        return json({ data: { link: data.properties?.action_link } })
       }
 
       default:
