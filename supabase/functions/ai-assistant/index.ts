@@ -167,7 +167,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
       const model =
         Deno.env.get('DEEPSEEK_MODEL') ||
-        (Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-v4-flash' : 'gpt-4o-mini')
+        (Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-chat' : 'gpt-4o-mini')
 
       const apiMessages = [
         { role: 'system', content: systemPrompt },
@@ -186,7 +186,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           messages: apiMessages,
           response_format: { type: 'json_object' },
           temperature: 0.1,
-          max_tokens: 800,
+          max_tokens: 2048,
         }),
       })
 
@@ -221,11 +221,39 @@ FORMATO OBRIGATÓRIO (JSON puro):
         .replace(/```\s*$/i, '')
         .trim()
 
-      try {
-        aiParsed = JSON.parse(cleanContent)
-      } catch (err) {
-        console.error('Failed to parse AI JSON:', cleanContent, err)
-        aiParsed = { reply: cleanContent, action: { type: 'none' } }
+      function tryParseJson(str: string): Record<string, unknown> | null {
+        try {
+          return JSON.parse(str)
+        } catch {
+          // Tenta reparar JSON truncado fechando colchetes e chaves
+          const attempts = [
+            str + ']}',
+            str + '"}]}}',
+            str + '"]}}',
+            str + '}}',
+            str + '}',
+          ]
+          for (const att of attempts) {
+            try {
+              return JSON.parse(att)
+            } catch {
+              // continua
+            }
+          }
+          return null
+        }
+      }
+
+      const parsedObj = tryParseJson(cleanContent)
+      if (parsedObj) {
+        aiParsed = parsedObj as unknown as AIResponseStructure
+      } else {
+        // Se mesmo assim não parsear, extrai texto se houver
+        const replyMatch = cleanContent.match(/"reply"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/)
+        aiParsed = {
+          reply: replyMatch ? replyMatch[1].replace(/\\"/g, '"') : cleanContent,
+          action: { type: 'none' },
+        }
       }
     } else {
       // Fallback inteligente para desenvolvimento local quando chave não estiver configurada
