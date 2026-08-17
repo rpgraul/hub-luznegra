@@ -567,19 +567,33 @@ export default function GanttView({
     }
   }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today])
 
-  // Ctrl + Scroll to Zoom listener
+  // Zoom & Horizontal Timeline Wheel listener
   useEffect(() => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
 
+    let lastZoomTime = 0
+
     function handleWheel(e: WheelEvent) {
+      const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
+
       if (e.ctrlKey || e.metaKey) {
+        // Ctrl + Scroll: Zoom in / Zoom out
         e.preventDefault()
+        const now = Date.now()
+        if (now - lastZoomTime < 140) return
+        lastZoomTime = now
+
         if (e.deltaY < 0) {
           handleZoomIn()
         } else if (e.deltaY > 0) {
           handleZoomOut()
         }
+      } else if (container) {
+        // Normal Scroll: Move horizontally along the timeline
+        e.preventDefault()
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+        container.scrollLeft += delta
       }
     }
 
@@ -799,13 +813,14 @@ export default function GanttView({
                       return (
                         <tr
                           key={task.id}
-                          className={`group border-b border-border/50 transition hover:bg-muted/40 ${
+                          onDoubleClick={() => onOpenTask(task)}
+                          className={`group cursor-default border-b border-border/50 transition hover:bg-muted/40 ${
                             isDone ? 'bg-emerald-500/5' : isOverdue ? 'bg-rose-500/5' : ''
                           }`}
                           style={{ height: ROW_HEIGHT }}
                         >
                           {/* Quick Toggle Done Checkbox */}
-                          <td className="w-8 px-2 text-center">
+                          <td className="w-8 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => handleToggleDone(task)}
@@ -820,12 +835,12 @@ export default function GanttView({
                             </button>
                           </td>
 
-                          {/* Title & Tags */}
+                          {/* Title & Tags (2 clicks to open) */}
                           <td className="max-w-[140px] px-2">
-                            <button
-                              type="button"
-                              onClick={() => onOpenTask(task)}
-                              className="flex flex-col w-full text-left transition hover:text-primary"
+                            <div
+                              onDoubleClick={() => onOpenTask(task)}
+                              title="2 cliques para abrir detalhes"
+                              className="flex flex-col w-full text-left transition select-none"
                             >
                               <div className="flex items-center gap-1.5">
                                 <span
@@ -876,7 +891,7 @@ export default function GanttView({
                                   ))}
                                 </div>
                               )}
-                            </button>
+                            </div>
                           </td>
 
                           {/* Status */}
