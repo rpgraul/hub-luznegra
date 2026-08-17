@@ -117,7 +117,7 @@ export default function TopBar({
         <img
           src="/logo.svg"
           alt="Logo da Editora Luz Negra"
-          className="h-8 w-auto"
+          className="h-8 w-auto brightness-0 invert transition hover:opacity-90"
         />
         <span className="hidden sm:inline">Editora Luz Negra</span>
       </button>

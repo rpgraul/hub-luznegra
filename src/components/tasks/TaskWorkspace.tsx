@@ -212,6 +212,7 @@ export default function TaskWorkspace({
             tasks={visibleTasks}
             onOpenTask={openTask}
             updateTask={tasksApi.updateTask}
+            moveTaskStatus={tasksApi.moveTaskStatus}
           />
         )
       case 'kanban':
