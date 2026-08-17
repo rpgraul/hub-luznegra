@@ -320,14 +320,14 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onOpenAi}
-            title="Abrir Lord Camarão"
+            title="Abrir Lorde Camarão"
             className="group flex w-full items-center gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2 text-xs font-semibold text-foreground transition hover:bg-muted hover:border-border cursor-pointer shadow-2xs"
           >
             <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs">
               🦐
             </div>
             <div className="flex flex-1 items-center justify-between min-w-0">
-              <span className="truncate font-bold text-foreground">Lord Camarão</span>
+              <span className="truncate font-bold text-foreground">Lorde Camarão</span>
               <span className="text-[9px] font-semibold text-muted-foreground bg-background px-1.5 py-0.5 rounded border border-border/60">
                 Assistente IA
               </span>

@@ -98,7 +98,7 @@ const CHAT_STORAGE_KEY = 'hub_ai_chat_messages_v1'
 const WELCOME_MSG: AIMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: `Olá! Sou o **Lord Camarão**, assistente do Hub da Editora Luz Negra. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
+  content: `Olá! Sou o **Lorde Camarão**, assistente do Hub da Editora Luz Negra. Posso criar tarefas, quebrar em subtarefas, mudar prioridades ou gerar relatórios rápidos. Como posso ajudar?`,
 }
 
 export default function AIAssistantModal({
@@ -196,7 +196,7 @@ export default function AIAssistantModal({
       if (response?.action && response.action.type !== 'none') {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
-        toast.success('Ação executada com sucesso pelo Lord Camarão!')
+        toast.success('Ação executada com sucesso pelo Lorde Camarão!')
       }
     } catch (error) {
       toast.danger(
@@ -242,7 +242,7 @@ export default function AIAssistantModal({
           </div>
           <div>
             <h2 className="flex items-center gap-1.5 text-xs font-semibold leading-none">
-              <span>Lord Camarão</span>
+              <span>Lorde Camarão</span>
               <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground border border-border/60">
                 Assistente IA
               </span>

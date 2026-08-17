@@ -111,7 +111,7 @@ Deno.serve(async (req) => {
       .join('\n')
 
     // 2. Monta o system prompt ultra-enxuto para economia máxima de tokens
-    const systemPrompt = `Você é o Lord Camarão, assistente de IA do Hub da Editora Luz Negra.
+    const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
 Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
 Projetos: ${projectsMap || 'Nenhum'}
