@@ -329,48 +329,60 @@ html[data-theme='dark'],
 }
 
 /* Undated tasks styling */
-.gantt .bar-wrapper.gantt-undated .bar {
+.gantt .bar-wrapper.gantt-undated .bar,
+.gantt .bar-wrapper.gantt-subtask-undated .bar {
   fill: transparent !important;
   stroke: var(--g-border-color) !important;
   stroke-width: 1.5 !important;
   stroke-dasharray: 4 3;
 }
 
-.gantt .bar-wrapper.gantt-undated .bar-progress {
+.gantt .bar-wrapper.gantt-undated .bar-progress,
+.gantt .bar-wrapper.gantt-subtask-undated .bar-progress {
   display: none;
 }
 
-.gantt .bar-wrapper.gantt-undated .bar-label {
+.gantt .bar-wrapper.gantt-undated .bar-label,
+.gantt .bar-wrapper.gantt-subtask-undated .bar-label {
   fill: var(--g-text-muted) !important;
   text-shadow: none !important;
 }
 
 /* Done tasks styling */
-.gantt .bar-wrapper.gantt-done .bar {
+.gantt .bar-wrapper.gantt-done .bar,
+.gantt .bar-wrapper.gantt-subtask-done .bar {
   fill: #10b981 !important;
   stroke: #059669 !important;
   opacity: 0.95;
 }
 
-.gantt .bar-wrapper.gantt-done .bar-progress {
+.gantt .bar-wrapper.gantt-done .bar-progress,
+.gantt .bar-wrapper.gantt-subtask-done .bar-progress {
   fill: rgba(255, 255, 255, 0.3) !important;
 }
 
 /* Overdue tasks styling */
-.gantt .bar-wrapper.gantt-overdue .bar {
+.gantt .bar-wrapper.gantt-overdue .bar,
+.gantt .bar-wrapper.gantt-subtask-overdue .bar {
   fill: #f43f5e !important;
   stroke: #e11d48 !important;
   stroke-width: 1.5px !important;
 }
 
 /* Subtasks bar styling */
-.gantt .bar-wrapper.gantt-subtask-bar .bar {
+.gantt .bar-wrapper.gantt-subtask-bar .bar,
+.gantt .bar-wrapper.gantt-subtask-done .bar,
+.gantt .bar-wrapper.gantt-subtask-overdue .bar,
+.gantt .bar-wrapper.gantt-subtask-undated .bar {
   opacity: 0.88;
   stroke-dasharray: 5 2;
   stroke-width: 1px !important;
 }
 
-.gantt .bar-wrapper.gantt-subtask-bar .bar-label {
+.gantt .bar-wrapper.gantt-subtask-bar .bar-label,
+.gantt .bar-wrapper.gantt-subtask-done .bar-label,
+.gantt .bar-wrapper.gantt-subtask-overdue .bar-label,
+.gantt .bar-wrapper.gantt-subtask-undated .bar-label {
   font-size: 10px !important;
   font-weight: 500 !important;
 }

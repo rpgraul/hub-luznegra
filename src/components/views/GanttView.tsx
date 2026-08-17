@@ -212,13 +212,25 @@ export default function GanttView({
           }
         }
 
-        let customClass = isSubtask ? 'gantt-subtask-bar' : ''
-        if (task.status === 'done') {
-          customClass += ' gantt-done'
-        } else if (isOverdue) {
-          customClass += ' gantt-overdue'
-        } else if (undated) {
-          customClass += ' gantt-undated'
+        let customClass = ''
+        if (isSubtask) {
+          if (task.status === 'done') {
+            customClass = 'gantt-subtask-done'
+          } else if (isOverdue) {
+            customClass = 'gantt-subtask-overdue'
+          } else if (undated) {
+            customClass = 'gantt-subtask-undated'
+          } else {
+            customClass = 'gantt-subtask-bar'
+          }
+        } else {
+          if (task.status === 'done') {
+            customClass = 'gantt-done'
+          } else if (isOverdue) {
+            customClass = 'gantt-overdue'
+          } else if (undated) {
+            customClass = 'gantt-undated'
+          }
         }
 
         const taskTitle = isSubtask
@@ -234,7 +246,7 @@ export default function GanttView({
           end,
           progress,
           dependencies: task.parent_id ? [task.parent_id] : undefined,
-          custom_class: customClass.trim(),
+          custom_class: customClass,
           color:
             task.status === 'done'
               ? '#10b981'
