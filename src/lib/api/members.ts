@@ -4,6 +4,7 @@ export interface ProjectMember {
   id: string
   username: string
   full_name: string | null
+  avatar_url?: string | null
 }
 
 export async function listProjectMembers(

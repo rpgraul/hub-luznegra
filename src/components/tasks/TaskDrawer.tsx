@@ -649,17 +649,25 @@ export default function TaskDrawer({
                                 key={userId}
                                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium text-foreground"
                               >
-                                <span
-                                  className="flex size-4 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs"
-                                  style={{ backgroundColor: userColor(userId) }}
-                                >
-                                  {initials}
-                                </span>
+                                {member?.avatar_url ? (
+                                  <img
+                                    src={member.avatar_url}
+                                    alt={name}
+                                    className="size-4.5 rounded-full object-cover ring-1 ring-border shadow-2xs"
+                                  />
+                                ) : (
+                                  <span
+                                    className="flex size-4.5 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs"
+                                    style={{ backgroundColor: userColor(userId) }}
+                                  >
+                                    {initials}
+                                  </span>
+                                )}
                                 <span>{name}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleToggleAssignee(userId)}
-                                  className="cursor-pointer text-muted-foreground hover:text-red-500"
+                                  className="cursor-pointer text-muted-foreground hover:text-red-500 ml-0.5"
                                   title="Remover responsável"
                                 >
                                   <i className="fa-solid fa-xmark text-[10px]" />

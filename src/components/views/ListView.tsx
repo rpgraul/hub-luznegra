@@ -131,10 +131,18 @@ function AssigneesCell({
       {members.map((member) => {
         const name = member.full_name ?? member.username
         const initials = name.slice(0, 2).toUpperCase()
-        return (
+        return member.avatar_url ? (
+          <img
+            key={member.id}
+            src={member.avatar_url}
+            alt={name}
+            title={name}
+            className="size-5.5 shrink-0 rounded-full object-cover ring-2 ring-background shadow-2xs cursor-pointer"
+          />
+        ) : (
           <span
             key={member.id}
-            className="flex size-5 shrink-0 items-center justify-center rounded-full ring-2 ring-background text-[9px] font-bold text-white shadow-2xs cursor-pointer"
+            className="flex size-5.5 shrink-0 items-center justify-center rounded-full ring-2 ring-background text-[9px] font-bold text-white shadow-2xs cursor-pointer"
             style={{ backgroundColor: userColor(member.id) }}
             title={name}
           >
@@ -143,7 +151,7 @@ function AssigneesCell({
         )
       })}
       {members.length === 1 && (
-        <span className="ml-2 max-w-24 truncate text-xs font-medium text-foreground">
+        <span className="ml-2 max-w-28 truncate text-xs font-medium text-foreground">
           {members[0].full_name ?? members[0].username}
         </span>
       )}

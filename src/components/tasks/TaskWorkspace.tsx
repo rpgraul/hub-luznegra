@@ -258,6 +258,7 @@ export default function TaskWorkspace({
             moveTaskStatus={tasksApi.moveTaskStatus}
             reorderTask={tasksApi.reorderTask}
             createTask={tasksApi.createTask}
+            memberOf={memberOf}
           />
         )
       case 'lista':

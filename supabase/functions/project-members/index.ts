@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     // Retorna todos os perfis ativos ordenados por nome / username
     const { data: allProfiles, error: profilesError } = await admin
       .from('profiles')
-      .select('id, username, full_name')
+      .select('id, username, full_name, avatar_url')
       .order('full_name', { nullsFirst: true })
       .order('username')
 

@@ -9,6 +9,7 @@ import { toast, Button } from '@heroui/react'
 import TaskCard from '@/components/tasks/TaskCard'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { TASK_STATUSES } from '@/hooks/useTasks'
+import type { ProjectMember } from '@/lib/api/members'
 import type { NewTaskInput } from '@/lib/api/tasks'
 import type { Project, Task, TaskStatus } from '@/types/database'
 
@@ -26,6 +27,7 @@ interface KanbanViewProps {
     orderIndex?: number
   }) => Promise<unknown>
   createTask: (input: NewTaskInput) => Promise<Task>
+  memberOf?: (id: string | null) => ProjectMember | null
 }
 
 export default function KanbanView({
@@ -36,6 +38,7 @@ export default function KanbanView({
   moveTaskStatus,
   reorderTask,
   createTask,
+  memberOf,
 }: KanbanViewProps) {
   const [showSubtasksAsCards, setShowSubtasksAsCards] = useState(false)
 
@@ -222,6 +225,7 @@ export default function KanbanView({
                                     onCreateSubtask={handleCreateSubtask}
                                     compact={false}
                                     parentTaskTitle={parent?.title}
+                                    memberOf={memberOf}
                                     project={
                                       task.project_id
                                         ? projectById.get(task.project_id)

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PRIORITY_ICONS } from '@/utils/status'
 import { formatDateRange, todayIso } from '@/utils/format'
 import { userColor, userRowColor } from '@/utils/colors'
+import type { ProjectMember } from '@/lib/api/members'
 import type { Task } from '@/types/database'
 
 interface TaskCardProps {
@@ -14,6 +15,7 @@ interface TaskCardProps {
   compact?: boolean
   project?: { name: string; color: string } | null
   parentTaskTitle?: string | null
+  memberOf?: (id: string | null) => ProjectMember | null
 }
 
 export default function TaskCard({
@@ -26,6 +28,7 @@ export default function TaskCard({
   compact = false,
   project = null,
   parentTaskTitle = null,
+  memberOf,
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
@@ -177,14 +180,31 @@ export default function TaskCard({
                     : []
               if (assigneeIds.length === 0) return null
               return (
-                <div className="flex items-center -space-x-1">
-                  {assigneeIds.map((id) => (
-                    <span
-                      key={id}
-                      className="flex size-4.5 shrink-0 items-center justify-center rounded-full ring-1 ring-card text-[8px] font-bold text-white shadow-2xs"
-                      style={{ backgroundColor: userColor(id) }}
-                    />
-                  ))}
+                <div className="flex items-center -space-x-1.5">
+                  {assigneeIds.map((id) => {
+                    const member = memberOf ? memberOf(id) : null
+                    const name = member?.full_name ?? member?.username ?? 'Responsável'
+                    const initials = (name.charAt(0) || 'U').toUpperCase()
+
+                    return member?.avatar_url ? (
+                      <img
+                        key={id}
+                        src={member.avatar_url}
+                        alt={name}
+                        title={name}
+                        className="size-5 shrink-0 rounded-full object-cover ring-1.5 ring-card shadow-2xs cursor-pointer"
+                      />
+                    ) : (
+                      <span
+                        key={id}
+                        title={name}
+                        className="flex size-5 shrink-0 items-center justify-center rounded-full ring-1.5 ring-card text-[8px] font-bold text-white shadow-2xs cursor-pointer"
+                        style={{ backgroundColor: userColor(id) }}
+                      >
+                        {initials}
+                      </span>
+                    )
+                  })}
                 </div>
               )
             })()}
