@@ -241,6 +241,7 @@ export default function TaskWorkspace({
         return (
           <GanttView
             tasks={visibleTasks}
+            projects={projects}
             onOpenTask={openTask}
             updateTask={tasksApi.updateTask}
             moveTaskStatus={tasksApi.moveTaskStatus}

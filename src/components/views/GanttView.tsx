@@ -146,10 +146,6 @@ export default function GanttView({
     due: string
   } | null>(null)
 
-  // Default zoom is Week (Semana)
-  const [zoomIndex, setZoomIndex] = useState(2)
-  const [showTable, setShowTable] = useState(true)
-
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
 
