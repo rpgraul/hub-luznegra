@@ -216,30 +216,15 @@ export async function uploadAvatar(file: File): Promise<{ url: string | null; er
   if (uploadError) return { url: null, error: uploadError.message }
 
   const { data } = supabase.storage.from('avatars').getPublicUrl(path)
-  return { url: data.publicUrl, error: null }
+  const publicUrlWithCacheBust = `${data.publicUrl}?t=${Date.now()}`
+  return { url: publicUrlWithCacheBust, error: null }
 }
 
 export async function changePassword(
-  currentPassword: string,
   newPassword: string,
 ): Promise<{ error: string | null }> {
   if (newPassword.length < 6) {
     return { error: 'A nova senha deve ter no mínimo 6 caracteres.' }
-  }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user?.email) {
-    return { error: 'Não foi possível reautenticar a conta.' }
-  }
-
-  const { error: reauthError } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: currentPassword,
-  })
-  if (reauthError) {
-    return { error: 'Senha atual incorreta.' }
   }
 
   const { error } = await supabase.auth.updateUser({ password: newPassword })

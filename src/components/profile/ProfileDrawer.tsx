@@ -23,7 +23,6 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
   const [fullName, setFullName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
-  const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [feriasInicio, setFeriasInicio] = useState('')
@@ -39,7 +38,6 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
       setFullName(user.full_name ?? '')
       setAvatarUrl(user.avatar_url)
       setFile(null)
-      setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
       setFeriasInicio(user.ferias_inicio ?? '')
@@ -64,9 +62,6 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
       }
       if (newPassword !== confirmPassword) {
         return 'As senhas não coincidem.'
-      }
-      if (!currentPassword) {
-        return 'Informe a senha atual para alterá-la.'
       }
     }
     if ((feriasInicio && !feriasFim) || (!feriasInicio && feriasFim)) {
@@ -111,10 +106,7 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
     }
 
     if (newPassword) {
-      const { error: passwordError } = await changePassword(
-        currentPassword,
-        newPassword,
-      )
+      const { error: passwordError } = await changePassword(newPassword)
       if (passwordError) {
         setError(passwordError)
         setSaving(false)
@@ -242,17 +234,6 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
               <i className="fa-solid fa-key text-primary" />
               <span>Alterar Senha</span>
             </div>
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground">Senha Atual</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-                placeholder="Digite para confirmar alteração"
-                className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none shadow-2xs"
-              />
-            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground">Nova Senha</label>
@@ -277,6 +258,9 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
                 />
               </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Deixe os campos em branco se não desejar alterar sua senha.
+            </p>
           </div>
 
           {/* Férias */}

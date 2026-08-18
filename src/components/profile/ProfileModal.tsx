@@ -109,10 +109,7 @@ export default function ProfileModal({ open, onOpenChange }: ProfileModalProps) 
     }
 
     if (newPassword) {
-      const { error: passwordError } = await changePassword(
-        currentPassword,
-        newPassword,
-      )
+      const { error: passwordError } = await changePassword(newPassword)
       if (passwordError) {
         setError(passwordError)
         setSaving(false)
