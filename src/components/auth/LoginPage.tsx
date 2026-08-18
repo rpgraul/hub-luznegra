@@ -38,9 +38,14 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-6 rounded-xl border bg-background p-8 shadow-sm"
       >
-        <div className="space-y-1">
-          <i className="fa-solid fa-list-check text-2xl text-primary" />
-          <h1 className="text-2xl font-semibold tracking-tight">Hub</h1>
+        <div className="flex flex-col items-center text-center space-y-2">
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm mb-1">
+            <img
+              src="/logo.svg"
+              alt="Editora Luz Negra"
+              className="size-8 brightness-0 invert"
+            />
+          </div>
           <p className="text-sm text-muted-foreground">
             Entre com seu usuário ou e-mail
           </p>
