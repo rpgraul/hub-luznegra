@@ -8,7 +8,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
 
 const FROM = 'no-reply@hub.luznegra.com.br'
-const APP_URL = 'https://hub.site-da-empresa.com.br'
+const APP_URL = 'https://hub.luznegra.com.br'
 const TZ = 'America/Sao_Paulo'
 const MAX_ATTEMPTS = 3
 const QUEUE_BATCH = 20

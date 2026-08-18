@@ -10,6 +10,7 @@ import {
   reactivateUser,
   sendPasswordResetEmail,
   generateRecoveryLink,
+  sendCustomEmail,
   type AdminUser,
 } from '@/lib/supabaseClient'
 import CreateUserModal from '@/components/admin/CreateUserModal'
@@ -23,6 +24,7 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [toDeactivate, setToDeactivate] = useState<AdminUser | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
   const [recoveryModal, setRecoveryModal] = useState<{
     user: AdminUser
     link: string
@@ -387,19 +389,60 @@ export default function UserManagement() {
               </div>
             </div>
 
-            {/* WhatsApp Direct Share */}
-            <div className="pt-2 flex items-center justify-between border-t border-border">
-              <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `Olá! Aqui está o seu link de acesso para definir sua senha no Hub da Editora Luz Negra:\n\n${recoveryModal.link}`,
-                )}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700 cursor-pointer"
+            {/* Actions: Send Email & Close */}
+            <div className="pt-2 flex items-center justify-between border-t border-border gap-2">
+              <button
+                type="button"
+                disabled={isSendingEmail}
+                onClick={async () => {
+                  if (!recoveryModal?.user?.email || !recoveryModal?.link) return
+                  setIsSendingEmail(true)
+                  const recipientName = recoveryModal.user.full_name || recoveryModal.user.username
+                  const { success, error: sendErr } = await sendCustomEmail({
+                    to: recoveryModal.user.email,
+                    subject: 'Redefinição de Senha - Hub Luz Negra',
+                    html: `
+                      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
+                        <h2 style="color: #0f172a; margin-bottom: 16px;">Redefinição de Senha</h2>
+                        <p>Olá, <strong>${recipientName}</strong>,</p>
+                        <p>Foi solicitada a redefinição de senha para sua conta no <strong>Hub da Editora Luz Negra</strong>.</p>
+                        <p style="margin: 24px 0;">
+                          <a href="${recoveryModal.link}" style="background-color: #2563eb; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
+                            Definir Nova Senha
+                          </a>
+                        </p>
+                        <p style="font-size: 13px; color: #64748b;">
+                          Se o botão acima não funcionar, copie e cole o link abaixo no seu navegador:<br/>
+                          <a href="${recoveryModal.link}" style="color: #2563eb; word-break: break-all;">${recoveryModal.link}</a>
+                        </p>
+                        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+                        <p style="font-size: 12px; color: #94a3b8;">
+                          Se você não solicitou esta alteração, ignore este e-mail. O link expira em 24 horas.
+                        </p>
+                      </div>
+                    `,
+                  })
+                  setIsSendingEmail(false)
+                  if (!success || sendErr) {
+                    toast.danger(`Erro ao enviar e-mail: ${sendErr || 'Falha desconhecida'}`)
+                  } else {
+                    toast.success(`E-mail de redefinição enviado com sucesso para ${recoveryModal.user.email}!`)
+                  }
+                }}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 disabled:opacity-60 cursor-pointer"
               >
-                <i className="fa-brands fa-whatsapp text-sm" />
-                <span>Enviar pelo WhatsApp</span>
-              </a>
+                {isSendingEmail ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                    <span>Enviando e-mail...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-paper-plane text-xs" />
+                    <span>Enviar por E-mail</span>
+                  </>
+                )}
+              </button>
 
               <button
                 type="button"

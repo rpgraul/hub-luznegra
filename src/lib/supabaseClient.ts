@@ -139,6 +139,32 @@ export async function generateRecoveryLink(email: string): Promise<{ link: strin
   return { link: res.data?.link ?? null, error: null }
 }
 
+export async function sendCustomEmail(input: {
+  to: string
+  subject: string
+  html: string
+}): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const { data, error } = await supabase.functions.invoke<{ success: boolean; id?: string; error?: string }>(
+      'send-email',
+      {
+        body: input,
+      },
+    )
+    if (error) {
+      const msg =
+        error.context instanceof Response ? await error.context.text() : error.message
+      return { success: false, error: msg }
+    }
+    if (data && !data.success && data.error) {
+      return { success: false, error: data.error }
+    }
+    return { success: true, error: null }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Erro ao enviar e-mail via Resend.' }
+  }
+}
+
 // ============================================================
 // Perfil (próprio usuário)
 // ============================================================
