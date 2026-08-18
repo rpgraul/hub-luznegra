@@ -9,6 +9,7 @@ interface SidebarProps {
   activeProjectId: string | null
   onProjectChange: (projectId: string | null) => void
   onCreateProject: () => void
+  onEditProject?: (project: Project) => void
   showAllTasks: boolean
   onShowAllChange: (show: boolean) => void
   tasks?: Task[]
@@ -20,6 +21,7 @@ export default function Sidebar({
   activeProjectId,
   onProjectChange,
   onCreateProject,
+  onEditProject,
   showAllTasks,
   onShowAllChange,
   tasks = [],
