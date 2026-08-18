@@ -69,7 +69,12 @@ export default function LoginPage() {
         </TextField.Root>
 
         <Checkbox isSelected={remember} onChange={setRemember}>
-          Manter logado
+          <Checkbox.Content>
+            <Checkbox.Control>
+              <Checkbox.Indicator />
+            </Checkbox.Control>
+            <span className="text-sm select-none cursor-pointer">Manter logado</span>
+          </Checkbox.Content>
         </Checkbox>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
