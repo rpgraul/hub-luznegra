@@ -4,10 +4,11 @@ import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import { userColor } from '@/utils/colors'
 import { todayIso, formatDate } from '@/utils/format'
-import type { Task, TaskPriority, TaskStatus } from '@/types/database'
+import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
 
 interface GanttViewProps {
   tasks: Task[]
+  projects?: Project[]
   onOpenTask: (task: Task) => void
   updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
   moveTaskStatus?: (args: { id: string; status: TaskStatus }) => Promise<unknown>
@@ -121,10 +122,18 @@ function diffDaysLocal(startIso: string, endIso: string): number {
 
 export default function GanttView({
   tasks,
+  projects = [],
   onOpenTask,
   updateTask,
   moveTaskStatus,
 }: GanttViewProps) {
+  const [zoomIndex, setZoomIndex] = useState(2) // Default: Week
+  const [showTable, setShowTable] = useState(true)
+
+  const projectById = useMemo(
+    () => new Map(projects.map((p) => [p.id, p])),
+    [projects],
+  )
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const ganttInstanceRef = useRef<Gantt | null>(null)
@@ -861,16 +870,23 @@ export default function GanttView({
                       const isDone = task.status === 'done'
                       const isOverdue = !isDone && task.due_date && today > task.due_date
 
+                      const project = task.project_id ? projectById.get(task.project_id) : null
+                      const projectColor = project?.color || '#7b68ee'
+                      const rowBg = task.project_id
+                        ? `${projectColor}14` // ~8% de opacidade para fundo suave
+                        : undefined
+
                       return (
                         <tr
                           key={task.id}
                           onDoubleClick={() => onOpenTask(task)}
-                          className={`group cursor-default border-b border-border/50 transition hover:bg-muted/40 ${
-                            isSubtask ? 'bg-muted/15' : ''
-                          } ${
-                            isDone ? 'bg-emerald-500/5' : isOverdue ? 'bg-rose-500/5' : ''
+                          className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${
+                            isDone ? 'opacity-70' : ''
                           }`}
-                          style={{ height: ROW_HEIGHT }}
+                          style={{
+                            height: ROW_HEIGHT,
+                            backgroundColor: rowBg,
+                          }}
                         >
                           {/* Quick Toggle Done Checkbox */}
                           <td className="w-8 px-2 text-center" onClick={(e) => e.stopPropagation()}>

@@ -609,11 +609,24 @@ export default function ListView({
 }: ListViewProps) {
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
 
   const projectById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
     [projects],
   )
+
+  function toggleCollapseProject(projectId: string) {
+    setCollapsedProjects((prev) => {
+      const next = new Set(prev)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }
 
   function handleSortBy(field: SortField) {
     if (sortField === field) {
@@ -806,38 +819,60 @@ export default function ListView({
                 {emptyMessage}
               </div>
             )}
-            {sections.map(({ project, sectionTasks }) => (
-              <section key={project?.id ?? '__sem_projeto__'}>
-                <header className="mb-2 flex items-center gap-2 px-1">
-                  <span
-                    className="size-2.5 rounded-full shadow-2xs"
-                    style={{ backgroundColor: project?.color ?? '#94A3B8' }}
-                  />
-                  <h2 className="text-xs font-bold text-foreground">
-                    {project?.name ?? 'Sem projeto'}
-                  </h2>
-                  <span className="text-xs text-muted-foreground">
-                    {sectionTasks.length} tarefa(s)
-                  </span>
-                </header>
-                <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
-                  <TasksTable
-                    rows={sectionTasks}
-                    emptyMessage={emptyMessage}
-                    onToggleDone={handleToggleDone}
-                    onChangeStatus={handleChangeStatus}
-                    onCommitField={handleCommitField}
-                    onOpen={onOpenTask}
-                    memberOf={memberOf}
-                    countSubtasks={countSubtasks}
-                    projectById={projectById}
-                    onSortBy={handleSortBy}
-                    currentSortField={sortField}
-                    currentSortDir={sortDirection}
-                  />
-                </div>
-              </section>
-            ))}
+            {sections.map(({ project, sectionTasks }) => {
+              const projectIdKey = project?.id ?? '__sem_projeto__'
+              const isCollapsed = collapsedProjects.has(projectIdKey)
+
+              return (
+                <section key={projectIdKey} className="transition-all duration-200">
+                  <header
+                    onClick={() => toggleCollapseProject(projectIdKey)}
+                    className="mb-2 flex items-center justify-between gap-2 px-2 py-1 rounded-lg hover:bg-muted/40 cursor-pointer transition select-none group"
+                  >
+                    <div className="flex items-center gap-2">
+                      <i
+                        className={`fa-solid fa-chevron-right text-[10px] text-muted-foreground transition-transform duration-200 ${
+                          isCollapsed ? '' : 'rotate-90'
+                        }`}
+                      />
+                      <span
+                        className="size-2.5 rounded-full shadow-2xs"
+                        style={{ backgroundColor: project?.color ?? '#94A3B8' }}
+                      />
+                      <h2 className="text-xs font-bold text-foreground group-hover:text-primary transition">
+                        {project?.name ?? 'Sem projeto'}
+                      </h2>
+                      <span className="text-[11px] text-muted-foreground">
+                        ({sectionTasks.length} tarefa{sectionTasks.length !== 1 ? 's' : ''})
+                      </span>
+                    </div>
+
+                    <span className="text-[10px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 transition">
+                      {isCollapsed ? 'Clique para expandir' : 'Clique para minimizar'}
+                    </span>
+                  </header>
+
+                  {!isCollapsed && (
+                    <div className="rounded-xl border border-border bg-background shadow-2xs overflow-hidden animate-in fade-in duration-150">
+                      <TasksTable
+                        rows={sectionTasks}
+                        emptyMessage={emptyMessage}
+                        onToggleDone={handleToggleDone}
+                        onChangeStatus={handleChangeStatus}
+                        onCommitField={handleCommitField}
+                        onOpen={onOpenTask}
+                        memberOf={memberOf}
+                        countSubtasks={countSubtasks}
+                        projectById={projectById}
+                        onSortBy={handleSortBy}
+                        currentSortField={sortField}
+                        currentSortDir={sortDirection}
+                      />
+                    </div>
+                  )}
+                </section>
+              )
+            })}
           </div>
         ) : (
           <div className="rounded-md border border-border bg-background shadow-2xs overflow-hidden">
