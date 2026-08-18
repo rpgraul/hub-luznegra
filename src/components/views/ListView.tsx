@@ -137,12 +137,12 @@ function AssigneesCell({
             src={member.avatar_url}
             alt={name}
             title={name}
-            className="size-5.5 shrink-0 rounded-full object-cover ring-2 ring-background shadow-2xs cursor-pointer"
+            className="size-6 shrink-0 rounded-full object-cover ring-2 ring-background shadow-2xs hover:scale-110 hover:z-10 transition-transform cursor-pointer"
           />
         ) : (
           <span
             key={member.id}
-            className="flex size-5.5 shrink-0 items-center justify-center rounded-full ring-2 ring-background text-[9px] font-bold text-white shadow-2xs cursor-pointer"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full ring-2 ring-background text-[10px] font-bold text-white shadow-2xs hover:scale-110 hover:z-10 transition-transform cursor-pointer"
             style={{ backgroundColor: userColor(member.id) }}
             title={name}
           >
@@ -150,11 +150,6 @@ function AssigneesCell({
           </span>
         )
       })}
-      {members.length === 1 && (
-        <span className="ml-2 max-w-28 truncate text-xs font-medium text-foreground">
-          {members[0].full_name ?? members[0].username}
-        </span>
-      )}
     </div>
   )
 }
