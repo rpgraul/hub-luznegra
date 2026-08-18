@@ -285,16 +285,6 @@ export default function TaskWorkspace({
     }
   }
 
-  if (showAllTasks === true && activeProjectId === null) {
-    return (
-      <div className="flex h-full items-center justify-center p-8">
-        <p className="text-sm text-muted-foreground">
-          Selecione um projeto para começar.
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div className="relative h-full">
       <div
