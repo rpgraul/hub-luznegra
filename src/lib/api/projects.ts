@@ -71,3 +71,23 @@ export async function archiveProject(id: string): Promise<void> {
 
   if (error) throw new Error(error.message)
 }
+
+export async function listArchivedProjects(): Promise<Project[]> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .eq('archived', true)
+    .order('name')
+
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+export async function unarchiveProject(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('projects')
+    .update({ archived: false })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+}

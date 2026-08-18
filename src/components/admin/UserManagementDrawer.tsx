@@ -115,8 +115,8 @@ export default function UserManagementDrawer({
         onClick={() => onOpenChange(false)}
       />
 
-      {/* Slide-over Drawer lateral (mesmo padrão do TaskDrawer) */}
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[760px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
+      {/* Slide-over Drawer lateral com largura ampla/ajustável */}
+      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[960px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
         {/* Drawer Header */}
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/95 px-6 backdrop-blur">
           <div className="flex items-center gap-2.5">

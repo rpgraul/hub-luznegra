@@ -10,6 +10,7 @@ interface SidebarProps {
   onProjectChange: (projectId: string | null) => void
   onCreateProject: () => void
   onEditProject?: (project: Project) => void
+  onOpenArchivedProjects?: () => void
   showAllTasks: boolean
   onShowAllChange: (show: boolean) => void
   tasks?: Task[]
@@ -22,6 +23,7 @@ export default function Sidebar({
   onProjectChange,
   onCreateProject,
   onEditProject,
+  onOpenArchivedProjects,
   showAllTasks,
   onShowAllChange,
   tasks = [],
@@ -311,11 +313,23 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onCreateProject}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-primary/5 hover:text-primary"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-primary/5 hover:text-primary cursor-pointer"
           >
             <i className="fa-solid fa-plus text-xs" />
             <span>Novo projeto...</span>
           </button>
+
+          {/* Archived Projects Button */}
+          {onOpenArchivedProjects && (
+            <button
+              type="button"
+              onClick={onOpenArchivedProjects}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground/80 transition hover:bg-muted hover:text-foreground cursor-pointer"
+            >
+              <i className="fa-solid fa-box-archive text-xs" />
+              <span>Projetos arquivados</span>
+            </button>
+          )}
         </div>
       </div>
 

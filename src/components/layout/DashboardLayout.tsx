@@ -24,6 +24,7 @@ import ProjectModal from '@/components/projects/ProjectModal'
 import AIAssistantModal from '@/components/ai/AIAssistantModal'
 import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
 import UserManagementDrawer from '@/components/admin/UserManagementDrawer'
+import ArchivedProjectsModal from '@/components/projects/ArchivedProjectsModal'
 import { toast } from '@heroui/react'
 import type { Json } from '@/types/database'
 
@@ -40,6 +41,7 @@ export default function DashboardLayout({
   const { preferences, setView, setProject, setShowAll } = usePreferences()
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
+  const [archivedModalOpen, setArchivedModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
@@ -171,6 +173,7 @@ export default function DashboardLayout({
           setEditingProject(p)
           setProjectModalOpen(true)
         }}
+        onOpenArchivedProjects={() => setArchivedModalOpen(true)}
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
         tasks={tasksApi.tasks}
@@ -214,6 +217,14 @@ export default function DashboardLayout({
         project={editingProject}
         onSaved={handleProjectSaved}
         onDeleted={handleProjectDeleted}
+      />
+
+      <ArchivedProjectsModal
+        open={archivedModalOpen}
+        onOpenChange={setArchivedModalOpen}
+        onRestored={(p) => {
+          setProject(p.id)
+        }}
       />
 
       <NewTaskModal
