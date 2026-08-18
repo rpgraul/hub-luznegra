@@ -24,6 +24,7 @@ import ProjectModal from '@/components/projects/ProjectModal'
 import AIAssistantModal from '@/components/ai/AIAssistantModal'
 import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
 import UserManagementDrawer from '@/components/admin/UserManagementDrawer'
+import ProfileDrawer from '@/components/profile/ProfileDrawer'
 import ArchivedProjectsModal from '@/components/projects/ArchivedProjectsModal'
 import { toast } from '@heroui/react'
 import type { Json } from '@/types/database'
@@ -45,6 +46,7 @@ export default function DashboardLayout({
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [profileDrawerOpen, setProfileDrawerOpen] = useState(false)
   const [usersDrawerOpen, setUsersDrawerOpen] = useState(false)
 
   const [layout, setLayout] = useState<LayoutState>(() => loadLayout())
@@ -56,9 +58,14 @@ export default function DashboardLayout({
     function handleOpenUsers() {
       setUsersDrawerOpen(true)
     }
+    function handleOpenProfile() {
+      setProfileDrawerOpen(true)
+    }
     window.addEventListener('hub:open-users-drawer', handleOpenUsers)
+    window.addEventListener('hub:open-profile-drawer', handleOpenProfile)
     return () => {
       window.removeEventListener('hub:open-users-drawer', handleOpenUsers)
+      window.removeEventListener('hub:open-profile-drawer', handleOpenProfile)
     }
   }, [])
 
@@ -248,6 +255,11 @@ export default function DashboardLayout({
       <UserManagementDrawer
         open={usersDrawerOpen}
         onOpenChange={setUsersDrawerOpen}
+      />
+
+      <ProfileDrawer
+        open={profileDrawerOpen}
+        onOpenChange={setProfileDrawerOpen}
       />
     </div>
   )
