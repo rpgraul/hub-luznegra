@@ -40,6 +40,7 @@ export default function DashboardLayout({
   const { preferences, setView, setProject, setShowAll } = usePreferences()
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const [usersDrawerOpen, setUsersDrawerOpen] = useState(false)
@@ -75,9 +76,18 @@ export default function DashboardLayout({
 
   if (!user) return null
 
-  function handleProjectCreated(project: Project) {
+  function handleProjectSaved(project: Project) {
     void queryClient.invalidateQueries({ queryKey: ['projects'] })
     setProject(project.id)
+    setEditingProject(null)
+  }
+
+  function handleProjectDeleted(projectId: string) {
+    void queryClient.invalidateQueries({ queryKey: ['projects'] })
+    if (preferences?.active_project_id === projectId) {
+      setProject(null)
+    }
+    setEditingProject(null)
   }
 
   function handleViewClick(view: DefaultView) {
@@ -153,7 +163,14 @@ export default function DashboardLayout({
         projects={projects}
         activeProjectId={preferences?.active_project_id ?? null}
         onProjectChange={setProject}
-        onCreateProject={() => setProjectModalOpen(true)}
+        onCreateProject={() => {
+          setEditingProject(null)
+          setProjectModalOpen(true)
+        }}
+        onEditProject={(p) => {
+          setEditingProject(p)
+          setProjectModalOpen(true)
+        }}
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
         tasks={tasksApi.tasks}
@@ -190,8 +207,13 @@ export default function DashboardLayout({
 
       <ProjectModal
         open={projectModalOpen}
-        onOpenChange={setProjectModalOpen}
-        onCreated={handleProjectCreated}
+        onOpenChange={(open) => {
+          setProjectModalOpen(open)
+          if (!open) setEditingProject(null)
+        }}
+        project={editingProject}
+        onSaved={handleProjectSaved}
+        onDeleted={handleProjectDeleted}
       />
 
       <NewTaskModal

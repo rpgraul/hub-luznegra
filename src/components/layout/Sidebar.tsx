@@ -259,15 +259,14 @@ export default function Sidebar({
               const isActive = activeProjectId === project.id
               const count = taskCounts[project.id] ?? 0
               return (
-                <button
+                <div
                   key={project.id}
-                  type="button"
-                  onClick={() => onProjectChange(project.id)}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition ${
+                  className={`group flex w-full items-center justify-between rounded-lg px-2 py-1.5 font-medium transition cursor-pointer ${
                     isActive
                       ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
+                  onClick={() => onProjectChange(project.id)}
                 >
                   <span className="flex min-w-0 items-center gap-2 truncate">
                     <span
@@ -276,18 +275,34 @@ export default function Sidebar({
                     />
                     <span className="truncate">{project.name}</span>
                   </span>
-                  {count > 0 && (
-                    <span
-                      className={`rounded-full px-1.5 py-0.2 text-[10px] font-semibold ${
-                        isActive
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </button>
+
+                  <div className="flex items-center gap-1">
+                    {onEditProject && (
+                      <button
+                        type="button"
+                        title={`Editar projeto "${project.name}"`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onEditProject(project)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 flex size-5 items-center justify-center rounded text-muted-foreground hover:bg-background/80 hover:text-foreground transition cursor-pointer"
+                      >
+                        <i className="fa-solid fa-gear text-[10px]" />
+                      </button>
+                    )}
+                    {count > 0 && (
+                      <span
+                        className={`rounded-full px-1.5 py-0.2 text-[10px] font-semibold ${
+                          isActive
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    )}
+                  </div>
+                </div>
               )
             })
           )}
