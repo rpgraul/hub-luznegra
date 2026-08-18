@@ -47,7 +47,7 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
 }
 
 export async function updateProject(input: UpdateProjectInput): Promise<Project> {
-  const patch: Record<string, unknown> = {}
+  const patch: Partial<Project> = {}
   if (input.name !== undefined) patch.name = input.name.trim()
   if (input.description !== undefined) patch.description = input.description?.trim() || null
   if (input.color !== undefined) patch.color = input.color
