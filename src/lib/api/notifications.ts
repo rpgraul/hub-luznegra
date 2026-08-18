@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabaseClient'
 import type { Notification } from '@/types/database'
 
-const NOTIFICATIONS_LIMIT = 10
+const NOTIFICATIONS_LIMIT = 30
 
 export async function getNotifications(): Promise<Notification[]> {
   const { data, error } = await supabase
@@ -11,7 +11,7 @@ export async function getNotifications(): Promise<Notification[]> {
     .limit(NOTIFICATIONS_LIMIT)
 
   if (error) throw new Error(error.message)
-  return data ?? []
+  return (data ?? []) as Notification[]
 }
 
 export async function getUnreadCount(): Promise<number> {
@@ -38,6 +38,24 @@ export async function markAllNotificationsRead(): Promise<void> {
     .from('notifications')
     .update({ read: true })
     .eq('read', false)
+
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteNotification(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteAllNotifications(): Promise<void> {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .neq('id', '00000000-0000-0000-0000-000000000000') // Deleta todas do usuário autenticado (respeitando RLS)
 
   if (error) throw new Error(error.message)
 }

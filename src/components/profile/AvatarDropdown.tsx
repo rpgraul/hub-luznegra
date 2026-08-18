@@ -1,14 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router'
 import { Avatar, Badge, Dropdown } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import { isInFerias } from '@/utils/format'
-import ProfileModal from '@/components/profile/ProfileModal'
+import ProfileDrawer from '@/components/profile/ProfileDrawer'
 
 export default function AvatarDropdown() {
   const { user, signOut } = useAuth()
-  const navigate = useNavigate()
   const [profileOpen, setProfileOpen] = useState(false)
 
   const displayName = user?.full_name ?? user?.username ?? 'Usuário'
@@ -56,7 +54,9 @@ export default function AvatarDropdown() {
             {user?.role === 'admin' && (
               <Dropdown.Item
                 key="usuarios"
-                onAction={() => navigate('/dashboard/admin/users')}
+                onAction={() => {
+                  window.dispatchEvent(new CustomEvent('hub:open-users-drawer'))
+                }}
               >
                 <i className="fa-solid fa-users mr-2" />
                 Gerenciar Usuários
@@ -70,7 +70,7 @@ export default function AvatarDropdown() {
         </Dropdown.Popover>
       </Dropdown.Root>
 
-      <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} />
+      <ProfileDrawer open={profileOpen} onOpenChange={setProfileOpen} />
     </>
   )
 }

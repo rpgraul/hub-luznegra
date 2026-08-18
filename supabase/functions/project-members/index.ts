@@ -1,7 +1,6 @@
-// Edge Function: membros de um projeto (dropdown de responsável).
-// Sem project_id, retorna a equipe inteira (dashboard "Todas as tarefas").
-// profiles tem RLS restritiva (só o próprio perfil), então o frontend não pode
-// listar membros diretamente — aqui a service role faz a consulta.
+// Edge Function: membros da equipe (dropdown de responsável e filtros).
+// Retorna todos os usuários ativos da equipe para que qualquer membro
+// cadastrado possa ser atribuído a tarefas ou novos projetos.
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
 
@@ -15,9 +14,6 @@ Deno.serve(async (req) => {
       return json({ error: 'Não autorizado.' }, 401)
     }
 
-    const body = (await req.json()) as { project_id?: string | null }
-    const projectId = body.project_id
-
     const token = authHeader.replace('Bearer ', '')
 
     const admin = createClient(
@@ -29,56 +25,38 @@ Deno.serve(async (req) => {
     const { data: caller } = await admin.auth.getUser(token)
     if (!caller.user) return json({ error: 'Não autorizado.' }, 401)
 
-    // Sem projeto: lista a equipe inteira (dropdowns com "Todas as tarefas").
-    if (!projectId) {
-      const { data: all } = await admin
-        .from('profiles')
-        .select('id, username, full_name')
-        .order('full_name', { nullsFirst: true })
-        .order('username')
-      return json({ data: all ?? [] })
-    }
-
-    // Confere participação usando o RPC já existente (SECURITY DEFINER, p/ authenticated)
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!,
-      { global: { headers: { Authorization: `Bearer ${token}` } } },
-    )
-    const { data: isParticipant } = await userClient.rpc('is_project_participant', {
-      p_project_id: projectId,
+    // Busca usuários de auth para filtrar desativados (banned_until)
+    const { data: authUsers } = await admin.auth.admin.listUsers({
+      perPage: 1000,
     })
-    if (!isParticipant) {
-      return json({ error: 'Você não participa deste projeto.' }, 403)
+
+    const activeUserIds = new Set<string>()
+    for (const u of authUsers?.users ?? []) {
+      const isBanned = Boolean(
+        u.banned_until &&
+        u.banned_until !== 'none' &&
+        !isNaN(new Date(u.banned_until).getTime()) &&
+        new Date(u.banned_until).getTime() > Date.now()
+      )
+      if (!isBanned) {
+        activeUserIds.add(u.id)
+      }
     }
 
-    const { data: project } = await admin
-      .from('projects')
-      .select('owner_id')
-      .eq('id', projectId)
-      .maybeSingle()
-    if (!project) return json({ error: 'Projeto não encontrado.' }, 404)
-
-    const { data: assignees } = await admin
-      .from('tasks')
-      .select('assigned_to')
-      .eq('project_id', projectId)
-      .not('assigned_to', 'is', null)
-
-    const ids = new Set<string>()
-    if (project.owner_id) ids.add(project.owner_id)
-    for (const a of assignees ?? []) {
-      if (a.assigned_to) ids.add(a.assigned_to)
-    }
-
-    if (ids.size === 0) return json({ data: [] })
-
-    const { data: profiles } = await admin
+    // Retorna todos os perfis ativos ordenados por nome / username
+    const { data: allProfiles, error: profilesError } = await admin
       .from('profiles')
       .select('id, username, full_name')
-      .in('id', Array.from(ids))
+      .order('full_name', { nullsFirst: true })
+      .order('username')
 
-    return json({ data: profiles ?? [] })
+    if (profilesError) {
+      return json({ error: profilesError.message }, 500)
+    }
+
+    const activeProfiles = (allProfiles ?? []).filter((p) => activeUserIds.has(p.id))
+
+    return json({ data: activeProfiles })
   } catch (err) {
     console.error('project-members error:', err)
     return json(

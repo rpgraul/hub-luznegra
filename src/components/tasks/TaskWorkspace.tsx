@@ -145,6 +145,37 @@ export default function TaskWorkspace({
     setDrawerOpen(true)
   }, [initialTaskId, visibleTasks])
 
+  useEffect(() => {
+    async function handleCustomOpenTask(e: Event) {
+      const customEvent = e as CustomEvent<{ taskId: string }>
+      const targetId = customEvent.detail?.taskId
+      if (!targetId) return
+
+      const found = tasks.find((t) => t.id === targetId)
+      if (found) {
+        setSelectedTask(found)
+        setDrawerOpen(true)
+        return
+      }
+
+      // Se não estiver na lista visível (ex: outro projeto ou filtro), busca via API
+      try {
+        const fetched = await tasksApi.getTask(targetId)
+        if (fetched) {
+          setSelectedTask(fetched)
+          setDrawerOpen(true)
+        }
+      } catch {
+        // ignora se não encontrar
+      }
+    }
+
+    window.addEventListener('hub:open-task-drawer', handleCustomOpenTask)
+    return () => {
+      window.removeEventListener('hub:open-task-drawer', handleCustomOpenTask)
+    }
+  }, [tasks, tasksApi])
+
   function openTask(task: Task) {
     setSelectedTask(task)
     setDrawerOpen(true)

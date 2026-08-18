@@ -37,6 +37,7 @@ export interface AdminUser {
   email: string
   username: string
   full_name: string | null
+  avatar_url?: string | null
   role: UserRoleName
   created_at: string
   last_sign_in_at: string | null

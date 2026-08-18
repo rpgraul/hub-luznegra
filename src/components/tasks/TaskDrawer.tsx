@@ -7,7 +7,6 @@ import {
   Separator,
   Select,
   ListBox,
-  AlertDialog,
 } from '@heroui/react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useTaskComments } from '@/hooks/useTaskComments'
@@ -1031,32 +1030,48 @@ export default function TaskDrawer({
         )}
       </div>
 
-      {/* Delete Confirmation Alert */}
-      <AlertDialog.Root isOpen={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialog.Backdrop />
-        <AlertDialog.Container>
-          <AlertDialog.Dialog className="rounded-md border border-border bg-card sm:max-w-md">
-            <AlertDialog.Header>
-              <AlertDialog.Heading>Excluir tarefa?</AlertDialog.Heading>
-              <p className="text-sm text-muted-foreground">
-                Esta ação é definitiva. As subtarefas desta tarefa também serão
-                excluídas.
-              </p>
-            </AlertDialog.Header>
-            <AlertDialog.Body />
-            <AlertDialog.Footer>
-              <Button variant="outline" className="rounded-md" onPress={() => setConfirmDelete(false)}>
+      {/* Delete Confirmation Modal (custom com z-index 60 para ficar sobre o Drawer) */}
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setConfirmDelete(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-rose-500/10">
+                <i className="fa-solid fa-trash-can text-lg" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Excluir Tarefa?</h3>
+                <p className="text-xs text-muted-foreground">Esta ação não poderá ser desfeita</p>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Tem certeza que deseja excluir <strong>"{currentTask?.title}"</strong>? Todas as subtarefas e comentários vinculados também serão excluídos definitivamente.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded-lg border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition shadow-2xs cursor-pointer"
+              >
                 Cancelar
-              </Button>
-              <Button variant="danger" className="rounded-md" onPress={() => void handleDelete()}>
-                <i className="fa-solid fa-trash mr-1" />
-                Excluir
-              </Button>
-            </AlertDialog.Footer>
-            <AlertDialog.CloseTrigger />
-          </AlertDialog.Dialog>
-        </AlertDialog.Container>
-      </AlertDialog.Root>
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                className="flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 transition shadow-xs cursor-pointer"
+              >
+                <i className="fa-solid fa-trash text-xs" />
+                <span>Sim, Excluir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

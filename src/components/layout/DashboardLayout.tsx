@@ -23,6 +23,7 @@ import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 import ProjectModal from '@/components/projects/ProjectModal'
 import AIAssistantModal from '@/components/ai/AIAssistantModal'
 import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
+import UserManagementDrawer from '@/components/admin/UserManagementDrawer'
 import { toast } from '@heroui/react'
 import type { Json } from '@/types/database'
 
@@ -41,11 +42,22 @@ export default function DashboardLayout({
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [usersDrawerOpen, setUsersDrawerOpen] = useState(false)
 
   const [layout, setLayout] = useState<LayoutState>(() => loadLayout())
   const [presets, setPresets] = useState<SavedPreset[]>(() => loadPresets())
 
   const tasksApi = useTasks(preferences?.show_all_tasks ?? false)
+
+  useEffect(() => {
+    function handleOpenUsers() {
+      setUsersDrawerOpen(true)
+    }
+    window.addEventListener('hub:open-users-drawer', handleOpenUsers)
+    return () => {
+      window.removeEventListener('hub:open-users-drawer', handleOpenUsers)
+    }
+  }, [])
 
   useEffect(() => {
     saveLayout(layout)
@@ -198,6 +210,11 @@ export default function DashboardLayout({
         projectName={
           projects.find((p) => p.id === preferences?.active_project_id)?.name
         }
+      />
+
+      <UserManagementDrawer
+        open={usersDrawerOpen}
+        onOpenChange={setUsersDrawerOpen}
       />
     </div>
   )

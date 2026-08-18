@@ -18,6 +18,13 @@ export interface NewProjectInput {
   color?: string
 }
 
+export interface UpdateProjectInput {
+  id: string
+  name?: string
+  description?: string | null
+  color?: string
+}
+
 export async function createProject(input: NewProjectInput): Promise<Project> {
   const {
     data: { user },
@@ -37,4 +44,30 @@ export async function createProject(input: NewProjectInput): Promise<Project> {
 
   if (error) throw new Error(error.message)
   return data
+}
+
+export async function updateProject(input: UpdateProjectInput): Promise<Project> {
+  const patch: Record<string, unknown> = {}
+  if (input.name !== undefined) patch.name = input.name.trim()
+  if (input.description !== undefined) patch.description = input.description?.trim() || null
+  if (input.color !== undefined) patch.color = input.color
+
+  const { data, error } = await supabase
+    .from('projects')
+    .update(patch)
+    .eq('id', input.id)
+    .select('*')
+    .single()
+
+  if (error) throw new Error(error.message)
+  return data
+}
+
+export async function archiveProject(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('projects')
+    .update({ archived: true })
+    .eq('id', id)
+
+  if (error) throw new Error(error.message)
 }
