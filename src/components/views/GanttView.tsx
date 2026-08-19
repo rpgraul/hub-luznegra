@@ -398,11 +398,14 @@ export default function GanttView({
     tableEl.addEventListener('scroll', onTableScroll, { passive: true })
     ganttContainer.addEventListener('scroll', onGanttScroll, { passive: true })
 
+    // Align initially
+    ganttContainer.scrollTop = tableEl.scrollTop
+
     return () => {
       tableEl.removeEventListener('scroll', onTableScroll)
       ganttContainer.removeEventListener('scroll', onGanttScroll)
     }
-  }, [showTable])
+  }, [showTable, rows])
 
   // Scroll timeline to today
   const scrollToToday = useCallback((smooth = true) => {
@@ -669,14 +672,8 @@ export default function GanttView({
           container.scrollLeft += e.deltaY || e.deltaX
         }
       } else {
-        // Normal Scroll
-        // If deltaY is dominant and we have a table, scroll the table vertically
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          if (table) {
-            table.scrollTop += e.deltaY
-          }
-        }
-        if (container && Math.abs(e.deltaX) > 0) {
+        // Horizontal scroll via touchpad or shift
+        if (container && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
           container.scrollLeft += e.deltaX
         }
       }

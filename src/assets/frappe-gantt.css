@@ -53,7 +53,7 @@ html[data-theme='dark'],
   line-height: 1.2;
   position: relative;
   overflow-x: auto !important;
-  overflow-y: hidden !important;
+  overflow-y: auto !important;
   font-size: 11px;
   height: 100%;
   width: 100%;
