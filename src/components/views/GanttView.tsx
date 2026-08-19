@@ -822,31 +822,31 @@ export default function GanttView({
       {/* Main Content Area: Left Table + Gantt SVG */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
-          {/* Collapsible Left Table with comfortable min-width */}
+          {/* Collapsible Left Table with comfortable fit and no horizontal scroll */}
           {showTable && (
             <div
               ref={tableRef}
-              className="w-[660px] min-w-[620px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-auto border-r border-border bg-background select-text pb-8"
+              className="w-[740px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8"
             >
-              <table className="w-full border-collapse text-xs">
+              <table className="w-full table-fixed border-collapse text-xs">
                 <thead>
                   <tr
                     className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800"
                     style={{ height: HEADER_HEIGHT }}
                   >
-                    <th className="w-9 min-w-[36px] px-2 text-center font-bold text-slate-800 dark:text-slate-100">
+                    <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100">
                       <i className="fa-solid fa-check text-[11px]" title="Concluir" />
                     </th>
-                    <th className="min-w-[240px] px-3 text-left font-bold text-slate-800 dark:text-slate-100">
+                    <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">
                       Tarefa & Tags
                     </th>
-                    <th className="w-28 min-w-[110px] px-2 text-left font-bold text-slate-800 dark:text-slate-100">
+                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">
                       Status
                     </th>
-                    <th className="w-32 min-w-[125px] px-2 text-left font-bold text-slate-800 dark:text-slate-100">
+                    <th className="w-32 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">
                       Início
                     </th>
-                    <th className="w-32 min-w-[125px] px-2 pr-3 text-left font-bold text-slate-800 dark:text-slate-100">
+                    <th className="w-32 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">
                       Fim
                     </th>
                   </tr>
@@ -885,7 +885,7 @@ export default function GanttView({
                           }}
                         >
                           {/* Quick Toggle Done Checkbox */}
-                          <td className="w-8 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <td className="w-8 px-1 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => handleToggleDone(task)}
@@ -901,12 +901,12 @@ export default function GanttView({
                           </td>
 
                           {/* Title & Tags (2 clicks to open) */}
-                          <td className="max-w-[280px] px-2">
+                          <td className="px-2 overflow-hidden">
                             <div
                               onDoubleClick={() => onOpenTask(task)}
                               title={`${task.title}\n(Duplo clique para abrir detalhes)`}
-                              style={{ paddingLeft: `${depth * 16}px` }}
-                              className="flex flex-col w-full text-left transition select-none"
+                              style={{ paddingLeft: `${depth * 14}px` }}
+                              className="flex flex-col w-full text-left transition select-none min-w-0"
                             >
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {isSubtask ? (
@@ -922,10 +922,10 @@ export default function GanttView({
                                       backgroundColor: isDone
                                         ? '#10b981'
                                         : isOverdue
-                                          ? '#f43f5e'
-                                          : task.assigned_to
-                                            ? userColor(task.assigned_to)
-                                            : STATUS_COLORS[task.status],
+                                            ? '#f43f5e'
+                                            : task.assigned_to
+                                              ? userColor(task.assigned_to)
+                                              : STATUS_COLORS[task.status],
                                     }}
                                   />
                                 )}
@@ -936,8 +936,8 @@ export default function GanttView({
                                     isDone
                                       ? 'line-through text-muted-foreground'
                                       : isOverdue
-                                        ? 'text-rose-600 font-semibold'
-                                        : ''
+                                          ? 'text-rose-600 font-semibold'
+                                          : ''
                                   }`}
                                 >
                                   {task.title}
@@ -979,7 +979,7 @@ export default function GanttView({
                           </td>
 
                           {/* Status */}
-                          <td className="px-2">
+                          <td className="px-1.5">
                             <select
                               value={task.status}
                               aria-label={`Status de ${task.title}`}
@@ -989,7 +989,7 @@ export default function GanttView({
                                   e.target.value as TaskStatus,
                                 )
                               }
-                              className="w-full min-w-[100px] cursor-pointer rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary focus:outline-none"
+                              className="w-full cursor-pointer rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary focus:outline-none"
                               style={{
                                 color: STATUS_COLORS[task.status],
                               }}
@@ -1015,12 +1015,12 @@ export default function GanttView({
                                   e.target.value,
                                 )
                               }
-                              className="w-full min-w-[115px] rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary"
+                              className="w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary"
                             />
                           </td>
 
                           {/* Due Date */}
-                          <td className="px-1.5 pr-3">
+                          <td className="px-1.5 pr-2">
                             <input
                               type="date"
                               value={task.due_date ?? ''}
@@ -1028,7 +1028,7 @@ export default function GanttView({
                               onChange={(e) =>
                                 handleDateChange(task, 'due_date', e.target.value)
                               }
-                              className={`w-full min-w-[115px] rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${
+                              className={`w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${
                                 isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''
                               }`}
                             />

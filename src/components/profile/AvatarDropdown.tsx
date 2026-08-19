@@ -17,6 +17,9 @@ export default function AvatarDropdown() {
     <Dropdown.Root>
       <Dropdown.Trigger>
         <Avatar size="sm" style={{ backgroundColor: userColor(user?.id ?? '') }} className="cursor-pointer">
+          {user?.avatar_url && (
+            <Avatar.Image src={user.avatar_url} alt={displayName} className="object-cover" />
+          )}
           <Avatar.Fallback className="bg-transparent text-white">
             {displayName.charAt(0).toUpperCase()}
           </Avatar.Fallback>
