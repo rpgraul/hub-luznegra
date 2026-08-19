@@ -578,12 +578,18 @@ export default function GanttView({
     }
 
     const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
+    if (ganttContainer) {
+      // Clear Frappe Gantt's inline height so container matches wrapper and scrolls vertically
+      ganttContainer.style.height = ''
+      ganttContainer.style.maxHeight = '100%'
+    }
 
     function onTableScroll() {
       if (isSyncingScroll.current) return
       isSyncingScroll.current = true
-      if (ganttContainer) {
-        ganttContainer.scrollTop = tableRef.current?.scrollTop || 0
+      const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
+      if (gContainer && tableRef.current) {
+        gContainer.scrollTop = tableRef.current.scrollTop
       }
       requestAnimationFrame(() => {
         isSyncingScroll.current = false
@@ -593,8 +599,9 @@ export default function GanttView({
     function onGanttScroll() {
       if (isSyncingScroll.current) return
       isSyncingScroll.current = true
-      if (tableRef.current && ganttContainer) {
-        tableRef.current.scrollTop = ganttContainer.scrollTop
+      const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
+      if (tableRef.current && gContainer) {
+        tableRef.current.scrollTop = gContainer.scrollTop
       }
       requestAnimationFrame(() => {
         isSyncingScroll.current = false
