@@ -368,44 +368,7 @@ export default function GanttView({
     }
   }, [commitPendingDateChange])
 
-  // Synchronize vertical scroll between table and timeline
-  useEffect(() => {
-    const tableEl = tableRef.current
-    const wrapper = wrapperRef.current
-    if (!wrapper) return
-    const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
 
-    if (!tableEl || !ganttContainer) return
-
-    function onTableScroll() {
-      if (isSyncingScroll.current) return
-      isSyncingScroll.current = true
-      ganttContainer!.scrollTop = tableEl!.scrollTop
-      requestAnimationFrame(() => {
-        isSyncingScroll.current = false
-      })
-    }
-
-    function onGanttScroll() {
-      if (isSyncingScroll.current) return
-      isSyncingScroll.current = true
-      tableEl!.scrollTop = ganttContainer!.scrollTop
-      requestAnimationFrame(() => {
-        isSyncingScroll.current = false
-      })
-    }
-
-    tableEl.addEventListener('scroll', onTableScroll, { passive: true })
-    ganttContainer.addEventListener('scroll', onGanttScroll, { passive: true })
-
-    // Align initially
-    ganttContainer.scrollTop = tableEl.scrollTop
-
-    return () => {
-      tableEl.removeEventListener('scroll', onTableScroll)
-      ganttContainer.removeEventListener('scroll', onGanttScroll)
-    }
-  }, [showTable, rows])
 
   // Scroll timeline to today
   const scrollToToday = useCallback((smooth = true) => {
@@ -614,6 +577,41 @@ export default function GanttView({
       if (task) onOpenTask(task)
     }
 
+    const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
+
+    function onTableScroll() {
+      if (isSyncingScroll.current) return
+      isSyncingScroll.current = true
+      if (ganttContainer) {
+        ganttContainer.scrollTop = tableRef.current?.scrollTop || 0
+      }
+      requestAnimationFrame(() => {
+        isSyncingScroll.current = false
+      })
+    }
+
+    function onGanttScroll() {
+      if (isSyncingScroll.current) return
+      isSyncingScroll.current = true
+      if (tableRef.current && ganttContainer) {
+        tableRef.current.scrollTop = ganttContainer.scrollTop
+      }
+      requestAnimationFrame(() => {
+        isSyncingScroll.current = false
+      })
+    }
+
+    const tableEl = tableRef.current
+    if (tableEl) {
+      tableEl.addEventListener('scroll', onTableScroll, { passive: true })
+    }
+    if (ganttContainer) {
+      ganttContainer.addEventListener('scroll', onGanttScroll, { passive: true })
+      if (tableEl) {
+        ganttContainer.scrollTop = tableEl.scrollTop
+      }
+    }
+
     wrapper.addEventListener('mousedown', handleTimelineMouseDown)
     wrapper.addEventListener('dblclick', handleDoubleClick)
 
@@ -623,6 +621,12 @@ export default function GanttView({
 
     return () => {
       clearTimeout(timer)
+      if (tableEl) {
+        tableEl.removeEventListener('scroll', onTableScroll)
+      }
+      if (ganttContainer) {
+        ganttContainer.removeEventListener('scroll', onGanttScroll)
+      }
       wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
       wrapper.removeEventListener('dblclick', handleDoubleClick)
       if (gantt) {
@@ -633,7 +637,7 @@ export default function GanttView({
       ganttInstanceRef.current = null
       lastZoomRef.current = null
     }
-  }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today])
+  }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today, showTable])
 
   // Zoom & Smooth 2D Scroll + Middle-Click Pan listener
   useEffect(() => {
@@ -671,11 +675,6 @@ export default function GanttView({
           e.preventDefault()
           container.scrollLeft += e.deltaY || e.deltaX
         }
-      } else {
-        // Horizontal scroll via touchpad or shift
-        if (container && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-          container.scrollLeft += e.deltaX
-        }
       }
     }
 
@@ -704,6 +703,7 @@ export default function GanttView({
 
       if (container) {
         container.scrollLeft = scrollStartLeft - dx
+        container.scrollTop = scrollStartTop - dy
       }
       if (table) {
         table.scrollTop = scrollStartTop - dy
@@ -734,6 +734,7 @@ export default function GanttView({
     window.addEventListener('mouseup', handleMouseUp)
 
     if (table) {
+      table.addEventListener('wheel', handleWheel, { passive: false })
       table.addEventListener('mousedown', handleMouseDown)
       table.addEventListener('auxclick', handleAuxClick)
     }
@@ -745,6 +746,7 @@ export default function GanttView({
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
       if (table) {
+        table.removeEventListener('wheel', handleWheel)
         table.removeEventListener('mousedown', handleMouseDown)
         table.removeEventListener('auxclick', handleAuxClick)
       }
