@@ -88,6 +88,11 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
 
 export async function updateTask(id: string, patch: TaskPatch): Promise<Task> {
   const updatePayload = { ...patch }
+  // Remove campos virtuais/não persistidos no banco caso existam
+  if ('tags' in updatePayload) {
+    delete updatePayload.tags
+  }
+
   const { data, error } = await supabase
     .from('tasks')
     .update(updatePayload)
