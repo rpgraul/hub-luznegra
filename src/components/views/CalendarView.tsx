@@ -431,11 +431,11 @@ export default function CalendarView({
               style: {
                 backgroundColor: baseColor,
                 color: 'white',
-                borderRadius: '6px',
-                border: isOverdue ? '1.5px solid #f43f5e' : 'none',
-                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
-                padding: '2px',
-                minHeight: '26px',
+                borderRadius: '8px',
+                border: isOverdue ? '2px solid #f43f5e' : '1px solid rgba(255, 255, 255, 0.15)',
+                boxShadow: '0 2px 5px -1px rgba(0, 0, 0, 0.25), 0 1px 3px -1px rgba(0, 0, 0, 0.15)',
+                padding: '3px',
+                minHeight: '36px',
               },
             }
           }}
