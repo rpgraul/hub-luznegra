@@ -244,8 +244,7 @@ export default function CalendarView({
             )}
 
             {isOverdue && (
-              <span className="rounded-md bg-amber-400 text-amber-950 px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-xs border border-amber-300">
-                <i className="fa-solid fa-triangle-exclamation mr-1 text-[8px]" />
+              <span className="rounded-md bg-rose-600 text-white px-2 py-0.5 text-[9px] font-extrabold tracking-wide shadow-xs">
                 Atrasada
               </span>
             )}
@@ -460,7 +459,6 @@ export default function CalendarView({
           eventPropGetter={(event) => {
             const task = event.task
             const isDone = task.status === 'done'
-            const isOverdue = event.isOverdue
 
             // Base color: preserve assignee userColor (or status color), keeping identity clear
             const baseColor = isDone
@@ -474,12 +472,8 @@ export default function CalendarView({
                 backgroundColor: baseColor,
                 color: 'white',
                 borderRadius: '8px',
-                border: isOverdue
-                  ? '2px solid #ef4444'
-                  : '1px solid rgba(255, 255, 255, 0.2)',
-                boxShadow: isOverdue
-                  ? '0 0 0 1px #b91c1c, 0 3px 8px rgba(239, 68, 68, 0.35)'
-                  : '0 2px 5px -1px rgba(0, 0, 0, 0.25), 0 1px 3px -1px rgba(0, 0, 0, 0.15)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                boxShadow: '0 2px 5px -1px rgba(0, 0, 0, 0.25), 0 1px 3px -1px rgba(0, 0, 0, 0.15)',
                 padding: '3px',
                 minHeight: '36px',
               },
