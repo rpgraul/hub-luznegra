@@ -211,10 +211,11 @@
 
 /* Events container & styling */
 .rbc-event {
-  padding: 0 !important;
-  background: transparent !important;
-  border: none !important;
-  margin: 1.5px 3px !important;
+  padding: 2px 4px !important;
+  border-radius: 6px !important;
+  margin: 1.5px 2px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
 }
 
 .rbc-event:focus {
@@ -224,6 +225,7 @@
 
 .rbc-event-content {
   font-size: 11px !important;
+  color: inherit !important;
 }
 
 .rbc-row-segment {

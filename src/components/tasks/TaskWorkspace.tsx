@@ -190,7 +190,14 @@ export default function TaskWorkspace({
   }
 
   function openNewTask(start?: Date) {
-    setCreateStartDate(start ? start.toISOString() : null)
+    if (start) {
+      const year = start.getFullYear()
+      const month = String(start.getMonth() + 1).padStart(2, '0')
+      const day = String(start.getDate()).padStart(2, '0')
+      setCreateStartDate(`${year}-${month}-${day}`)
+    } else {
+      setCreateStartDate(null)
+    }
     setCreateOpen(true)
   }
 

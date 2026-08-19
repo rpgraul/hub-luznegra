@@ -209,28 +209,27 @@ export default function CalendarView({
     return (
       <div
         className={`group relative flex flex-col justify-between overflow-hidden rounded-md p-1.5 leading-tight transition select-none ${
-          isDone ? 'opacity-65' : ''
+          isDone ? 'opacity-70' : ''
         }`}
         title={`${task.title}\nStatus: ${statusLabel}\nProjeto: ${project?.name || 'Sem projeto'}\nPrazo: ${
           task.due_date ? formatDate(task.due_date) : 'Sem prazo'
         }`}
       >
-        {/* Header line: Status dot, Title, Assignee avatar */}
-        <div className="flex items-center justify-between gap-1 min-w-0">
-          <div className="flex items-center gap-1 min-w-0 flex-1">
-            {/* Status dot */}
+        {/* Top line: Project indicator badge + Status + Avatar */}
+        <div className="flex items-center justify-between gap-1 mb-1">
+          <div className="flex items-center gap-1 min-w-0">
+            {project && (
+              <span
+                className="truncate rounded px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider text-white shadow-2xs"
+                style={{ backgroundColor: project.color || '#7b68ee' }}
+              >
+                {project.name}
+              </span>
+            )}
             <span
-              className="size-1.5 shrink-0 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[task.status] || '#94a3b8' }}
-            />
-
-            {/* Title */}
-            <span
-              className={`truncate text-xs font-semibold ${
-                isDone ? 'line-through opacity-80' : ''
-              } ${isOverdue ? 'text-rose-200 font-bold' : 'text-white'}`}
+              className="rounded bg-black/25 px-1 py-0.2 text-[8px] font-semibold text-white/90 backdrop-blur-xs"
             >
-              {task.title}
+              {statusLabel}
             </span>
           </div>
 
@@ -250,7 +249,7 @@ export default function CalendarView({
               </span>
             )}
 
-            {/* Assignee Avatar */}
+            {/* Assignee Avatar with real photo */}
             {assignees.length > 0 ? (
               <div className="flex items-center -space-x-1">
                 {assignees.slice(0, 2).map((m) => {
@@ -259,7 +258,7 @@ export default function CalendarView({
                   return (
                     <div
                       key={m.id}
-                      className="size-4.5 shrink-0 overflow-hidden rounded-full ring-1 ring-white/40 shadow-2xs"
+                      className="size-5 shrink-0 overflow-hidden rounded-full ring-1.5 ring-white/50 shadow-2xs"
                       style={{ backgroundColor: userColor(m.id) }}
                       title={name}
                     >
@@ -273,7 +272,7 @@ export default function CalendarView({
                           }}
                         />
                       ) : (
-                        <span className="flex size-full items-center justify-center text-[7px] font-bold text-white">
+                        <span className="flex size-full items-center justify-center text-[7.5px] font-bold text-white">
                           {initials}
                         </span>
                       )}
@@ -283,7 +282,7 @@ export default function CalendarView({
               </div>
             ) : task.assigned_to ? (
               <div
-                className="flex size-4.5 shrink-0 items-center justify-center rounded-full text-[7px] font-bold text-white ring-1 ring-white/30"
+                className="flex size-5 shrink-0 items-center justify-center rounded-full text-[7.5px] font-bold text-white ring-1.5 ring-white/40"
                 style={{ backgroundColor: userColor(task.assigned_to) }}
               >
                 {task.assigned_to.slice(0, 2).toUpperCase()}
@@ -292,19 +291,30 @@ export default function CalendarView({
           </div>
         </div>
 
+        {/* Task Title */}
+        <div className="min-w-0">
+          <span
+            className={`block truncate text-xs font-bold ${
+              isDone ? 'line-through opacity-80' : ''
+            } ${isOverdue ? 'text-rose-100 font-extrabold' : 'text-white'}`}
+          >
+            {task.title}
+          </span>
+        </div>
+
         {/* Tags line (if present) */}
         {tags.length > 0 && (
           <div className="mt-1 flex flex-wrap items-center gap-1 overflow-hidden">
             {tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="rounded bg-black/20 px-1 py-0.2 text-[8px] font-medium text-white/90 backdrop-blur-xs"
+                className="rounded bg-black/30 px-1.5 py-0.2 text-[8.5px] font-semibold text-white/95 backdrop-blur-xs"
               >
                 #{tag}
               </span>
             ))}
             {tags.length > 3 && (
-              <span className="text-[8px] text-white/70">+{tags.length - 3}</span>
+              <span className="text-[8px] text-white/80 font-medium">+{tags.length - 3}</span>
             )}
           </div>
         )}

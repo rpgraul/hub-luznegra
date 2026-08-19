@@ -82,8 +82,9 @@ export default function NewTaskModal({
     setStatus('todo')
     setPriority('medium')
     setAssignedTo(currentUserId)
-    setStartDate(initialStartDate ? initialStartDate.slice(0, 10) : '')
-    setDueDate('')
+    const initDate = initialStartDate ? initialStartDate.slice(0, 10) : ''
+    setStartDate(initDate)
+    setDueDate(initDate)
     setHours('')
     setDescription(null)
     setSubtasks([])
