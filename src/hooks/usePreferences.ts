@@ -46,6 +46,7 @@ export function usePreferences() {
     setProject: (projectId: string | null) =>
       mutation.mutate({ active_project_id: projectId }),
     setShowAll: (show: boolean) => mutation.mutate({ show_all_tasks: show }),
+    setHideDone: (hide: boolean) => mutation.mutate({ hide_done_tasks: hide }),
     isSaving: mutation.isPending,
   }
 }

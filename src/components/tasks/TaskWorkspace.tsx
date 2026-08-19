@@ -38,6 +38,7 @@ interface TaskWorkspaceProps {
   initialTaskId?: string
   projects: Project[]
   showAllTasks: boolean
+  hideDoneTasks?: boolean
   layout: LayoutState
   onLayoutChange: (layout: LayoutState) => void
 }
@@ -113,6 +114,7 @@ export default function TaskWorkspace({
   initialTaskId,
   projects,
   showAllTasks,
+  hideDoneTasks = false,
   layout,
   onLayoutChange,
 }: TaskWorkspaceProps) {
@@ -133,9 +135,15 @@ export default function TaskWorkspace({
   const { memberOf } = useProjectMembers(activeProjectId)
 
   const visibleTasks = useMemo(() => {
-    if (!activeProjectId) return tasks
-    return tasks.filter((task) => task.project_id === activeProjectId)
-  }, [tasks, activeProjectId])
+    let list = tasks
+    if (activeProjectId) {
+      list = list.filter((task) => task.project_id === activeProjectId)
+    }
+    if (hideDoneTasks) {
+      list = list.filter((task) => task.status !== 'done')
+    }
+    return list
+  }, [tasks, activeProjectId, hideDoneTasks])
 
   useEffect(() => {
     if (!initialTaskId || !visibleTasks) return

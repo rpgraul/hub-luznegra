@@ -34,6 +34,8 @@ interface TopBarProps {
   onSavePreset: (name: string) => void
   onDeletePreset: (id: string) => void
   onOpenNewTask?: () => void
+  hideDoneTasks?: boolean
+  onHideDoneChange?: (hide: boolean) => void
 }
 
 const HOLD_DELAY = 450
@@ -49,6 +51,8 @@ export default function TopBar({
   onSavePreset,
   onDeletePreset,
   onOpenNewTask,
+  hideDoneTasks = false,
+  onHideDoneChange,
 }: TopBarProps) {
   const [savePresetOpen, setSavePresetOpen] = useState(false)
   const [presetName, setPresetName] = useState('')
@@ -155,6 +159,34 @@ export default function TopBar({
 
       {/* Right Side: Presets, New Task & User Actions */}
       <div className="flex items-center gap-2">
+        {/* Toggle Hide Done Tasks */}
+        {onHideDoneChange && (
+          <Button
+            variant={hideDoneTasks ? 'secondary' : 'ghost'}
+            size="sm"
+            onPress={() => onHideDoneChange(!hideDoneTasks)}
+            aria-label={
+              hideDoneTasks
+                ? 'Concluídas estão ocultas. Clique para exibir.'
+                : 'Concluídas estão visíveis. Clique para ocultar.'
+            }
+            className={`h-8 gap-1.5 text-xs font-semibold ${
+              hideDoneTasks
+                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shadow-2xs'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <i
+              className={`fa-solid ${
+                hideDoneTasks ? 'fa-eye-slash text-amber-500' : 'fa-circle-check text-emerald-500'
+              } text-xs`}
+            />
+            <span className="hidden sm:inline">
+              {hideDoneTasks ? 'Concluídas ocultas' : 'Ocultar concluídas'}
+            </span>
+          </Button>
+        )}
+
         {/* Layout Presets Dropdown */}
         <Dropdown.Root>
           <Dropdown.Trigger>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Calendar, momentLocalizer, type View } from 'react-big-calendar'
 import type { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop'
 import { withDragAndDrop } from '@/lib/withDragAndDrop'
@@ -52,7 +53,11 @@ function addDays(date: Date, days: number): Date {
 
 function toDate(iso: string | null): Date | null {
   if (!iso) return null
-  return new Date(`${iso}T00:00:00`)
+  const parts = iso.split('-').map(Number)
+  if (parts.length !== 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return null
+  }
+  return new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0)
 }
 
 export default function CalendarView({
@@ -61,11 +66,18 @@ export default function CalendarView({
   onSelectSlot,
   updateTask,
 }: CalendarViewProps) {
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date())
+  const [currentView, setCurrentView] = useState<View>('month')
+
   const events: CalendarEvent[] = tasks
     .map((task) => {
-      const start = toDate(task.start_date ?? task.due_date)
-      const end = toDate(task.due_date ?? task.start_date)
-      if (!start || !end) return null
+      const rawStart = toDate(task.start_date ?? task.due_date)
+      const rawEnd = toDate(task.due_date ?? task.start_date)
+      if (!rawStart || !rawEnd) return null
+
+      const start = rawStart <= rawEnd ? rawStart : rawEnd
+      const end = rawEnd >= rawStart ? rawEnd : rawStart
+
       return {
         id: task.id,
         title: task.title,
@@ -111,7 +123,10 @@ export default function CalendarView({
         <DnDCalendar
           localizer={localizer}
           events={events}
-          defaultView="month"
+          date={currentDate}
+          onNavigate={(newDate) => setCurrentDate(newDate)}
+          view={currentView}
+          onView={(newView) => setCurrentView(newView)}
           views={['month', 'week', 'day'] as View[]}
           messages={MESSAGES}
           culture="pt-br"
@@ -131,7 +146,7 @@ export default function CalendarView({
               borderRadius: '6px',
               border: 'none',
               fontSize: '0.75rem',
-              opacity: event.task.status === 'done' ? 0.5 : 1,
+              opacity: event.task.status === 'done' ? 0.6 : 1,
             },
           })}
         />

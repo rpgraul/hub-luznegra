@@ -39,7 +39,7 @@ export default function DashboardLayout({
   initialTaskId,
 }: DashboardLayoutProps) {
   const { user } = useAuth()
-  const { preferences, setView, setProject, setShowAll } = usePreferences()
+  const { preferences, setView, setProject, setShowAll, setHideDone } = usePreferences()
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [archivedModalOpen, setArchivedModalOpen] = useState(false)
@@ -183,6 +183,8 @@ export default function DashboardLayout({
         onOpenArchivedProjects={() => setArchivedModalOpen(true)}
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
+        hideDoneTasks={preferences?.hide_done_tasks ?? false}
+        onHideDoneChange={setHideDone}
         tasks={tasksApi.tasks}
         onOpenAi={() => setAiModalOpen(true)}
       />
@@ -200,6 +202,8 @@ export default function DashboardLayout({
           onSavePreset={handleSavePreset}
           onDeletePreset={handleDeletePreset}
           onOpenNewTask={() => setCreateTaskOpen(true)}
+          hideDoneTasks={preferences?.hide_done_tasks ?? false}
+          onHideDoneChange={setHideDone}
         />
 
         <main className="flex-1 min-h-0 overflow-hidden">
@@ -208,6 +212,7 @@ export default function DashboardLayout({
               initialTaskId={initialTaskId}
               projects={projects}
               showAllTasks={preferences?.show_all_tasks ?? false}
+              hideDoneTasks={preferences?.hide_done_tasks ?? false}
               layout={layout}
               onLayoutChange={setLayout}
             />

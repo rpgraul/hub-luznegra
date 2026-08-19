@@ -13,6 +13,8 @@ interface SidebarProps {
   onOpenArchivedProjects?: () => void
   showAllTasks: boolean
   onShowAllChange: (show: boolean) => void
+  hideDoneTasks?: boolean
+  onHideDoneChange?: (hide: boolean) => void
   tasks?: Task[]
   onOpenAi?: () => void
 }
@@ -26,6 +28,8 @@ export default function Sidebar({
   onOpenArchivedProjects,
   showAllTasks,
   onShowAllChange,
+  hideDoneTasks = false,
+  onHideDoneChange,
   tasks = [],
   onOpenAi,
 }: SidebarProps) {
@@ -190,7 +194,7 @@ export default function Sidebar({
       </div>
 
       {/* Main Navigation Items */}
-      <div className="px-2 py-0.5 text-xs">
+      <div className="px-2 py-0.5 space-y-1 text-xs">
         <button
           type="button"
           onClick={() => onShowAllChange(!showAllTasks)}
@@ -213,6 +217,35 @@ export default function Sidebar({
           </span>
           <i className="fa-solid fa-arrow-right-arrow-left text-[10px] text-muted-foreground/50 transition-transform group-hover:text-muted-foreground" />
         </button>
+
+        {onHideDoneChange && (
+          <button
+            type="button"
+            onClick={() => onHideDoneChange(!hideDoneTasks)}
+            title={
+              hideDoneTasks
+                ? 'Tarefas concluídas estão ocultas. Clique para exibir.'
+                : 'Tarefas concluídas estão visíveis. Clique para ocultar.'
+            }
+            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <span className="flex items-center gap-2">
+              <i
+                className={`fa-solid ${
+                  hideDoneTasks ? 'fa-eye-slash text-amber-500/80' : 'fa-circle-check text-emerald-500'
+                } text-[11px]`}
+              />
+              <span className="text-xs">
+                Concluídas: <span className="font-semibold text-foreground">{hideDoneTasks ? 'Ocultas' : 'Exibidas'}</span>
+              </span>
+            </span>
+            <i
+              className={`fa-solid fa-toggle-${
+                hideDoneTasks ? 'off text-muted-foreground/50' : 'on text-emerald-500'
+              } text-xs transition-colors`}
+            />
+          </button>
+        )}
       </div>
 
       <div className="my-1 mx-2 h-px bg-border/80" />

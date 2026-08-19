@@ -28,6 +28,7 @@ export type UserPreferences = {
   default_view: DefaultView
   active_project_id: string | null
   show_all_tasks: boolean
+  hide_done_tasks?: boolean
   updated_at: string
 }
 

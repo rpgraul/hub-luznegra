@@ -196,10 +196,19 @@ export default function GanttView({
   const ganttTasks = useMemo(
     () =>
       rows.map(({ task, undated, isSubtask }) => {
-        const start = task.start_date ?? today
-        const end = task.due_date
-          ? addDaysLocal(task.due_date, 1)
-          : addDaysLocal(task.start_date ?? today, 1)
+        const rawStart = task.start_date ?? today
+        const rawEnd = task.due_date ?? task.start_date ?? today
+
+        let start = rawStart
+        let end = rawEnd
+
+        // Ensure start is not after end
+        if (start > end) {
+          start = end
+        }
+
+        // Add 1 day to end for Frappe Gantt boundary (must strictly be > start)
+        const finalEnd = addDaysLocal(end, 1)
 
         let progress = 0
         let isOverdue = false
@@ -248,7 +257,7 @@ export default function GanttView({
           id: task.id,
           name: taskTitle.length > 35 ? `${taskTitle.slice(0, 34)}…` : taskTitle,
           start,
-          end,
+          end: finalEnd,
           progress,
           dependencies: task.parent_id ? [task.parent_id] : undefined,
           custom_class: customClass,
