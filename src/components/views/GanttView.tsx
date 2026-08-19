@@ -826,7 +826,7 @@ export default function GanttView({
           {showTable && (
             <div
               ref={tableRef}
-              className="w-[580px] min-w-[560px] max-w-[50vw] shrink-0 overflow-y-auto overflow-x-auto border-r border-border bg-background select-text pb-8"
+              className="w-[660px] min-w-[620px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-auto border-r border-border bg-background select-text pb-8"
             >
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -837,7 +837,7 @@ export default function GanttView({
                     <th className="w-9 min-w-[36px] px-2 text-center font-bold text-slate-800 dark:text-slate-100">
                       <i className="fa-solid fa-check text-[11px]" title="Concluir" />
                     </th>
-                    <th className="min-w-[170px] px-3 text-left font-bold text-slate-800 dark:text-slate-100">
+                    <th className="min-w-[240px] px-3 text-left font-bold text-slate-800 dark:text-slate-100">
                       Tarefa & Tags
                     </th>
                     <th className="w-28 min-w-[110px] px-2 text-left font-bold text-slate-800 dark:text-slate-100">
@@ -901,10 +901,10 @@ export default function GanttView({
                           </td>
 
                           {/* Title & Tags (2 clicks to open) */}
-                          <td className="max-w-[200px] px-2">
+                          <td className="max-w-[280px] px-2">
                             <div
                               onDoubleClick={() => onOpenTask(task)}
-                              title="2 cliques para abrir detalhes"
+                              title={`${task.title}\n(Duplo clique para abrir detalhes)`}
                               style={{ paddingLeft: `${depth * 16}px` }}
                               className="flex flex-col w-full text-left transition select-none"
                             >
