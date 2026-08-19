@@ -245,7 +245,7 @@ export default function NotificationBell({
 
       {/* Painel Flutuante de Notificações */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 w-88 sm:w-96 rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl z-50 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150">
+        <div className="fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-1 w-[calc(100vw-1rem)] sm:w-96 max-w-sm rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl z-[9999] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150">
           {/* Header do Painel */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
             <div className="flex items-center gap-2">
