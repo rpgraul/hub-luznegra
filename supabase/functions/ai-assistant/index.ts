@@ -366,7 +366,13 @@ FORMATO OBRIGATÓRIO (JSON puro):
     function resolveMemberId(identifier: unknown): string {
       if (!identifier || typeof identifier !== 'string') return userId
       const clean = identifier.replace(/^@/, '').toLowerCase().trim()
-      const found = (members ?? []).find((m) => m.id === clean || m.username.toLowerCase() === clean)
+      const found = (members ?? []).find(
+        (m) =>
+          m.id === clean ||
+          m.username.toLowerCase() === clean ||
+          (m.full_name && m.full_name.toLowerCase().includes(clean)) ||
+          clean.includes(m.username.toLowerCase())
+      )
       return found ? found.id : userId
     }
 
