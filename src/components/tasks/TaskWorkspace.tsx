@@ -287,6 +287,8 @@ export default function TaskWorkspace({
         return (
           <CalendarView
             tasks={visibleTasks}
+            projects={projects}
+            memberOf={memberOf}
             onOpenTask={openTask}
             onSelectSlot={openNewTask}
             updateTask={tasksApi.updateTask}

@@ -1,13 +1,15 @@
-import { useState } from 'react'
-import { Calendar, momentLocalizer, type View } from 'react-big-calendar'
+import { useState, useMemo } from 'react'
+import { Calendar, momentLocalizer, type View, type EventProps } from 'react-big-calendar'
 import type { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop'
 import { withDragAndDrop } from '@/lib/withDragAndDrop'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import 'react-big-calendar/lib/addons/dragAndDrop/styles.css'
 import moment from 'moment/min/moment-with-locales'
-import { toast } from '@heroui/react'
+import { toast, Button } from '@heroui/react'
 import { userColor } from '@/utils/colors'
-import type { Task } from '@/types/database'
+import { formatDate, todayIso } from '@/utils/format'
+import type { Project, Task } from '@/types/database'
+import type { ProjectMember } from '@/lib/api/members'
 
 moment.locale('pt-br')
 const localizer = momentLocalizer(moment)
@@ -19,11 +21,15 @@ interface CalendarEvent {
   start: Date
   end: Date
   allDay: boolean
+  isSpan: boolean
+  isOverdue: boolean
   task: Task
 }
 
 interface CalendarViewProps {
   tasks: Task[]
+  projects?: Project[]
+  memberOf?: (id: string | null) => ProjectMember | null
   onOpenTask: (task: Task) => void
   onSelectSlot: (start: Date) => void
   updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
@@ -45,6 +51,22 @@ const MESSAGES = {
   showMore: (total: number) => `+${total} mais`,
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  backlog: 'Backlog',
+  todo: 'A Fazer',
+  in_progress: 'Em Andamento',
+  review: 'Revisão',
+  done: 'Concluído',
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  backlog: '#94a3b8',
+  todo: '#38bdf8',
+  in_progress: '#818cf8',
+  review: '#fbbf24',
+  done: '#34d399',
+}
+
 function addDays(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
@@ -62,32 +84,70 @@ function toDate(iso: string | null): Date | null {
 
 export default function CalendarView({
   tasks,
+  projects = [],
+  memberOf,
   onOpenTask,
   onSelectSlot,
   updateTask,
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date())
   const [currentView, setCurrentView] = useState<View>('month')
+  const [filterMode, setFilterMode] = useState<'all' | 'due_only'>('all')
 
-  const events: CalendarEvent[] = tasks
-    .map((task) => {
-      const rawStart = toDate(task.start_date ?? task.due_date)
-      const rawEnd = toDate(task.due_date ?? task.start_date)
-      if (!rawStart || !rawEnd) return null
+  const today = todayIso()
 
-      const start = rawStart <= rawEnd ? rawStart : rawEnd
-      const end = rawEnd >= rawStart ? rawEnd : rawStart
+  const projectMap = useMemo(() => {
+    const map = new Map<string, Project>()
+    projects.forEach((p) => map.set(p.id, p))
+    return map
+  }, [projects])
 
-      return {
-        id: task.id,
-        title: task.title,
-        start,
-        end: addDays(end, 1),
-        allDay: true,
-        task,
-      }
-    })
-    .filter((event): event is CalendarEvent => event !== null)
+  const events: CalendarEvent[] = useMemo(() => {
+    return tasks
+      .map((task) => {
+        if (filterMode === 'due_only') {
+          // Show only at due_date (or start_date if no due_date)
+          const targetDateStr = task.due_date ?? task.start_date
+          const targetDate = toDate(targetDateStr)
+          if (!targetDate) return null
+
+          const isOverdue = task.status !== 'done' && !!task.due_date && today > task.due_date
+
+          return {
+            id: task.id,
+            title: task.title,
+            start: targetDate,
+            end: addDays(targetDate, 1),
+            allDay: true,
+            isSpan: false,
+            isOverdue,
+            task,
+          }
+        }
+
+        const rawStart = toDate(task.start_date ?? task.due_date)
+        const rawEnd = toDate(task.due_date ?? task.start_date)
+        if (!rawStart || !rawEnd) return null
+
+        const start = rawStart <= rawEnd ? rawStart : rawEnd
+        const end = rawEnd >= rawStart ? rawEnd : rawStart
+
+        const isSpan = task.start_date !== null && task.due_date !== null && task.start_date !== task.due_date
+        const isOverdue = task.status !== 'done' && !!task.due_date && today > task.due_date
+
+        return {
+          id: task.id,
+          title: task.title,
+          start,
+          end: addDays(end, 1),
+          allDay: true,
+          isSpan,
+          isOverdue,
+          task,
+        }
+      })
+      .filter((event): event is CalendarEvent => event !== null)
+  }, [tasks, filterMode, today])
 
   const handleEventDrop: withDragAndDropProps<CalendarEvent>['onEventDrop'] = ({
     event,
@@ -117,9 +177,211 @@ export default function CalendarView({
     }).catch(() => toast.danger('Não foi possível salvar as datas.'))
   }
 
+  // Custom Event component to show rich metadata: tags, assignee avatar, status badge
+  function CustomEventComponent({ event }: EventProps<CalendarEvent>) {
+    const task = event.task
+    const isDone = task.status === 'done'
+    const isOverdue = event.isOverdue
+
+    const project = task.project_id ? projectMap.get(task.project_id) : null
+    const tags = task.tags ?? []
+
+    const assigneeIds =
+      task.assignees && task.assignees.length > 0
+        ? task.assignees
+        : task.assigned_to
+          ? [task.assigned_to]
+          : []
+
+    const assignees = assigneeIds
+      .map((id) => (memberOf ? memberOf(id) : null))
+      .filter((m): m is ProjectMember => !!m)
+
+    const priorityBadge =
+      task.priority === 'urgent'
+        ? { label: 'Urgente', color: 'bg-rose-500 text-white' }
+        : task.priority === 'high'
+          ? { label: 'Alta', color: 'bg-amber-500 text-white' }
+          : null
+
+    const statusLabel = STATUS_LABELS[task.status] || task.status
+
+    return (
+      <div
+        className={`group relative flex flex-col justify-between overflow-hidden rounded-md p-1.5 leading-tight transition select-none ${
+          isDone ? 'opacity-65' : ''
+        }`}
+        title={`${task.title}\nStatus: ${statusLabel}\nProjeto: ${project?.name || 'Sem projeto'}\nPrazo: ${
+          task.due_date ? formatDate(task.due_date) : 'Sem prazo'
+        }`}
+      >
+        {/* Header line: Status dot, Title, Assignee avatar */}
+        <div className="flex items-center justify-between gap-1 min-w-0">
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            {/* Status dot */}
+            <span
+              className="size-1.5 shrink-0 rounded-full"
+              style={{ backgroundColor: STATUS_COLORS[task.status] || '#94a3b8' }}
+            />
+
+            {/* Title */}
+            <span
+              className={`truncate text-xs font-semibold ${
+                isDone ? 'line-through opacity-80' : ''
+              } ${isOverdue ? 'text-rose-200 font-bold' : 'text-white'}`}
+            >
+              {task.title}
+            </span>
+          </div>
+
+          {/* Right badges & Avatar */}
+          <div className="flex items-center gap-1 shrink-0">
+            {priorityBadge && (
+              <span
+                className={`rounded px-1 py-0.2 text-[8px] font-bold uppercase tracking-wider ${priorityBadge.color}`}
+              >
+                {priorityBadge.label}
+              </span>
+            )}
+
+            {isOverdue && (
+              <span className="rounded bg-rose-600 px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
+                Atrasada
+              </span>
+            )}
+
+            {/* Assignee Avatar */}
+            {assignees.length > 0 ? (
+              <div className="flex items-center -space-x-1">
+                {assignees.slice(0, 2).map((m) => {
+                  const name = m.full_name || m.username || 'User'
+                  const initials = (m.username || name).slice(0, 2).toUpperCase()
+                  return (
+                    <div
+                      key={m.id}
+                      className="size-4.5 shrink-0 overflow-hidden rounded-full ring-1 ring-white/40 shadow-2xs"
+                      style={{ backgroundColor: userColor(m.id) }}
+                      title={name}
+                    >
+                      {m.avatar_url ? (
+                        <img
+                          src={m.avatar_url}
+                          alt={name}
+                          className="size-full object-cover"
+                          onError={(e) => {
+                            ;(e.currentTarget as HTMLElement).style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        <span className="flex size-full items-center justify-center text-[7px] font-bold text-white">
+                          {initials}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : task.assigned_to ? (
+              <div
+                className="flex size-4.5 shrink-0 items-center justify-center rounded-full text-[7px] font-bold text-white ring-1 ring-white/30"
+                style={{ backgroundColor: userColor(task.assigned_to) }}
+              >
+                {task.assigned_to.slice(0, 2).toUpperCase()}
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Tags line (if present) */}
+        {tags.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1 overflow-hidden">
+            {tags.slice(0, 3).map((tag) => (
+              <span
+                key={tag}
+                className="rounded bg-black/20 px-1 py-0.2 text-[8px] font-medium text-white/90 backdrop-blur-xs"
+              >
+                #{tag}
+              </span>
+            ))}
+            {tags.length > 3 && (
+              <span className="text-[8px] text-white/70">+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="h-full p-4">
-      <div className="h-full overflow-hidden rounded-xl border bg-background">
+    <div className="flex h-full flex-col bg-background p-4 select-none">
+      {/* Top Controls Toolbar */}
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card/60 px-4 py-2 text-xs backdrop-blur shadow-2xs">
+        {/* Left Side: Stats & Legend */}
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-foreground">
+            {events.length} tarefa{events.length !== 1 ? 's' : ''} agendada{events.length !== 1 ? 's' : ''}
+          </span>
+
+          <div className="hidden sm:flex items-center gap-2 border-l border-border pl-3 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-full bg-[#818cf8]" />
+              <span>Em Andamento</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-full bg-[#38bdf8]" />
+              <span>A Fazer</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-full bg-[#34d399]" />
+              <span>Concluído</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Right Side: Mode Switcher & Month Quick Jump */}
+        <div className="flex items-center gap-2">
+          {/* Mode Switcher */}
+          <div className="flex items-center rounded-lg border border-border bg-background p-0.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
+                filterMode === 'all'
+                  ? 'bg-primary text-primary-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <i className="fa-solid fa-arrows-left-right mr-1.5 text-[10px]" />
+              Período Completo
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('due_only')}
+              className={`rounded px-2.5 py-1 text-xs font-semibold transition ${
+                filterMode === 'due_only'
+                  ? 'bg-primary text-primary-foreground shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <i className="fa-regular fa-calendar-check mr-1.5 text-[10px]" />
+              Apenas Entregas (Deadlines)
+            </button>
+          </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7.5 gap-1.5 text-xs font-semibold"
+            onPress={() => setCurrentDate(new Date())}
+          >
+            <i className="fa-solid fa-calendar-day text-xs" />
+            <span>Mês Atual</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Calendar Area */}
+      <div className="h-full min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background shadow-xs">
         <DnDCalendar
           localizer={localizer}
           events={events}
@@ -133,22 +395,39 @@ export default function CalendarView({
           selectable
           resizable
           longPressThreshold={150}
+          components={{
+            event: CustomEventComponent,
+          }}
           onSelectEvent={(event) => onOpenTask(event.task)}
           onSelectSlot={(slotInfo) => onSelectSlot(slotInfo.start)}
           onEventDrop={handleEventDrop}
           onEventResize={handleEventResize}
-          eventPropGetter={(event) => ({
-            style: {
-              backgroundColor: event.task.assigned_to
-                ? userColor(event.task.assigned_to)
-                : '#6B7280',
-              color: 'white',
-              borderRadius: '6px',
-              border: 'none',
-              fontSize: '0.75rem',
-              opacity: event.task.status === 'done' ? 0.6 : 1,
-            },
-          })}
+          eventPropGetter={(event) => {
+            const task = event.task
+            const isDone = task.status === 'done'
+            const isOverdue = event.isOverdue
+
+            // Base color from assigned user or status
+            const baseColor = isDone
+              ? '#10b981'
+              : isOverdue
+                ? '#e11d48'
+                : task.assigned_to
+                  ? userColor(task.assigned_to)
+                  : STATUS_COLORS[task.status] || '#7b68ee'
+
+            return {
+              style: {
+                backgroundColor: baseColor,
+                color: 'white',
+                borderRadius: '6px',
+                border: isOverdue ? '1.5px solid #f43f5e' : 'none',
+                boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)',
+                padding: '2px',
+                minHeight: '26px',
+              },
+            }
+          }}
         />
       </div>
     </div>
