@@ -755,14 +755,18 @@ FORMATO OBRIGATÓRIO (JSON puro):
           }
         }
 
-        // Enfileira no email_queue como backup garantido ou se não enviou direto
-        await admin.from('email_queue').insert({
-          to_email: targetEmail,
-          subject,
-          html: bodyHtml,
-          task_id: taskId,
-          status: emailSentDirectly ? 'sent' : 'pending',
-        })
+        // Se houver tabela email_queue, registra como log
+        try {
+          await admin.from('email_queue').insert({
+            to_email: targetEmail,
+            subject,
+            html: bodyHtml,
+            task_id: taskId,
+            status: emailSentDirectly ? 'sent' : 'pending',
+          })
+        } catch {
+          // ignora caso a tabela email_queue seja opcional
+        }
 
         actionResult = {
           success: true,
