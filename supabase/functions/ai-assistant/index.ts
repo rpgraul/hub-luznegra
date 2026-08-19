@@ -154,11 +154,12 @@ DIRETRIZES DE RESPOSTA E PODERES:
   Quando o usuário pedir para enviar e-mail (ex: "Envie um e-mail para o Raul sobre a tarefa X", "mande um email com o prazo da tarefa Y para o diego"):
   1. Identifique o destinatário na lista de membros (por nome, username ou @username). Se ele não tiver e-mail ou não for encontrado, informe na resposta.
   2. Identifique a tarefa mencionada na lista de tarefas para extrair seus dados (título, prazo, status, link https://hub.luznegra.com.br/task/{id}).
-  3. SEMPRE use a ação "send_email" para disparo real imediato (NÃO use rascunho/draft).
+  3. Formate SEMPRE as datas no padrão brasileiro DD/MM/YYYY (ex: 20/09/2026).
+  4. SEMPRE use a ação "send_email" para disparo real imediato (NÃO use rascunho/draft).
      action: send_email, params: {
        "recipient": string (username, nome, ou e-mail),
        "subject": string (assunto do e-mail),
-       "body": string (mensagem em texto claro ou HTML com detalhes da tarefa e link caso aplicável),
+       "body": string (mensagem em texto claro com detalhes da tarefa; destaque o título da tarefa em negrito e datas em DD/MM/YYYY),
        "task_id"?: string (ID da tarefa vinculada se houver)
      }
 - ENVIAR NOTIFICAÇÃO IN-APP (send_notification):
@@ -723,14 +724,129 @@ FORMATO OBRIGATÓRIO (JSON puro):
           })
         }
 
-        // Se houver uma tarefa referenciada e o corpo não incluir HTML rico, monta formato elegante
-        if (!bodyHtml.includes('<p>') && !bodyHtml.includes('<div>')) {
-          bodyHtml = `<p>${bodyHtml.replace(/\n/g, '<br/>')}</p>`
+        // Busca dados completos da tarefa caso taskId esteja presente
+        let taskData: { title: string; due_date: string | null; start_date: string | null; status: string; priority: string; project_id: string } | null = null
+        if (taskId) {
+          const { data: t } = await admin
+            .from('tasks')
+            .select('title, due_date, start_date, status, priority, project_id')
+            .eq('id', taskId)
+            .maybeSingle()
+          if (t) taskData = t
         }
 
-        if (taskId && !bodyHtml.includes(`/task/${taskId}`)) {
-          bodyHtml += `<p style="margin-top: 16px;"><a href="https://hub.luznegra.com.br/task/${taskId}" style="background-color: #7b68ee; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Abrir Tarefa no Hub</a></p>`
+        function formatPtBrDate(dateStr: string | null | undefined): string {
+          if (!dateStr) return 'Não definido'
+          const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+          if (m) return `${m[3]}/${m[2]}/${m[1]}`
+          const m2 = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+          if (m2) return dateStr
+          return dateStr
         }
+
+        // Converte datas no formato ISO dentro do texto do e-mail para DD/MM/YYYY
+        bodyHtml = bodyHtml.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')
+
+        const recipientName = targetUser?.full_name || targetUser?.username || recipient.replace(/^@/, '')
+        const taskTitle = taskData?.title || ''
+        const taskLink = taskId ? `https://hub.luznegra.com.br/task/${taskId}` : ''
+        const taskDueDate = taskData?.due_date ? formatPtBrDate(taskData.due_date) : null
+
+        // Monta template HTML profissional com identidade visual Hub / Editora Luz Negra
+        const styledTemplate = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 24px 32px; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-bottom: 1px solid #4338ca;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">
+                      HUB <span style="font-size: 13px; font-weight: 500; color: #a5b4fc; margin-left: 6px;">Editora Luz Negra</span>
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="font-size: 11px; font-weight: 600; color: #c7d2fe; background-color: rgba(99, 102, 241, 0.3); border: 1px solid rgba(165, 180, 252, 0.2); padding: 4px 10px; border-radius: 20px;">Notificação</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Body Content -->
+          <tr>
+            <td style="padding: 32px; font-size: 14px; line-height: 1.6; color: #e2e8f0;">
+              <p style="margin-top: 0; margin-bottom: 20px; font-size: 15px; color: #f8fafc;">
+                Olá, <strong>${recipientName}</strong>,
+              </p>
+
+              ${
+                taskTitle
+                  ? `<div style="margin: 20px 0; padding: 16px 20px; background-color: #0f172a; border-left: 4px solid #7b68ee; border-radius: 6px; border: 1px solid #334155;">
+                      <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px;">Tarefa</div>
+                      <div style="font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: ${taskDueDate ? '8px' : '0'};">
+                        ${taskTitle}
+                      </div>
+                      ${
+                        taskDueDate
+                          ? `<div style="font-size: 13px; color: #cbd5e1;">
+                              <span style="color: #94a3b8;">Prazo final:</span> <strong style="color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px;">${taskDueDate}</strong>
+                            </div>`
+                          : ''
+                      }
+                    </div>`
+                  : ''
+              }
+
+              <div style="margin: 20px 0; color: #cbd5e1;">
+                ${
+                  bodyHtml.includes('<p>') || bodyHtml.includes('<div>')
+                    ? bodyHtml
+                    : `<p style="margin: 0;">${bodyHtml.replace(/\n/g, '<br/>')}</p>`
+                }
+              </div>
+
+              ${
+                taskLink
+                  ? `<div style="margin: 32px 0 20px; text-align: center;">
+                      <a href="${taskLink}" target="_blank" style="display: inline-block; background-color: #7b68ee; color: #ffffff; padding: 12px 28px; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(123, 104, 238, 0.35);">
+                        Abrir Tarefa no Hub &rarr;
+                      </a>
+                    </div>
+                    <p style="margin-top: 12px; font-size: 11px; color: #64748b; text-align: center;">
+                      Ou cole este link no navegador: <br/>
+                      <a href="${taskLink}" style="color: #818cf8; text-decoration: underline; word-break: break-all;">${taskLink}</a>
+                    </p>`
+                  : ''
+              }
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0f172a; border-top: 1px solid #334155; font-size: 12px; color: #64748b; text-align: center;">
+              <p style="margin: 0 0 4px;">Mensagem enviada automaticamente pelo <strong>Lorde Camarão</strong>.</p>
+              <p style="margin: 0;">© ${new Date().getFullYear()} Editora Luz Negra • Hub</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+        `.trim()
 
         // Envia via Resend diretamente se a chave estiver presente
         const resendApiKey = Deno.env.get('RESEND_API_KEY')
@@ -748,7 +864,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
                 from: 'no-reply@hub.luznegra.com.br',
                 to: targetEmail,
                 subject,
-                html: bodyHtml,
+                html: styledTemplate,
               }),
             })
             if (res.ok) {
@@ -766,7 +882,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           await admin.from('email_queue').insert({
             to_email: targetEmail,
             subject,
-            html: bodyHtml,
+            html: styledTemplate,
             task_id: taskId,
             status: emailSentDirectly ? 'sent' : 'pending',
           })
