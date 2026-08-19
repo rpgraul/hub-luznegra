@@ -840,6 +840,9 @@ export default function GanttView({
                     <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">
                       Tarefa & Tags
                     </th>
+                    <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">
+                      Resp.
+                    </th>
                     <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">
                       Status
                     </th>
@@ -974,6 +977,32 @@ export default function GanttView({
                                     </span>
                                   ))}
                                 </div>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Assignee Avatar */}
+                          <td className="w-16 px-1 text-center" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center">
+                              {task.assigned_to ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenTask(task)}
+                                  className="flex size-5.5 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs transition hover:scale-115 cursor-pointer ring-1 ring-border/60"
+                                  style={{ backgroundColor: userColor(task.assigned_to) }}
+                                  title="Clique para ver ou alterar responsável"
+                                >
+                                  {task.assigned_to.slice(0, 2).toUpperCase()}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenTask(task)}
+                                  className="flex size-5.5 items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground/50 hover:text-primary hover:border-primary transition cursor-pointer text-[9px]"
+                                  title="Atribuir responsável"
+                                >
+                                  <i className="fa-solid fa-plus text-[8px]" />
+                                </button>
                               )}
                             </div>
                           </td>
