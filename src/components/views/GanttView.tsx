@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Gantt from 'frappe-gantt'
 import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import type { ProjectMember } from '@/lib/api/members'
 import { userColor } from '@/utils/colors'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
@@ -129,6 +131,7 @@ export default function GanttView({
 }: GanttViewProps) {
   const [zoomIndex, setZoomIndex] = useState(2) // Default: Week
   const [showTable, setShowTable] = useState(true)
+  const { memberOf } = useProjectMembers(null)
 
   const projectById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
@@ -1086,27 +1089,61 @@ export default function GanttView({
 
                           {/* Assignee Avatar */}
                           <td className="w-16 px-1 text-center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center">
-                              {task.assigned_to ? (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenTask(task)}
-                                  className="flex size-5.5 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs transition hover:scale-115 cursor-pointer ring-1 ring-border/60"
-                                  style={{ backgroundColor: userColor(task.assigned_to) }}
-                                  title="Clique para ver ou alterar responsável"
-                                >
-                                  {task.assigned_to.slice(0, 2).toUpperCase()}
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => onOpenTask(task)}
-                                  className="flex size-5.5 items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground/50 hover:text-primary hover:border-primary transition cursor-pointer text-[9px]"
-                                  title="Atribuir responsável"
-                                >
-                                  <i className="fa-solid fa-plus text-[8px]" />
-                                </button>
-                              )}
+                            <div className="flex items-center justify-center -space-x-1">
+                              {(() => {
+                                const assigneeIds =
+                                  task.assignees && task.assignees.length > 0
+                                    ? task.assignees
+                                    : task.assigned_to
+                                      ? [task.assigned_to]
+                                      : []
+
+                                if (assigneeIds.length === 0) {
+                                  return (
+                                    <button
+                                      type="button"
+                                      onClick={() => onOpenTask(task)}
+                                      className="flex size-6 items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground/50 hover:text-primary hover:border-primary transition cursor-pointer text-[9px]"
+                                      title="Atribuir responsável"
+                                    >
+                                      <i className="fa-solid fa-plus text-[8px]" />
+                                    </button>
+                                  )
+                                }
+
+                                return assigneeIds.map((userId) => {
+                                  const member = memberOf(userId)
+                                  const displayName = member?.full_name || member?.username || 'Responsável'
+                                  const initials = (member?.username || displayName || userId)
+                                    .slice(0, 2)
+                                    .toUpperCase()
+
+                                  return (
+                                    <button
+                                      key={userId}
+                                      type="button"
+                                      onClick={() => onOpenTask(task)}
+                                      className="flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs transition hover:scale-115 hover:z-10 cursor-pointer ring-1.5 ring-background overflow-hidden"
+                                      style={{ backgroundColor: userColor(userId) }}
+                                      title={displayName}
+                                    >
+                                      {member?.avatar_url ? (
+                                        <img
+                                          src={member.avatar_url}
+                                          alt={displayName}
+                                          className="size-full object-cover"
+                                          onError={(e) => {
+                                            // fallback to initials on load error
+                                            (e.currentTarget as HTMLElement).style.display = 'none'
+                                          }}
+                                        />
+                                      ) : (
+                                        initials
+                                      )}
+                                    </button>
+                                  )
+                                })
+                              })()}
                             </div>
                           </td>
 
