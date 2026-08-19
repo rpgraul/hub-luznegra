@@ -623,12 +623,20 @@ export default function GanttView({
     }
   }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today])
 
-  // Zoom & Horizontal Timeline Wheel listener
+  // Zoom & Smooth 2D Scroll + Middle-Click Pan listener
   useEffect(() => {
     const wrapper = wrapperRef.current
+    const table = tableRef.current
     if (!wrapper) return
 
     let lastZoomTime = 0
+
+    // Middle-click Pan State
+    let isPanning = false
+    let startX = 0
+    let startY = 0
+    let scrollStartLeft = 0
+    let scrollStartTop = 0
 
     function handleWheel(e: WheelEvent) {
       const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
@@ -645,17 +653,97 @@ export default function GanttView({
         } else if (e.deltaY > 0) {
           handleZoomOut()
         }
-      } else if (container) {
-        // Normal Scroll: Move horizontally along the timeline
+      } else if (e.shiftKey) {
+        // Shift + Scroll: Force horizontal scroll
+        if (container) {
+          e.preventDefault()
+          container.scrollLeft += e.deltaY || e.deltaX
+        }
+      } else {
+        // Normal Scroll
+        // If deltaY is dominant and we have a table, scroll the table vertically
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          if (table) {
+            table.scrollTop += e.deltaY
+          }
+        }
+        if (container && Math.abs(e.deltaX) > 0) {
+          container.scrollLeft += e.deltaX
+        }
+      }
+    }
+
+    function handleMouseDown(e: MouseEvent) {
+      // Middle Click (button === 1) or Left Click with Alt
+      if (e.button === 1 || (e.button === 0 && e.altKey)) {
         e.preventDefault()
-        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-        container.scrollLeft += delta
+        e.stopPropagation()
+        const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
+        isPanning = true
+        startX = e.clientX
+        startY = e.clientY
+        scrollStartLeft = container ? container.scrollLeft : 0
+        scrollStartTop = table ? table.scrollTop : 0
+        document.body.style.cursor = 'grabbing'
+        document.body.style.userSelect = 'none'
+      }
+    }
+
+    function handleMouseMove(e: MouseEvent) {
+      if (!isPanning) return
+      e.preventDefault()
+      const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
+      const dx = e.clientX - startX
+      const dy = e.clientY - startY
+
+      if (container) {
+        container.scrollLeft = scrollStartLeft - dx
+      }
+      if (table) {
+        table.scrollTop = scrollStartTop - dy
+      }
+    }
+
+    function handleMouseUp(e: MouseEvent) {
+      if (isPanning) {
+        if (e.button === 1 || e.button === 0) {
+          isPanning = false
+          document.body.style.cursor = ''
+          document.body.style.userSelect = ''
+        }
+      }
+    }
+
+    // Prevent default auxclick (middle click autoscroll icon in some browsers)
+    function handleAuxClick(e: MouseEvent) {
+      if (e.button === 1) {
+        e.preventDefault()
       }
     }
 
     wrapper.addEventListener('wheel', handleWheel, { passive: false })
+    wrapper.addEventListener('mousedown', handleMouseDown)
+    wrapper.addEventListener('auxclick', handleAuxClick)
+    window.addEventListener('mousemove', handleMouseMove, { passive: false })
+    window.addEventListener('mouseup', handleMouseUp)
+
+    if (table) {
+      table.addEventListener('mousedown', handleMouseDown)
+      table.addEventListener('auxclick', handleAuxClick)
+    }
+
     return () => {
       wrapper.removeEventListener('wheel', handleWheel)
+      wrapper.removeEventListener('mousedown', handleMouseDown)
+      wrapper.removeEventListener('auxclick', handleAuxClick)
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      if (table) {
+        table.removeEventListener('mousedown', handleMouseDown)
+        table.removeEventListener('auxclick', handleAuxClick)
+      }
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
   }, [handleZoomIn, handleZoomOut])
 
@@ -1084,6 +1172,12 @@ export default function GanttView({
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
+              Botão do Meio (Scroll)
+            </kbd>
+            <span>Arrastar para navegar (pan horizontal & vertical)</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
               Ctrl + Scroll
             </kbd>
             <span>Zoom na linha do tempo</span>
@@ -1092,7 +1186,7 @@ export default function GanttView({
             <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
               Arrastar barra
             </kbd>
-            <span>Mover período (Pai move subtarefas)</span>
+            <span>Mover período</span>
           </span>
           <span className="flex items-center gap-1.5">
             <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
