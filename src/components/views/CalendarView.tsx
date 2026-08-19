@@ -92,7 +92,7 @@ export default function CalendarView({
 }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState<Date>(() => new Date())
   const [currentView, setCurrentView] = useState<View>('month')
-  const [filterMode, setFilterMode] = useState<'all' | 'due_only'>('all')
+  const [filterMode, setFilterMode] = useState<'due_only' | 'all'>('due_only')
 
   const today = todayIso()
 
