@@ -245,7 +245,8 @@ export default function CalendarView({
 
             {isOverdue && (
               <span className="rounded-md bg-amber-400 text-amber-950 px-1.5 py-0.5 text-[9px] font-black tracking-wide shadow-xs border border-amber-300">
-                ⚠️ Atrasada
+                <i className="fa-solid fa-triangle-exclamation mr-1 text-[8px]" />
+                Atrasada
               </span>
             )}
 
@@ -319,6 +320,45 @@ export default function CalendarView({
             )}
           </div>
         )}
+      </div>
+    )
+  }
+
+  function CustomDateHeader({ date, label }: { date: Date; label: string }) {
+    const isToday =
+      date.getDate() === new Date().getDate() &&
+      date.getMonth() === new Date().getMonth() &&
+      date.getFullYear() === new Date().getFullYear()
+
+    return (
+      <div className="flex items-center justify-between px-1.5 py-0.5 group/header">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelectSlot(date)
+          }}
+          title={`Criar nova tarefa em ${label}`}
+          className="size-4.5 rounded flex items-center justify-center text-[10px] text-muted-foreground/40 hover:text-primary hover:bg-primary/10 transition opacity-0 group-hover/header:opacity-100"
+        >
+          <i className="fa-solid fa-plus text-[9px]" />
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onSelectSlot(date)
+          }}
+          title={`Criar nova tarefa em ${label}`}
+          className={`text-xs font-bold transition hover:scale-110 cursor-pointer ${
+            isToday
+              ? 'size-6 rounded-full bg-[#7b68ee] text-white flex items-center justify-center shadow-xs'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {label}
+        </button>
       </div>
     )
   }
@@ -405,10 +445,14 @@ export default function CalendarView({
           culture="pt-br"
           selectable
           resizable
-          longPressThreshold={150}
+          longPressThreshold={10}
           components={{
             event: CustomEventComponent,
+            month: {
+              dateHeader: CustomDateHeader,
+            },
           }}
+          onDrillDown={(date) => onSelectSlot(date)}
           onSelectEvent={(event) => onOpenTask(event.task)}
           onSelectSlot={(slotInfo) => onSelectSlot(slotInfo.start)}
           onEventDrop={handleEventDrop}
