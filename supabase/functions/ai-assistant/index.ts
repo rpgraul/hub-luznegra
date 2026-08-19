@@ -29,8 +29,11 @@ interface AIAction {
     | 'bulk_status_update'
     | 'create_project'
     | 'update_task'
+    | 'update_tasks'
     | 'delete_task'
     | 'create_user'
+    | 'send_email'
+    | 'send_notification'
     | 'draft_email'
     | 'none'
   params?: Record<string, unknown>
@@ -84,9 +87,19 @@ Deno.serve(async (req) => {
       .select('id, name')
       .eq('archived', false)
 
+    // Lista de membros e e-mails (para envio de e-mails e menções/notificações)
+    const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 })
+    const emailByUser = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email]))
+    const userByEmail = new Map((authUsers?.users ?? []).map((u) => [u.email?.toLowerCase(), u.id]))
+
     const { data: members } = await admin
       .from('profiles')
-      .select('id, username, full_name')
+      .select('id, username, full_name, role')
+
+    const membersWithEmail = (members ?? []).map((m) => ({
+      ...m,
+      email: emailByUser.get(m.id) || null,
+    }))
 
     let currentProjectTasks: Array<{
       id: string
@@ -97,6 +110,7 @@ Deno.serve(async (req) => {
       start_date: string | null
       assigned_to: string | null
       parent_id: string | null
+      project_id: string
     }> = []
 
     let taskQuery = admin
@@ -110,45 +124,63 @@ Deno.serve(async (req) => {
     const { data: tasks } = await taskQuery.limit(80)
     currentProjectTasks = tasks ?? []
 
-    const membersMap = (members ?? []).map((m) => `@${m.username} (${m.full_name || m.username}, id: ${m.id})`).join(', ')
+    const membersMap = membersWithEmail
+      .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
+      .join('\n')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
     const tasksSnippet = currentProjectTasks
-      .slice(0, 30)
-      .map((t) => `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`)
+      .slice(0, 40)
+      .map((t) => `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}, responsável_id: ${t.assigned_to || 'nenhum'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`)
       .join('\n')
 
     // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
-Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
+Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário logado ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
-Projetos cadastrados: ${projectsMap || 'Nenhum'}
-Membros da equipe: ${membersMap || 'Nenhum'}
-Tarefas existentes (use os IDs e títulos reais para referenciar):
+Projetos cadastrados:
+${projectsMap || 'Nenhum'}
+
+Membros da equipe (reconheça nomes, usernames e e-mails):
+${membersMap || 'Nenhum'}
+
+Tarefas existentes (use os IDs e títulos reais para coletar dados, links e referenciar):
 ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 
-DIRETRIZES DE RESPOSTA:
+DIRETRIZES DE RESPOSTA E PODERES:
 - Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
-- Se o usuário pedir para sequenciar ou ajustar prazos de subtarefas de uma tarefa (ex: "gastar 3 dias em cada subtarefa sem paralelismo"):
-  Calcule as datas sequenciais (a partir de hoje ou da data de início da tarefa pai) e gere uma ação com a lista de tarefas a atualizar:
+- ENVIAR E-MAIL (send_email):
+  Quando o usuário pedir para enviar e-mail (ex: "Envie um e-mail para o Raul sobre a tarefa X", "mande um email com o prazo da tarefa Y para o diego"):
+  1. Identifique o destinatário na lista de membros (por nome, username ou @username). Se ele não tiver e-mail ou não for encontrado, informe na resposta.
+  2. Identifique a tarefa mencionada na lista de tarefas para extrair seus dados (título, prazo, status, link https://hub.luznegra.com.br/task/{id}).
+  3. Gere a ação "send_email" com os campos:
+     action: send_email, params: {
+       "recipient": string (username, nome, ou e-mail),
+       "subject": string (assunto do e-mail),
+       "body": string (mensagem em texto claro ou HTML com detalhes da tarefa e link caso aplicável),
+       "task_id"?: string (ID da tarefa vinculada se houver)
+     }
+- ENVIAR NOTIFICAÇÃO IN-APP (send_notification):
+  Quando o usuário pedir para alertar/notificar um membro na plataforma:
+  action: send_notification, params: {
+    "recipient": string (username, nome, ou user_id),
+    "type": "mention" | "task_assigned" | "due_date_reminder",
+    "content": string (texto da notificação),
+    "task_id"?: string (ID da tarefa para gerar o link direto)
+  }
+- Se o usuário pedir para sequenciar ou ajustar prazos de subtarefas:
   action: update_tasks, params: { "tasks": [ { "task_id": string, "task_title": string, "start_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD" } ] }
 - Se o usuário pedir para criar projeto:
   action: create_project, params: { "name": string, "color"?: string }
-- Se o usuário pedir algo que você NÃO encontrou no banco (ex: uma tarefa que não existe), explique na "reply" com clareza ("Não encontrei a tarefa 'X' no projeto atual.") e retorne "action": { "type": "none" }. NUNCA responda genericamente "Comando processado com sucesso" se nada foi alterado.
+- Se o usuário pedir algo que você NÃO encontrou no banco (ex: tarefa inexistente ou usuário não encontrado), explique na "reply" com clareza ("Não encontrei a tarefa 'X'." ou "Usuário 'Y' não encontrado.") e retorne "action": { "type": "none" }.
 
 FORMATO OBRIGATÓRIO (JSON puro):
 {
-  "reply": "Explicação curta e direta sobre o que foi executado ou esclarecimento caso não seja possível.",
+  "reply": "Explicação curta e direta sobre o que foi executado.",
   "action": {
-    "type": "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "draft_email" | "none",
-    "params": {
-      // create_project: { "name": string, "color"?: string, "description"?: string }
-      // create_task: { "title": string, "project_id"?: string, "priority"?: "low"|"medium"|"high"|"urgent", "assigned_to"?: string, "due_date"?: "YYYY-MM-DD", "start_date"?: "YYYY-MM-DD", "subtasks"?: string[] }
-      // update_task: { "task_id"?: string, "task_title"?: string, "start_date"?: "YYYY-MM-DD", "due_date"?: "YYYY-MM-DD", "status"?: string, "priority"?: string, "assigned_to"?: string }
-      // update_tasks: { "tasks": Array<{ "task_id"?: string, "task_title"?: string, "start_date"?: "YYYY-MM-DD", "due_date"?: "YYYY-MM-DD", "status"?: string, "priority"?: string }> }
-      // break_down_subtasks: { "parent_task_title": string, "subtasks": string[] }
-    }
+    "type": "send_email" | "send_notification" | "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "none",
+    "params": { ... }
   }
 }`
 
@@ -656,24 +688,160 @@ FORMATO OBRIGATÓRIO (JSON puro):
             password: defaultPassword,
           }
         }
+      } else if (type === 'send_email') {
+        const recipient = String(params.recipient || '').trim()
+        const subject = String(params.subject || 'Notificação do Hub - Editora Luz Negra').trim()
+        let bodyHtml = String(params.body || '').trim()
+        const taskId = (params.task_id as string) || null
+
+        // Descobre o e-mail do destinatário
+        let targetEmail: string | null = null
+        let targetUser = membersWithEmail.find(
+          (m) =>
+            m.email?.toLowerCase() === recipient.toLowerCase() ||
+            m.username.toLowerCase() === recipient.replace(/^@/, '').toLowerCase() ||
+            m.id === recipient ||
+            (m.full_name && m.full_name.toLowerCase().includes(recipient.toLowerCase()))
+        )
+
+        if (targetUser?.email) {
+          targetEmail = targetUser.email
+        } else if (recipient.includes('@') && recipient.includes('.')) {
+          targetEmail = recipient
+        }
+
+        if (!targetEmail) {
+          return json({
+            reply: `Não foi possível encontrar o e-mail para o usuário "${recipient}".`,
+            action: { type: 'none' },
+          })
+        }
+
+        // Se houver uma tarefa referenciada e o corpo não incluir HTML rico, monta formato elegante
+        if (!bodyHtml.includes('<p>') && !bodyHtml.includes('<div>')) {
+          bodyHtml = `<p>${bodyHtml.replace(/\n/g, '<br/>')}</p>`
+        }
+
+        if (taskId && !bodyHtml.includes(`/task/${taskId}`)) {
+          bodyHtml += `<p style="margin-top: 16px;"><a href="https://hub.luznegra.com.br/task/${taskId}" style="background-color: #7b68ee; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Abrir Tarefa no Hub</a></p>`
+        }
+
+        // Envia via Resend diretamente se a chave estiver presente
+        const resendApiKey = Deno.env.get('RESEND_API_KEY')
+        let emailSentDirectly = false
+
+        if (resendApiKey) {
+          try {
+            const res = await fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${resendApiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                from: 'no-reply@hub.luznegra.com.br',
+                to: targetEmail,
+                subject,
+                html: bodyHtml,
+              }),
+            })
+            if (res.ok) {
+              emailSentDirectly = true
+            } else {
+              console.warn('Resend direct send failed, queuing instead:', await res.text())
+            }
+          } catch (resendErr) {
+            console.warn('Resend direct fetch error, fallback to queue:', resendErr)
+          }
+        }
+
+        // Enfileira no email_queue como backup garantido ou se não enviou direto
+        await admin.from('email_queue').insert({
+          to_email: targetEmail,
+          subject,
+          html: bodyHtml,
+          task_id: taskId,
+          status: emailSentDirectly ? 'sent' : 'pending',
+        })
+
+        actionResult = {
+          success: true,
+          recipient: targetEmail,
+          subject,
+          direct: emailSentDirectly,
+        }
+      } else if (type === 'send_notification') {
+        const recipient = String(params.recipient || '').trim()
+        const notifType = (params.type as 'mention' | 'task_assigned' | 'due_date_reminder') || 'mention'
+        const content = String(params.content || '').trim()
+        const taskId = (params.task_id as string) || null
+
+        let targetUserId: string | null = null
+        const targetUser = membersWithEmail.find(
+          (m) =>
+            m.username.toLowerCase() === recipient.replace(/^@/, '').toLowerCase() ||
+            m.id === recipient ||
+            (m.full_name && m.full_name.toLowerCase().includes(recipient.toLowerCase())) ||
+            m.email?.toLowerCase() === recipient.toLowerCase()
+        )
+
+        if (targetUser) {
+          targetUserId = targetUser.id
+        }
+
+        if (!targetUserId) {
+          return json({
+            reply: `Não foi possível encontrar o usuário "${recipient}" para enviar a notificação.`,
+            action: { type: 'none' },
+          })
+        }
+
+        const { data: createdNotif, error: notifErr } = await admin
+          .from('notifications')
+          .insert({
+            user_id: targetUserId,
+            type: notifType,
+            content,
+            link: taskId ? `/task/${taskId}` : null,
+            read: false,
+          })
+          .select()
+          .single()
+
+        if (notifErr) {
+          console.error('Error inserting notification:', notifErr)
+          return json({
+            reply: `Erro ao emitir notificação: ${notifErr.message}`,
+            action: { type: 'none' },
+          })
+        }
+
+        actionResult = {
+          success: true,
+          notification: createdNotif,
+        }
       }
     }
 
     const finalReply =
       aiParsed.reply ||
-      (aiParsed.action?.type === 'create_project'
-        ? 'Projeto criado com sucesso.'
-        : aiParsed.action?.type === 'create_task'
-          ? 'Tarefa criada com sucesso.'
-          : aiParsed.action?.type === 'create_user'
-            ? 'Usuário criado com sucesso.'
-            : aiParsed.action?.type === 'update_task'
-              ? 'Tarefa atualizada com sucesso.'
-              : aiParsed.action?.type === 'delete_task'
-                ? 'Tarefa excluída com sucesso.'
-                : aiParsed.action?.type === 'duplicate_task'
-                  ? 'Tarefa duplicada com sucesso.'
-                  : 'Comando processado com sucesso.')
+      (aiParsed.action?.type === 'send_email'
+        ? 'E-mail enviado com sucesso.'
+        : aiParsed.action?.type === 'send_notification'
+          ? 'Notificação enviada com sucesso.'
+          : aiParsed.action?.type === 'create_project'
+            ? 'Projeto criado com sucesso.'
+            : aiParsed.action?.type === 'create_task'
+              ? 'Tarefa criada com sucesso.'
+              : aiParsed.action?.type === 'create_user'
+                ? 'Usuário criado com sucesso.'
+                : aiParsed.action?.type === 'update_task'
+                  ? 'Tarefa atualizada com sucesso.'
+                  : aiParsed.action?.type === 'delete_task'
+                    ? 'Tarefa excluída com sucesso.'
+                    : aiParsed.action?.type === 'duplicate_task'
+                      ? 'Tarefa duplicada com sucesso.'
+                      : 'Comando processado com sucesso.')
 
     return json({
       reply: finalReply,

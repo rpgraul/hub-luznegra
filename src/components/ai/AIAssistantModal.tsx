@@ -11,10 +11,10 @@ interface AIAssistantModalProps {
 }
 
 const DEFAULT_SUGGESTIONS = [
-  'Criar projeto "Brava Gente" na cor amarelo',
+  'Envie um e-mail para o Raul sobre a tarefa Revisão da LP',
+  'Notificar Diego sobre o prazo da tarefa',
   'Criar tarefa "Revisar texto" com prioridade alta',
   'Listar tarefas atrasadas',
-  'Concluir tarefas de baixa prioridade',
 ]
 
 function MarkdownMessage({ content }: { content?: string | null }) {
@@ -202,6 +202,7 @@ export default function AIAssistantModal({
       if (response?.action && response.action.type !== 'none') {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] })
         toast.success('Ação executada com sucesso pelo Lorde Camarão!')
       }
     } catch (error) {

@@ -96,7 +96,7 @@ export default function TopBar({
   const activeProject = projects.find((p) => p.id === activeProjectId)
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur select-none">
+    <header className="relative z-40 flex h-14 items-center justify-between border-b border-border bg-card/80 px-4 backdrop-blur select-none">
       {/* Left: Breadcrumbs / Active Space */}
       <div className="flex items-center gap-2 text-xs">
         <div className="flex items-center gap-1.5 font-medium text-muted-foreground">

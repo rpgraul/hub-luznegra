@@ -1,6 +1,6 @@
 import { useEffect, useState, useTransition } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from '@heroui/react'
+import { Popover, toast } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -153,19 +153,6 @@ export default function NotificationBell({
     }
   }, [user, queryClient])
 
-  // Fecha o dropdown se clicar fora
-  useEffect(() => {
-    if (!isOpen) return
-    function handleClickOutside(e: MouseEvent) {
-      const target = e.target as HTMLElement
-      if (!target.closest('[data-notification-panel]')) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isOpen])
-
   function refetchAll() {
     void queryClient.invalidateQueries({ queryKey: ['notifications'] })
   }
@@ -225,27 +212,30 @@ export default function NotificationBell({
     tone === 'dark' ? 'text-primary-foreground/90' : 'text-muted-foreground'
 
   return (
-    <div className="relative" data-notification-panel>
-      {/* Sininho Trigger */}
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        aria-label="Notificações"
-        className="relative flex size-8 items-center justify-center rounded-lg transition hover:bg-muted/80 cursor-pointer focus:outline-none"
-      >
-        <i className={`fa-solid fa-bell text-sm transition-transform active:scale-95 ${iconColor}`} />
-        {unread > 0 && (
-          <span
-            className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-xs animate-in zoom-in-75 duration-200"
-          >
-            {unread > 99 ? '99+' : unread}
-          </span>
-        )}
-      </button>
+    <Popover isOpen={isOpen} onOpenChange={setIsOpen}>
+      <Popover.Trigger>
+        <button
+          type="button"
+          aria-label="Notificações"
+          className="relative flex size-8 items-center justify-center rounded-lg transition hover:bg-muted/80 cursor-pointer focus:outline-none"
+        >
+          <i className={`fa-solid fa-bell text-sm transition-transform active:scale-95 ${iconColor}`} />
+          {unread > 0 && (
+            <span
+              className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-xs animate-in zoom-in-75 duration-200"
+            >
+              {unread > 99 ? '99+' : unread}
+            </span>
+          )}
+        </button>
+      </Popover.Trigger>
 
-      {/* Painel Flutuante de Notificações */}
-      {isOpen && (
-        <div className="fixed sm:absolute right-2 sm:right-0 top-14 sm:top-full mt-1 w-[calc(100vw-1rem)] sm:w-96 max-w-sm rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl z-[9999] overflow-hidden animate-in fade-in-0 zoom-in-95 duration-150">
+      <Popover.Content
+        placement="bottom end"
+        offset={8}
+        className="w-[calc(100vw-2rem)] sm:w-96 max-w-sm rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl overflow-hidden p-0 z-[9999]"
+      >
+        <Popover.Dialog className="p-0 outline-none">
           {/* Header do Painel */}
           <div className="flex items-center justify-between border-b border-border px-4 py-3 bg-muted/30">
             <div className="flex items-center gap-2">
@@ -377,8 +367,8 @@ export default function NotificationBell({
               })
             )}
           </div>
-        </div>
-      )}
-    </div>
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
   )
 }
