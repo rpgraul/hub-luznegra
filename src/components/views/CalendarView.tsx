@@ -208,7 +208,7 @@ export default function CalendarView({
 
     return (
       <div
-        className={`group relative flex flex-col justify-between overflow-hidden rounded-md p-1.5 leading-tight transition select-none ${
+        className={`group relative flex flex-col justify-between overflow-hidden rounded-lg p-2 leading-snug transition select-none ${
           isDone ? 'opacity-70' : ''
         }`}
         title={`${task.title}\nStatus: ${statusLabel}\nProjeto: ${project?.name || 'Sem projeto'}\nPrazo: ${
@@ -216,49 +216,49 @@ export default function CalendarView({
         }`}
       >
         {/* Top line: Project indicator badge + Status + Avatar */}
-        <div className="flex items-center justify-between gap-1 mb-1">
-          <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center justify-between gap-1.5 mb-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 min-w-0">
             {project && (
               <span
-                className="truncate rounded px-1.5 py-0.2 text-[8px] font-bold uppercase tracking-wider text-white shadow-2xs"
-                style={{ backgroundColor: project.color || '#7b68ee' }}
+                className="truncate rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-xs"
+                style={{ backgroundColor: project.color || '#6366f1' }}
               >
                 {project.name}
               </span>
             )}
             <span
-              className="rounded bg-black/25 px-1 py-0.2 text-[8px] font-semibold text-white/90 backdrop-blur-xs"
+              className="rounded-md bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs backdrop-blur-sm"
             >
               {statusLabel}
             </span>
           </div>
 
           {/* Right badges & Avatar */}
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             {priorityBadge && (
               <span
-                className={`rounded px-1 py-0.2 text-[8px] font-bold uppercase tracking-wider ${priorityBadge.color}`}
+                className={`rounded-md px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wider shadow-xs ${priorityBadge.color}`}
               >
                 {priorityBadge.label}
               </span>
             )}
 
             {isOverdue && (
-              <span className="rounded bg-rose-600 px-1 py-0.2 text-[8px] font-bold text-white shadow-2xs">
+              <span className="rounded-md bg-rose-600 px-1.5 py-0.5 text-[9px] font-extrabold text-white shadow-xs">
                 Atrasada
               </span>
             )}
 
             {/* Assignee Avatar with real photo */}
             {assignees.length > 0 ? (
-              <div className="flex items-center -space-x-1">
+              <div className="flex items-center -space-x-1.5">
                 {assignees.slice(0, 2).map((m) => {
                   const name = m.full_name || m.username || 'User'
                   const initials = (m.username || name).slice(0, 2).toUpperCase()
                   return (
                     <div
                       key={m.id}
-                      className="size-5 shrink-0 overflow-hidden rounded-full ring-1.5 ring-white/50 shadow-2xs"
+                      className="size-5.5 shrink-0 overflow-hidden rounded-full ring-2 ring-white/60 shadow-xs"
                       style={{ backgroundColor: userColor(m.id) }}
                       title={name}
                     >
@@ -272,7 +272,7 @@ export default function CalendarView({
                           }}
                         />
                       ) : (
-                        <span className="flex size-full items-center justify-center text-[7.5px] font-bold text-white">
+                        <span className="flex size-full items-center justify-center text-[8.5px] font-bold text-white">
                           {initials}
                         </span>
                       )}
@@ -282,7 +282,7 @@ export default function CalendarView({
               </div>
             ) : task.assigned_to ? (
               <div
-                className="flex size-5 shrink-0 items-center justify-center rounded-full text-[7.5px] font-bold text-white ring-1.5 ring-white/40"
+                className="flex size-5.5 shrink-0 items-center justify-center rounded-full text-[8.5px] font-bold text-white ring-2 ring-white/50 shadow-xs"
                 style={{ backgroundColor: userColor(task.assigned_to) }}
               >
                 {task.assigned_to.slice(0, 2).toUpperCase()}
@@ -294,9 +294,10 @@ export default function CalendarView({
         {/* Task Title */}
         <div className="min-w-0">
           <span
-            className={`block truncate text-xs font-bold ${
-              isDone ? 'line-through opacity-80' : ''
-            } ${isOverdue ? 'text-rose-100 font-extrabold' : 'text-white'}`}
+            className={`block truncate text-[13px] font-bold tracking-tight text-white ${
+              isDone ? 'line-through opacity-85' : ''
+            } ${isOverdue ? 'text-rose-100 font-extrabold' : ''}`}
+            style={{ textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}
           >
             {task.title}
           </span>
@@ -304,17 +305,17 @@ export default function CalendarView({
 
         {/* Tags line (if present) */}
         {tags.length > 0 && (
-          <div className="mt-1 flex flex-wrap items-center gap-1 overflow-hidden">
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 overflow-hidden">
             {tags.slice(0, 3).map((tag) => (
               <span
                 key={tag}
-                className="rounded bg-black/30 px-1.5 py-0.2 text-[8.5px] font-semibold text-white/95 backdrop-blur-xs"
+                className="rounded-md bg-black/40 px-2 py-0.5 text-[9.5px] font-bold text-white/95 backdrop-blur-sm shadow-2xs"
               >
                 #{tag}
               </span>
             ))}
             {tags.length > 3 && (
-              <span className="text-[8px] text-white/80 font-medium">+{tags.length - 3}</span>
+              <span className="text-[9px] text-white/90 font-semibold">+{tags.length - 3}</span>
             )}
           </div>
         )}
