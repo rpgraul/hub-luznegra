@@ -148,12 +148,27 @@ Deno.serve(async (req) => {
       .map((l) => `- [${l.id}] "${l.title}" (URL: ${l.url}, Tags: [${(l.tags || []).join(', ')}], Descrição: "${l.description || 's/desc'}", ProjetoID: ${l.project_id || 'Geral'})`)
       .join('\n')
 
+    const lastUserMsg = (messages[messages.length - 1]?.content || '').toLowerCase()
+
     const docsSnippet = (hubDocs ?? [])
       .map((d) => {
-        const textSummary = d.extracted_text ? d.extracted_text.slice(0, 200).replace(/\n+/g, ' ') : 's/texto'
-        return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url}, Trecho: "${textSummary}...")`
+        if (!d.extracted_text) {
+          return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url}, Conteúdo: "s/texto extraído")`
+        }
+        // Inclui até 8.000 caracteres do texto extraído para garantir que contratos, planilhas e relatórios estejam completos
+        const isMatched = lastUserMsg && (
+          d.title.toLowerCase().includes(lastUserMsg) ||
+          d.file_name.toLowerCase().includes(lastUserMsg) ||
+          lastUserMsg.split(/\s+/).some((w) => w.length > 3 && d.title.toLowerCase().includes(w))
+        )
+        const limit = isMatched ? 15000 : 8000
+        const textContent = d.extracted_text.length > limit
+          ? d.extracted_text.slice(0, limit) + '\n...[texto continuado/truncado]'
+          : d.extracted_text
+
+        return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url})\n  Conteúdo Integral Extraído:\n  """\n${textContent}\n  """`
       })
-      .join('\n')
+      .join('\n\n')
 
     // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
@@ -171,13 +186,15 @@ ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 Links úteis cadastrados (indique links e URLs para os usuários quando perguntarem sobre drives, artes, sites, etc.):
 ${linksSnippet || 'Nenhum link cadastrado.'}
 
-Documentos cadastrados (indique arquivos, contratos, relatórios e use os trechos de texto para responder):
+Documentos e Contratos cadastrados (use o Conteúdo Integral Extraído abaixo para responder com precisão sobre contratos, valores, partes, prazos, etc.):
 ${docsSnippet || 'Nenhum documento cadastrado.'}
 
 DIRETRIZES DE RESPOSTA E PODERES:
 - Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
+- CONSULTA A DOCUMENTOS E CONTRATOS:
+  Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
 - Quando o usuário perguntar por links (ex: artes, drive, post, financiamento), cite o título e a URL com markdown: [Nome do Link](URL).
 - Quando o usuário perguntar sobre documentos cadastrados ou pedir para localizar arquivos, cite o título do documento e sua URL.
 - CRIAR LINK ÚTIL (create_link):
