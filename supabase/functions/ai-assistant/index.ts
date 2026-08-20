@@ -139,9 +139,15 @@ Deno.serve(async (req) => {
       .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
       .join('\n')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
+    const memberNameById = new Map(
+      (members ?? []).map((m) => [m.id, `@${m.username} (${m.full_name || m.username})`])
+    )
     const tasksSnippet = currentProjectTasks
-      .slice(0, 40)
-      .map((t) => `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}, responsável_id: ${t.assigned_to || 'nenhum'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`)
+      .slice(0, 60)
+      .map(
+        (t) =>
+          `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}, responsável: ${t.assigned_to ? memberNameById.get(t.assigned_to) || t.assigned_to : 'nenhum'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`
+      )
       .join('\n')
 
     const linksSnippet = (hubLinks ?? [])
@@ -177,10 +183,10 @@ Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário logado ID: ${userId}. A
 Projetos cadastrados:
 ${projectsMap || 'Nenhum'}
 
-Membros da equipe (reconheça nomes, usernames e e-mails):
+Membros da equipe (reconheça nomes, usernames e e-mails para atribuição e mensagens):
 ${membersMap || 'Nenhum'}
 
-Tarefas existentes (use os IDs e títulos reais para coletar dados, links e referenciar):
+Tarefas existentes (use os IDs e títulos reais para atualizar, atribuir responsáveis, sequenciar ou consultar):
 ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 
 Links úteis cadastrados (indique links e URLs para os usuários quando perguntarem sobre drives, artes, sites, etc.):
@@ -193,12 +199,47 @@ DIRETRIZES DE RESPOSTA E PODERES:
 - Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
+- ATRIBUIR / ALTERAR RESPONSÁVEL OU ATUALIZAR TAREFA (update_task):
+  Quando o usuário pedir para atribuir, trocar ou adicionar responsável a uma tarefa existente, delegar, alterar status, prioridade ou prazos:
+  (Exemplos: "Adicione Raul como responsável da tarefa Revisão", "Atribua a tarefa Diagramação para o Diego", "Coloque Diego na tarefa X", "Passe a tarefa Y para @diego", "Mude o status de X para in_progress", "Coloque prioridade alta na tarefa Y"):
+  action: update_task, params: {
+    "task_id"?: string (ID real da tarefa se identificado),
+    "task_title"?: string (título da tarefa para localização),
+    "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
+    "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+    "priority"?: "urgent" | "high" | "normal" | "low",
+    "due_date"?: "YYYY-MM-DD",
+    "start_date"?: "YYYY-MM-DD"
+  }
+- ATUALIZAR VÁRIAS TAREFAS / SEQUENCIAR (update_tasks):
+  Quando o usuário pedir para sequenciar ou ajustar prazos/responsáveis de múltiplas tarefas:
+  action: update_tasks, params: {
+    "tasks": [
+      {
+        "task_id"?: string,
+        "task_title"?: string,
+        "assigned_to"?: string,
+        "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+        "priority"?: "urgent" | "high" | "normal" | "low",
+        "start_date"?: "YYYY-MM-DD",
+        "due_date"?: "YYYY-MM-DD"
+      }
+    ]
+  }
+- CRIAR TAREFA OU SUBTAREFAS (create_task):
+  action: create_task, params: {
+    "title": string,
+    "assigned_to"?: string (username ou nome do membro),
+    "priority"?: "urgent" | "high" | "normal" | "low",
+    "due_date"?: "YYYY-MM-DD",
+    "start_date"?: "YYYY-MM-DD",
+    "subtasks"?: string[]
+  }
 - CONSULTA A DOCUMENTOS E CONTRATOS:
   Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
   OBRIGATÓRIO: Sempre que responder sobre um documento ou contrato, inclua no final da resposta o botão/link interativo no formato exato: [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO) para que o usuário possa clicar e conferir o arquivo no modal com 1 clique.
 - LINKS ÚTEIS E WEBSITES:
   Sempre que o usuário perguntar por links ou quando você citar drives, artes, sites ou páginas cadastradas, inclua o link clicável no formato markdown [Nome do Link](URL) para que o usuário possa abrir com 1 clique.
-- Quando o usuário perguntar sobre documentos cadastrados ou pedir para localizar arquivos, cite o título do documento e inclua o link [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO).
 - CRIAR LINK ÚTIL (create_link):
   Se o usuário pedir para salvar um link útil (ex: "Salve o link do drive https://... com título Artes 2026"):
   action: create_link, params: {
@@ -228,9 +269,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
     "content": string (texto da notificação),
     "task_id"?: string (ID da tarefa para gerar o link direto)
   }
-- Se o usuário pedir para sequenciar ou ajustar prazos de subtarefas:
-  action: update_tasks, params: { "tasks": [ { "task_id": string, "task_title": string, "start_date": "YYYY-MM-DD", "due_date": "YYYY-MM-DD" } ] }
-- Se o usuário pedir para criar projeto:
+- CRIAR PROJETO (create_project):
   action: create_project, params: { "name": string, "color"?: string }
 - Se o usuário pedir algo que você NÃO encontrou no banco (ex: tarefa inexistente ou usuário não encontrado), explique na "reply" com clareza ("Não encontrei a tarefa 'X'." ou "Usuário 'Y' não encontrado.") e retorne "action": { "type": "none" }.
 
@@ -238,9 +277,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 {
   "reply": "Explicação curta e direta sobre o que foi executado.",
   "action": {
-    "type": "send_email" | "send_notification" | "create_link" | "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "none",
-    "params": { ... }
-  }
+}
 }`
 
     // 3. Chamada ao DeepSeek / OpenAI
@@ -422,17 +459,70 @@ FORMATO OBRIGATÓRIO (JSON puro):
       return null
     }
 
-    function resolveMemberId(identifier: unknown): string {
-      if (!identifier || typeof identifier !== 'string') return userId
-      const clean = identifier.replace(/^@/, '').toLowerCase().trim()
-      const found = (members ?? []).find(
-        (m) =>
-          m.id === clean ||
-          m.username.toLowerCase() === clean ||
-          (m.full_name && m.full_name.toLowerCase().includes(clean)) ||
-          clean.includes(m.username.toLowerCase())
+    function resolveMemberId(identifier: unknown): string | null {
+      if (!identifier) return null
+      if (typeof identifier !== 'string') return null
+      const raw = identifier.trim()
+      if (
+        !raw ||
+        [
+          'none',
+          'null',
+          'nenhum',
+          'desatribuir',
+          'remover',
+          'sem responsável',
+          'sem_responsavel',
+          'ninguem',
+          'ninguém',
+        ].includes(raw.toLowerCase())
+      ) {
+        return null
+      }
+
+      const clean = raw.replace(/^@/, '').toLowerCase().trim()
+
+      // 1. Direct UUID match
+      const byId = (members ?? []).find((m) => m.id === clean)
+      if (byId) return byId.id
+
+      // 2. Exact username match
+      const byUsername = (members ?? []).find((m) => m.username.toLowerCase() === clean)
+      if (byUsername) return byUsername.id
+
+      // 3. Exact full_name match
+      const byFullName = (members ?? []).find(
+        (m) => m.full_name && m.full_name.toLowerCase() === clean
       )
-      return found ? found.id : userId
+      if (byFullName) return byFullName.id
+
+      // 4. Word in full name (e.g. "diego" in "Diego Santos")
+      const byWordInName = (members ?? []).find((m) => {
+        if (!m.full_name) return false
+        const parts = m.full_name.toLowerCase().split(/\s+/)
+        return parts.includes(clean) || m.full_name.toLowerCase().startsWith(clean)
+      })
+      if (byWordInName) return byWordInName.id
+
+      // 5. Partial full_name contains
+      const byPartialName = (members ?? []).find(
+        (m) => m.full_name && m.full_name.toLowerCase().includes(clean)
+      )
+      if (byPartialName) return byPartialName.id
+
+      // 6. Partial username contains
+      const byPartialUsername = (members ?? []).find(
+        (m) => m.username.toLowerCase().includes(clean) || clean.includes(m.username.toLowerCase())
+      )
+      if (byPartialUsername) return byPartialUsername.id
+
+      // 7. Email match
+      const byEmail = (membersWithEmail ?? []).find(
+        (m) => m.email && m.email.toLowerCase().includes(clean)
+      )
+      if (byEmail) return byEmail.id
+
+      return null
     }
 
     if (aiParsed.action && aiParsed.action.type !== 'none') {
@@ -451,7 +541,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           for (const item of taskList) {
             if (!item.title) continue
-            const assignedUser = resolveMemberId(item.assigned_to || params.assigned_to)
+            const assignedUser = resolveMemberId(item.assigned_to || params.assigned_to) || userId
             const dueDate = normalizeDate(item.due_date || params.due_date)
             const startDate = normalizeDate(item.start_date || params.start_date)
 
@@ -643,13 +733,37 @@ FORMATO OBRIGATÓRIO (JSON puro):
             actionResult = { success: true, duplicatedTask: dupTask }
           }
         }
-      } else if (type === 'update_task') {
-        let taskId = params.task_id as string | undefined
-        if (!taskId && params.task_title) {
+      } else if (
+        type === 'update_task' ||
+        type === 'assign_task' ||
+        type === 'assign_user' ||
+        type === 'delegate_task' ||
+        type === 'set_assignee'
+      ) {
+        let taskId = (params.task_id || params.id || params.taskId) as string | undefined
+        const searchTitle = String(params.task_title || params.title || params.task_name || params.task || '').trim()
+
+        // 1. Busca por título na lista de tarefas carregadas em memória
+        if (!taskId && searchTitle) {
+          const cleanSearch = searchTitle.toLowerCase().replace(/^["']|["']$/g, '').trim()
+          const localMatch = currentProjectTasks.find(
+            (t) =>
+              t.title.toLowerCase() === cleanSearch ||
+              t.title.toLowerCase().includes(cleanSearch) ||
+              cleanSearch.includes(t.title.toLowerCase())
+          )
+          if (localMatch) {
+            taskId = localMatch.id
+          }
+        }
+
+        // 2. Busca no banco de dados se não achou em memória
+        if (!taskId && searchTitle) {
+          const cleanSearch = searchTitle.replace(/^["']|["']$/g, '').trim()
           const { data: found } = await admin
             .from('tasks')
-            .select('id')
-            .ilike('title', `%${params.task_title}%`)
+            .select('id, title')
+            .ilike('title', `%${cleanSearch}%`)
             .limit(1)
           taskId = found?.[0]?.id
         }
@@ -659,28 +773,62 @@ FORMATO OBRIGATÓRIO (JSON puro):
           if (params.status) patch.status = params.status
           if (params.priority) patch.priority = params.priority
           if (params.title) patch.title = params.title
-          if (params.assigned_to) patch.assigned_to = resolveMemberId(params.assigned_to)
+
+          const assignedParam =
+            params.assigned_to ??
+            params.responsible ??
+            params.assignee ??
+            params.member ??
+            params.user ??
+            params.responsavel
+          if (assignedParam !== undefined) {
+            patch.assigned_to = resolveMemberId(assignedParam)
+          }
+
           if (params.due_date !== undefined) patch.due_date = normalizeDate(params.due_date)
           if (params.start_date !== undefined) patch.start_date = normalizeDate(params.start_date)
 
-          const { data: updated } = await admin
+          const { data: updated, error: updateErr } = await admin
             .from('tasks')
             .update(patch)
             .eq('id', taskId)
             .select()
             .single()
 
-          actionResult = { success: true, task: updated }
+          if (updateErr) {
+            console.error('Update task error:', updateErr)
+            actionResult = { success: false, error: updateErr.message }
+          } else {
+            actionResult = { success: true, task: updated }
+          }
+        } else {
+          actionResult = { success: false, error: `Tarefa "${searchTitle}" não encontrada.` }
         }
       } else if (type === 'update_tasks' && Array.isArray(params.tasks)) {
         const updatedList: unknown[] = []
         for (const item of params.tasks as Array<Record<string, unknown>>) {
-          let taskId = item.task_id as string | undefined
-          if (!taskId && item.task_title) {
+          let taskId = (item.task_id || item.id || item.taskId) as string | undefined
+          const searchTitle = String(item.task_title || item.title || item.task_name || item.task || '').trim()
+
+          if (!taskId && searchTitle) {
+            const cleanSearch = searchTitle.toLowerCase().replace(/^["']|["']$/g, '').trim()
+            const localMatch = currentProjectTasks.find(
+              (t) =>
+                t.title.toLowerCase() === cleanSearch ||
+                t.title.toLowerCase().includes(cleanSearch) ||
+                cleanSearch.includes(t.title.toLowerCase())
+            )
+            if (localMatch) {
+              taskId = localMatch.id
+            }
+          }
+
+          if (!taskId && searchTitle) {
+            const cleanSearch = searchTitle.replace(/^["']|["']$/g, '').trim()
             const { data: found } = await admin
               .from('tasks')
-              .select('id')
-              .ilike('title', `%${item.task_title}%`)
+              .select('id, title')
+              .ilike('title', `%${cleanSearch}%`)
               .limit(1)
             taskId = found?.[0]?.id
           }
@@ -690,7 +838,18 @@ FORMATO OBRIGATÓRIO (JSON puro):
             if (item.status) patch.status = item.status
             if (item.priority) patch.priority = item.priority
             if (item.title) patch.title = item.title
-            if (item.assigned_to) patch.assigned_to = resolveMemberId(item.assigned_to)
+
+            const assignedParam =
+              item.assigned_to ??
+              item.responsible ??
+              item.assignee ??
+              item.member ??
+              item.user ??
+              item.responsavel
+            if (assignedParam !== undefined) {
+              patch.assigned_to = resolveMemberId(assignedParam)
+            }
+
             if (item.due_date !== undefined) patch.due_date = normalizeDate(item.due_date)
             if (item.start_date !== undefined) patch.start_date = normalizeDate(item.start_date)
 
