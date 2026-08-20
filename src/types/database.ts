@@ -105,7 +105,6 @@ export type HubDocument = {
   file_url: string
   extracted_text: string | null
   tags: string[]
-  project_id: string | null
   task_id: string | null
   created_by: string | null
   created_at: string
@@ -305,7 +304,6 @@ export interface Database {
           file_url: string
           extracted_text?: string | null
           tags?: string[]
-          project_id?: string | null
           task_id?: string | null
           created_by?: string | null
           created_at?: string
@@ -321,7 +319,6 @@ export interface Database {
           file_url?: string
           extracted_text?: string | null
           tags?: string[]
-          project_id?: string | null
           task_id?: string | null
           created_by?: string | null
           created_at?: string

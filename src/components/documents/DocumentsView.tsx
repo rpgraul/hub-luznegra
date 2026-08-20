@@ -4,25 +4,19 @@
 import { useState, useMemo } from 'react'
 import { toast } from '@heroui/react'
 import { useDocuments } from '@/hooks/useDocuments'
-import type { HubDocument, Project } from '@/types/database'
+import type { HubDocument } from '@/types/database'
 import { formatFileSize, getFileIconClass } from '@/lib/extractors'
 import DocumentUploadModal from './DocumentUploadModal'
 import DocumentDetailDrawer from './DocumentDetailDrawer'
 
 interface DocumentsViewProps {
-  projects: Project[]
-  activeProjectId: string | null
-  onProjectChange?: (projectId: string | null) => void
+  // Central de Documentos global do Hub
 }
 
 type FileTypeFilter = 'all' | 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'other'
 
-export default function DocumentsView({
-  projects,
-  activeProjectId,
-  onProjectChange,
-}: DocumentsViewProps) {
-  const { documents, isLoading, uploadDocument, deleteDocument } = useDocuments(activeProjectId)
+export default function DocumentsView({}: DocumentsViewProps = {}) {
+  const { documents, isLoading, uploadDocument, deleteDocument } = useDocuments()
   const [search, setSearch] = useState('')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all')
@@ -67,10 +61,7 @@ export default function DocumentsView({
     })
   }, [documents, search, typeFilter, selectedTag])
 
-  function getProject(projectId: string | null) {
-    if (!projectId) return null
-    return projects.find((p) => p.id === projectId) || null
-  }
+
 
   async function handleCopyShortcut(doc: HubDocument) {
     const shortcut = `#doc:${doc.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
@@ -120,20 +111,6 @@ export default function DocumentsView({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Seletor de Projeto */}
-            <select
-              value={activeProjectId || ''}
-              onChange={(e) => onProjectChange?.(e.target.value || null)}
-              className="h-8 rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Todos os Projetos</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-
             {/* Botão Enviar Documento */}
             <button
               type="button"
@@ -299,7 +276,6 @@ export default function DocumentsView({
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredDocuments.map((doc) => {
-              const project = getProject(doc.project_id)
               const iconClass = getFileIconClass(doc.file_type)
 
               return (
@@ -323,25 +299,6 @@ export default function DocumentsView({
                         </p>
                       </div>
                     </div>
-
-                    {/* Project badge */}
-                    {project && (
-                      <div className="mt-2">
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.2 text-[10px] font-medium"
-                          style={{
-                            backgroundColor: `${project.color || '#7b68ee'}18`,
-                            color: project.color || '#7b68ee',
-                          }}
-                        >
-                          <span
-                            className="size-1.5 rounded-full"
-                            style={{ backgroundColor: project.color || '#7b68ee' }}
-                          />
-                          {project.name}
-                        </span>
-                      </div>
-                    )}
 
                     {/* Extracted Text Snippet */}
                     {doc.extracted_text && (
@@ -430,14 +387,11 @@ export default function DocumentsView({
       <DocumentUploadModal
         open={uploadModalOpen}
         onOpenChange={setUploadModalOpen}
-        projects={projects}
-        activeProjectId={activeProjectId}
         onUpload={async (data) => {
           await uploadDocument({
             file: data.file,
             title: data.title,
             tags: data.tags,
-            project_id: data.project_id,
           })
         }}
       />
@@ -447,7 +401,6 @@ export default function DocumentsView({
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         document={selectedDoc}
-        project={getProject(selectedDoc?.project_id || null)}
         onDelete={handleDelete}
       />
     </div>

@@ -26,7 +26,6 @@ CREATE TABLE IF NOT EXISTS public.hub_documents (
   file_url TEXT NOT NULL, -- URL pública ou de acesso direto
   extracted_text TEXT, -- Conteúdo de texto extraído para busca e IA
   tags TEXT[] DEFAULT '{}',
-  project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
   task_id UUID REFERENCES public.tasks(id) ON DELETE SET NULL,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -39,7 +38,6 @@ CREATE INDEX IF NOT EXISTS idx_hub_links_task ON public.hub_links(task_id);
 CREATE INDEX IF NOT EXISTS idx_hub_links_tags ON public.hub_links USING gin(tags);
 CREATE INDEX IF NOT EXISTS idx_hub_links_created_at ON public.hub_links(created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_hub_docs_project ON public.hub_documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_hub_docs_task ON public.hub_documents(task_id);
 CREATE INDEX IF NOT EXISTS idx_hub_docs_tags ON public.hub_documents USING gin(tags);
 CREATE INDEX IF NOT EXISTS idx_hub_docs_type ON public.hub_documents(file_type);

@@ -13,9 +13,9 @@ import {
 import type { HubDocument } from '@/types/database'
 import { toast } from '@heroui/react'
 
-export function useDocuments(projectId?: string | null) {
+export function useDocuments() {
   const queryClient = useQueryClient()
-  const queryKey = ['documents', projectId ?? 'all']
+  const queryKey = ['documents']
 
   const {
     data: documents = [],
@@ -25,7 +25,7 @@ export function useDocuments(projectId?: string | null) {
     refetch,
   } = useQuery<HubDocument[]>({
     queryKey,
-    queryFn: () => listDocuments(projectId),
+    queryFn: () => listDocuments(),
     staleTime: 1000 * 60 * 2, // 2 minutos
   })
 

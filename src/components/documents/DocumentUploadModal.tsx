@@ -2,7 +2,6 @@
 // Modal de upload de documentos com extração de texto em tempo real para a IA (Lorde Camarão)
 
 import { useState, useRef } from 'react'
-import type { Project } from '@/types/database'
 import {
   extractTextFromFile,
   formatFileSize,
@@ -13,28 +12,22 @@ import {
 interface DocumentUploadModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  projects: Project[]
-  activeProjectId?: string | null
   onUpload: (data: {
     file: File
     title: string
     tags: string[]
-    project_id: string | null
   }) => Promise<void>
 }
 
 export default function DocumentUploadModal({
   open,
   onOpenChange,
-  projects,
-  activeProjectId,
   onUpload,
 }: DocumentUploadModalProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [title, setTitle] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
-  const [projectId, setProjectId] = useState<string | null>(null)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionResult, setExtractionResult] = useState<ExtractionResult | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -47,7 +40,6 @@ export default function DocumentUploadModal({
     setTitle('')
     setTagInput('')
     setTags([])
-    setProjectId(activeProjectId || null)
     setIsExtracting(false)
     setExtractionResult(null)
     setIsUploading(false)
@@ -111,7 +103,6 @@ export default function DocumentUploadModal({
         file: selectedFile,
         title: title.trim(),
         tags,
-        project_id: projectId || null,
       })
       onOpenChange(false)
       resetState()
@@ -274,25 +265,6 @@ export default function DocumentUploadModal({
                 required
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
               />
-            </div>
-
-            {/* Projeto Vinculado */}
-            <div>
-              <label className="mb-1 block font-semibold text-foreground">
-                Projeto Vinculado
-              </label>
-              <select
-                value={projectId || ''}
-                onChange={(e) => setProjectId(e.target.value || null)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-              >
-                <option value="">(Geral / Todos os Projetos)</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Tags */}

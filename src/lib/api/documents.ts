@@ -6,7 +6,6 @@ export interface UploadDocumentInput {
   file: File
   title?: string
   tags?: string[]
-  project_id?: string | null
   task_id?: string | null
 }
 
@@ -14,21 +13,15 @@ export interface UpdateDocumentInput {
   id: string
   title?: string
   tags?: string[]
-  project_id?: string | null
   task_id?: string | null
 }
 
-export async function listDocuments(projectId?: string | null): Promise<HubDocument[]> {
-  let query = supabase
+export async function listDocuments(): Promise<HubDocument[]> {
+  const { data, error } = await supabase
     .from('hub_documents')
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (projectId) {
-    query = query.eq('project_id', projectId)
-  }
-
-  const { data, error } = await query
   if (error) {
     console.error('Erro ao listar documentos:', error)
     throw new Error(error.message)
@@ -51,7 +44,7 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export async function uploadDocument(input: UploadDocumentInput): Promise<HubDocument> {
-  const { file, title, tags = [], project_id, task_id } = input
+  const { file, title, tags = [], task_id } = input
 
   // 1. Extração de texto no cliente
   const { text: extractedText, fileType } = await extractTextFromFile(file)
@@ -117,7 +110,6 @@ export async function uploadDocument(input: UploadDocumentInput): Promise<HubDoc
       file_url: fileUrl,
       extracted_text: extractedText,
       tags: tags,
-      project_id: project_id || null,
       task_id: task_id || null,
       created_by: userId,
     })
@@ -140,7 +132,6 @@ export async function updateDocument(input: UpdateDocumentInput): Promise<HubDoc
     .update({
       ...(updates.title !== undefined && { title: updates.title.trim() }),
       ...(updates.tags !== undefined && { tags: updates.tags }),
-      ...(updates.project_id !== undefined && { project_id: updates.project_id }),
       ...(updates.task_id !== undefined && { task_id: updates.task_id }),
     })
     .eq('id', id)

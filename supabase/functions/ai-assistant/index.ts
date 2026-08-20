@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
 
     const { data: hubDocs } = await admin
       .from('hub_documents')
-      .select('id, title, file_name, file_type, tags, project_id, file_url, extracted_text')
+      .select('id, title, file_name, file_type, tags, file_url, extracted_text')
       .limit(30)
 
     const membersMap = membersWithEmail

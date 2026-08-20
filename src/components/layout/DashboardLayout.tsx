@@ -233,11 +233,7 @@ export default function DashboardLayout({
             onProjectChange={setProject}
           />
         ) : activeTab === 'documents' ? (
-          <DocumentsView
-            projects={projects}
-            activeProjectId={preferences?.active_project_id ?? null}
-            onProjectChange={setProject}
-          />
+          <DocumentsView />
         ) : (
           <>
             <TopBar

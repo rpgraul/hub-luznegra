@@ -3,14 +3,13 @@
 
 import { useState } from 'react'
 import { toast } from '@heroui/react'
-import type { HubDocument, Project } from '@/types/database'
+import type { HubDocument } from '@/types/database'
 import { formatFileSize, getFileIconClass } from '@/lib/extractors'
 
 interface DocumentDetailDrawerProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   document: HubDocument | null
-  project?: Project | null
   onDelete?: (doc: HubDocument) => void
 }
 
@@ -18,7 +17,6 @@ export default function DocumentDetailDrawer({
   open,
   onOpenChange,
   document: doc,
-  project,
   onDelete,
 }: DocumentDetailDrawerProps) {
   const [searchTerm, setSearchTerm] = useState('')
@@ -124,22 +122,6 @@ export default function DocumentDetailDrawer({
             <span className="rounded-md bg-muted px-2 py-0.5 font-medium uppercase text-muted-foreground">
               {doc.file_type}
             </span>
-
-            {project && (
-              <span
-                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium"
-                style={{
-                  backgroundColor: `${project.color || '#7b68ee'}18`,
-                  color: project.color || '#7b68ee',
-                }}
-              >
-                <span
-                  className="size-1.5 rounded-full"
-                  style={{ backgroundColor: project.color || '#7b68ee' }}
-                />
-                {project.name}
-              </span>
-            )}
 
             <span className="text-muted-foreground text-[10px] ml-auto">
               {new Date(doc.created_at).toLocaleDateString('pt-BR')}
