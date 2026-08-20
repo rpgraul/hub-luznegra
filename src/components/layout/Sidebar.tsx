@@ -175,9 +175,9 @@ export default function Sidebar({
               type="button"
               onClick={onOpenAi}
               title="Assistente IA (Lorde Camarão)"
-              className="flex size-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition"
+              className="flex size-8 items-center justify-center rounded-lg text-foreground hover:bg-primary/10 transition text-sm cursor-pointer"
             >
-              <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+              <span>🦐</span>
             </button>
           )}
         </div>
@@ -468,8 +468,8 @@ export default function Sidebar({
             title="Abrir Lorde Camarão"
             className="group flex w-full items-center gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2 text-xs font-semibold text-foreground transition hover:bg-muted hover:border-border cursor-pointer shadow-2xs"
           >
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs text-primary">
-              <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs">
+              <span>🦐</span>
             </div>
             <div className="flex flex-1 items-center justify-between min-w-0">
               <span className="truncate font-bold text-foreground">Lorde Camarão</span>

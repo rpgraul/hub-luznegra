@@ -19,11 +19,11 @@ export default function AIAssistantFloatingButton({
           : 'bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 text-white shadow-indigo-500/25 ring-2 ring-white/20'
       }`}
     >
-      <i
-        className={`fa-solid ${
-          isOpen ? 'fa-xmark text-sm' : 'fa-wand-magic-sparkles text-base'
-        }`}
-      />
+      {isOpen ? (
+        <i className="fa-solid fa-xmark text-sm" />
+      ) : (
+        <span className="text-xl">🦐</span>
+      )}
     </button>
   )
 }
