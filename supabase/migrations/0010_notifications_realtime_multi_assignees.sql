@@ -1,6 +1,16 @@
 -- Migration 0010: Notificações em Tempo Real (Supabase Realtime) e suporte a múltiplos assignees
 -- 1. Habilita Realtime na tabela de notificações
-ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'notifications'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
+  END IF;
+END $$;
 
 -- 2. Atualiza a trigger de atribuição para suportar múltiplos assignees (array) ou assigned_to individual
 CREATE OR REPLACE FUNCTION public.notify_task_assigned()

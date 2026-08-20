@@ -1,3 +1,6 @@
+// src/lib/api/links.ts
+// Gerenciamento de Links Úteis da equipe (globais no Hub)
+
 import { supabase } from '@/lib/supabaseClient'
 import type { HubLink } from '@/types/database'
 
@@ -6,7 +9,6 @@ export interface CreateLinkInput {
   url: string
   description?: string | null
   tags?: string[]
-  project_id?: string | null
   task_id?: string | null
 }
 
@@ -16,21 +18,15 @@ export interface UpdateLinkInput {
   url?: string
   description?: string | null
   tags?: string[]
-  project_id?: string | null
   task_id?: string | null
 }
 
-export async function listLinks(projectId?: string | null): Promise<HubLink[]> {
-  let query = supabase
+export async function listLinks(): Promise<HubLink[]> {
+  const { data, error } = await supabase
     .from('hub_links')
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (projectId) {
-    query = query.eq('project_id', projectId)
-  }
-
-  const { data, error } = await query
   if (error) {
     console.error('Erro ao listar links:', error)
     throw new Error(error.message)
@@ -50,7 +46,6 @@ export async function createLink(input: CreateLinkInput): Promise<HubLink> {
       url: input.url.trim(),
       description: input.description?.trim() || null,
       tags: input.tags || [],
-      project_id: input.project_id || null,
       task_id: input.task_id || null,
       created_by: userId,
     })
@@ -75,7 +70,6 @@ export async function updateLink(input: UpdateLinkInput): Promise<HubLink> {
       ...(updates.url !== undefined && { url: updates.url.trim() }),
       ...(updates.description !== undefined && { description: updates.description?.trim() || null }),
       ...(updates.tags !== undefined && { tags: updates.tags }),
-      ...(updates.project_id !== undefined && { project_id: updates.project_id }),
       ...(updates.task_id !== undefined && { task_id: updates.task_id }),
     })
     .eq('id', id)

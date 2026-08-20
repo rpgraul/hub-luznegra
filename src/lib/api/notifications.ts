@@ -52,10 +52,12 @@ export async function deleteNotification(id: string): Promise<void> {
 }
 
 export async function deleteAllNotifications(): Promise<void> {
+  const { data: userAuth } = await supabase.auth.getUser()
+  const uid = userAuth?.user?.id
   const { error } = await supabase
     .from('notifications')
     .delete()
-    .neq('id', '00000000-0000-0000-0000-000000000000') // Deleta todas do usuário autenticado (respeitando RLS)
+    .eq('user_id', uid || '')
 
   if (error) throw new Error(error.message)
 }

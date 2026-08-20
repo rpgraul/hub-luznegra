@@ -1,5 +1,5 @@
 // src/hooks/useLinks.ts
-// TanStack Query hook para gerenciar Links Úteis
+// TanStack Query hook para gerenciar Links Úteis (globais no Hub)
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -13,9 +13,9 @@ import {
 import type { HubLink } from '@/types/database'
 import { toast } from '@heroui/react'
 
-export function useLinks(projectId?: string | null) {
+export function useLinks() {
   const queryClient = useQueryClient()
-  const queryKey = ['links', projectId ?? 'all']
+  const queryKey = ['links']
 
   const {
     data: links = [],
@@ -25,7 +25,7 @@ export function useLinks(projectId?: string | null) {
     refetch,
   } = useQuery<HubLink[]>({
     queryKey,
-    queryFn: () => listLinks(projectId),
+    queryFn: listLinks,
     staleTime: 1000 * 60 * 2, // 2 minutos
   })
 

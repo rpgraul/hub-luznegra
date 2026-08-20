@@ -1,22 +1,19 @@
 // src/components/links/LinkModal.tsx
-// Modal para adicionar ou editar um Link Útil
+// Modal para adicionar ou editar um Link Útil (globais no Hub)
 
 import { useState, useEffect } from 'react'
-import type { HubLink, Project } from '@/types/database'
+import type { HubLink } from '@/types/database'
 
 interface LinkModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   linkToEdit?: HubLink | null
-  projects: Project[]
-  activeProjectId?: string | null
   onSave: (data: {
     id?: string
     title: string
     url: string
     description?: string | null
     tags?: string[]
-    project_id?: string | null
   }) => Promise<void>
 }
 
@@ -24,8 +21,6 @@ export default function LinkModal({
   open,
   onOpenChange,
   linkToEdit,
-  projects,
-  activeProjectId,
   onSave,
 }: LinkModalProps) {
   const [title, setTitle] = useState('')
@@ -33,7 +28,6 @@ export default function LinkModal({
   const [description, setDescription] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [tags, setTags] = useState<string[]>([])
-  const [projectId, setProjectId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,17 +37,15 @@ export default function LinkModal({
       setUrl(linkToEdit.url)
       setDescription(linkToEdit.description || '')
       setTags(linkToEdit.tags || [])
-      setProjectId(linkToEdit.project_id || null)
     } else {
       setTitle('')
       setUrl('')
       setDescription('')
       setTags([])
-      setProjectId(activeProjectId || null)
     }
     setTagInput('')
     setError(null)
-  }, [linkToEdit, open, activeProjectId])
+  }, [linkToEdit, open])
 
   if (!open) return null
 
@@ -101,7 +93,6 @@ export default function LinkModal({
         url: finalUrl,
         description: description.trim() || null,
         tags,
-        project_id: projectId || null,
       })
       onOpenChange(false)
     } catch (err) {
@@ -181,25 +172,6 @@ export default function LinkModal({
                   className="w-full rounded-md border border-border bg-background pl-8 pr-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
                 />
               </div>
-            </div>
-
-            {/* Projeto vinculado */}
-            <div>
-              <label className="mb-1 block font-semibold text-foreground">
-                Projeto Vinculado
-              </label>
-              <select
-                value={projectId || ''}
-                onChange={(e) => setProjectId(e.target.value || null)}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:outline-none"
-              >
-                <option value="">(Geral / Todos os Projetos)</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
             </div>
 
             {/* Descrição */}

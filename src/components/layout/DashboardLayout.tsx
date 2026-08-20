@@ -237,11 +237,7 @@ export default function DashboardLayout({
       {/* Main Workspace Area */}
       <div className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
         {activeTab === 'links' ? (
-          <LinksView
-            projects={projects}
-            activeProjectId={preferences?.active_project_id ?? null}
-            onProjectChange={setProject}
-          />
+          <LinksView />
         ) : activeTab === 'documents' ? (
           <DocumentsView />
         ) : (

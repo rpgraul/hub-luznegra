@@ -174,31 +174,49 @@ export default function NotificationBell({
   }
 
   async function handleMarkAll() {
+    queryClient.setQueryData<Notification[]>(['notifications'], (old = []) =>
+      old.map((n) => ({ ...n, read: true })),
+    )
+    queryClient.setQueryData<number>(['notifications', 'unread'], 0)
     try {
       await markAllNotificationsRead()
       refetchAll()
       toast.success('Todas marcadas como lidas.')
     } catch {
+      refetchAll()
       toast.danger('Erro ao marcar notificações.')
     }
   }
 
   async function handleDelete(e: React.MouseEvent, id: string) {
     e.stopPropagation()
+    const target = notifications.find((n) => n.id === id)
+    queryClient.setQueryData<Notification[]>(['notifications'], (old = []) =>
+      old.filter((n) => n.id !== id),
+    )
+    if (target && !target.read) {
+      queryClient.setQueryData<number>(['notifications', 'unread'], (old = 0) =>
+        Math.max(0, old - 1),
+      )
+    }
     try {
       await deleteNotification(id)
       refetchAll()
     } catch {
+      refetchAll()
       toast.danger('Erro ao remover notificação.')
     }
   }
 
   async function handleClearAll() {
+    queryClient.setQueryData<Notification[]>(['notifications'], [])
+    queryClient.setQueryData<number>(['notifications', 'unread'], 0)
     try {
       await deleteAllNotifications()
       refetchAll()
       toast.success('Notificações limpas.')
     } catch {
+      refetchAll()
       toast.danger('Erro ao limpar notificações.')
     }
   }

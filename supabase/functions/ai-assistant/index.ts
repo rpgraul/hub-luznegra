@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
     // 1.1 Links e Documentos cadastrados no Hub
     const { data: hubLinks } = await admin
       .from('hub_links')
-      .select('id, title, url, description, tags, project_id')
+      .select('id, title, url, description, tags')
       .limit(40)
 
     const { data: hubDocs } = await admin
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
       .join('\n')
 
     const linksSnippet = (hubLinks ?? [])
-      .map((l) => `- [${l.id}] "${l.title}" (URL: ${l.url}, Tags: [${(l.tags || []).join(', ')}], Descrição: "${l.description || 's/desc'}", ProjetoID: ${l.project_id || 'Geral'})`)
+      .map((l) => `- [${l.id}] "${l.title}" (URL: ${l.url}, Tags: [${(l.tags || []).join(', ')}], Descrição: "${l.description || 's/desc'}")`)
       .join('\n')
 
     const lastUserMsg = (message || '').toLowerCase()
@@ -246,8 +246,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
     "title": string,
     "url": string,
     "description"?: string,
-    "tags"?: string[],
-    "project_id"?: string
+    "tags"?: string[]
   }
 - ENVIAR E-MAIL IMEDIATO (send_email):
   Quando o usuário pedir para enviar e-mail (ex: "Envie um e-mail para o Raul sobre a tarefa X", "mande um email com o prazo da tarefa Y para o diego"):
@@ -692,7 +691,6 @@ FORMATO OBRIGATÓRIO (JSON puro):
             url: String(params.url).trim(),
             description: (params.description as string) || null,
             tags: Array.isArray(params.tags) ? params.tags : [],
-            project_id: (params.project_id as string) || context.projectId || null,
             created_by: userId,
           })
           .select()

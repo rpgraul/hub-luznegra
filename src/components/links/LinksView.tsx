@@ -1,24 +1,14 @@
 // src/components/links/LinksView.tsx
-// Visualização principal de Links Úteis com busca, filtros por tags e projetos, abertura em nova aba e atalhos
+// Visualização principal de Links Úteis com busca rápida, filtros por tags, abertura em nova aba e atalhos
 
 import { useState, useMemo } from 'react'
 import { toast } from '@heroui/react'
 import { useLinks } from '@/hooks/useLinks'
-import type { HubLink, Project } from '@/types/database'
+import type { HubLink } from '@/types/database'
 import LinkModal from './LinkModal'
 
-interface LinksViewProps {
-  projects: Project[]
-  activeProjectId: string | null
-  onProjectChange?: (projectId: string | null) => void
-}
-
-export default function LinksView({
-  projects,
-  activeProjectId,
-  onProjectChange,
-}: LinksViewProps) {
-  const { links, isLoading, createLink, updateLink, deleteLink } = useLinks(activeProjectId)
+export default function LinksView() {
+  const { links, isLoading, createLink, updateLink, deleteLink } = useLinks()
   const [search, setSearch] = useState('')
   const [selectedTag, setSelectedTag] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -50,11 +40,6 @@ export default function LinksView({
       return matchSearch && matchTag
     })
   }, [links, search, selectedTag])
-
-  function getProject(projectId: string | null) {
-    if (!projectId) return null
-    return projects.find((p) => p.id === projectId) || null
-  }
 
   function getDomainFromUrl(url: string) {
     try {
@@ -130,26 +115,12 @@ export default function LinksView({
             <div>
               <h1 className="text-sm font-bold text-foreground">Links Úteis</h1>
               <p className="text-[11px] text-muted-foreground">
-                Central de acessos rápidos, pastas do Drive, artes e referências da equipe.
+                Central global de acessos rápidos, pastas do Drive, artes e referências da equipe.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Seletor de Projeto */}
-            <select
-              value={activeProjectId || ''}
-              onChange={(e) => onProjectChange?.(e.target.value || null)}
-              className="h-8 rounded-md border border-border bg-background px-2.5 text-xs text-foreground focus:border-primary focus:outline-none"
-            >
-              <option value="">Todos os Projetos</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-
             {/* Botão Novo Link */}
             <button
               type="button"
@@ -232,7 +203,7 @@ export default function LinksView({
             <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
               <i className="fa-solid fa-link-slash text-lg" />
             </div>
-            <h3 className="text-sm font-semibold text-foreground">Nenhum link encontrado</h3>
+            <h3 className="text-sm font-semibold text-foreground">Nenhum link cadastrado</h3>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {search || selectedTag
                 ? 'Tente alterar os termos de busca ou remover o filtro de tags.'
@@ -255,7 +226,6 @@ export default function LinksView({
         ) : (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {filteredLinks.map((link) => {
-              const project = getProject(link.project_id)
               const domain = getDomainFromUrl(link.url)
               const iconClass = getLinkIcon(link.url)
 
@@ -293,27 +263,11 @@ export default function LinksView({
                       </a>
                     </div>
 
-                    {/* Domain & Project Pill */}
+                    {/* Domain */}
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="truncate max-w-[150px] font-mono text-muted-foreground/80">
+                      <span className="truncate max-w-[200px] font-mono text-muted-foreground/80">
                         {domain}
                       </span>
-
-                      {project && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-2 py-0.2 font-medium"
-                          style={{
-                            backgroundColor: `${project.color || '#7b68ee'}18`,
-                            color: project.color || '#7b68ee',
-                          }}
-                        >
-                          <span
-                            className="size-1.5 rounded-full"
-                            style={{ backgroundColor: project.color || '#7b68ee' }}
-                          />
-                          {project.name}
-                        </span>
-                      )}
                     </div>
 
                     {/* Description */}
@@ -404,8 +358,6 @@ export default function LinksView({
         open={modalOpen}
         onOpenChange={setModalOpen}
         linkToEdit={editingLink}
-        projects={projects}
-        activeProjectId={activeProjectId}
         onSave={async (data) => {
           if (data.id) {
             await updateLink({
@@ -414,7 +366,6 @@ export default function LinksView({
               url: data.url,
               description: data.description,
               tags: data.tags,
-              project_id: data.project_id,
             })
           } else {
             await createLink({
@@ -422,7 +373,6 @@ export default function LinksView({
               url: data.url,
               description: data.description,
               tags: data.tags,
-              project_id: data.project_id,
             })
           }
         }}
