@@ -80,12 +80,12 @@ export default function DocumentDetailDrawer({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+        className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
         onClick={() => onOpenChange(false)}
       />
 
       {/* Slide-over Drawer */}
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[560px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
+      <div className="fixed inset-y-0 right-0 z-[70] flex h-full w-full max-w-[560px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
         {/* Header */}
         <div className="flex flex-col gap-2 border-b border-border p-4 bg-muted/20">
           <div className="flex items-start justify-between gap-3">
