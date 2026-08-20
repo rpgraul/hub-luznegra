@@ -17,6 +17,8 @@ interface SidebarProps {
   onHideDoneChange?: (hide: boolean) => void
   tasks?: Task[]
   onOpenAi?: () => void
+  activeTab?: 'tasks' | 'links' | 'documents'
+  onSelectTab?: (tab: 'tasks' | 'links' | 'documents') => void
 }
 
 export default function Sidebar({
@@ -32,6 +34,8 @@ export default function Sidebar({
   onHideDoneChange,
   tasks = [],
   onOpenAi,
+  activeTab = 'tasks',
+  onSelectTab,
 }: SidebarProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -125,11 +129,52 @@ export default function Sidebar({
 
         {/* Bottom Actions */}
         <div className="flex flex-col items-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => onSelectTab?.('tasks')}
+            title="Tarefas"
+            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+              activeTab === 'tasks'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <i className="fa-solid fa-list-check text-xs" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelectTab?.('links')}
+            title="Links Úteis"
+            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+              activeTab === 'links'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <i className="fa-solid fa-link text-xs" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelectTab?.('documents')}
+            title="Central de Documentos"
+            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+              activeTab === 'documents'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <i className="fa-solid fa-folder-open text-xs" />
+          </button>
+
+          <div className="my-1 h-px w-8 bg-border" />
+
           {onOpenAi && (
             <button
               type="button"
               onClick={onOpenAi}
-              title="Assistente IA"
+              title="Assistente IA (Lorde Camarão)"
               className="flex size-8 items-center justify-center rounded-lg text-primary hover:bg-primary/10 transition"
             >
               <i className="fa-solid fa-wand-magic-sparkles text-xs" />
@@ -366,6 +411,54 @@ export default function Sidebar({
         </div>
       </div>
 
+      {/* Navegação Rápida: Tarefas, Links Úteis e Documentos */}
+      <div className="border-t border-border px-2 py-1.5 space-y-0.5">
+        <button
+          type="button"
+          onClick={() => onSelectTab?.('tasks')}
+          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+            activeTab === 'tasks'
+              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <i className="fa-solid fa-list-check text-xs" />
+            <span>Tarefas</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab?.('links')}
+          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+            activeTab === 'links'
+              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <i className="fa-solid fa-link text-xs" />
+            <span>Links Úteis</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab?.('documents')}
+          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+            activeTab === 'documents'
+              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <i className="fa-solid fa-folder-open text-xs" />
+            <span>Documentos</span>
+          </span>
+        </button>
+      </div>
+
       {/* AI Assistant Button right above user name */}
       {onOpenAi && (
         <div className="border-t border-border p-2 pb-1">
@@ -375,8 +468,8 @@ export default function Sidebar({
             title="Abrir Lorde Camarão"
             className="group flex w-full items-center gap-2.5 rounded-md border border-border/70 bg-muted/40 p-2 text-xs font-semibold text-foreground transition hover:bg-muted hover:border-border cursor-pointer shadow-2xs"
           >
-            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs">
-              🦐
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-background border border-border/60 text-xs shadow-2xs text-primary">
+              <i className="fa-solid fa-wand-magic-sparkles text-xs" />
             </div>
             <div className="flex flex-1 items-center justify-between min-w-0">
               <span className="truncate font-bold text-foreground">Lorde Camarão</span>

@@ -82,6 +82,36 @@ export type Notification = {
   task_id: string | null
 }
 
+export type HubLink = {
+  id: string
+  title: string
+  url: string
+  description: string | null
+  tags: string[]
+  project_id: string | null
+  task_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type HubDocument = {
+  id: string
+  title: string
+  file_name: string
+  file_type: string
+  file_size: number
+  file_key: string
+  file_url: string
+  extracted_text: string | null
+  tags: string[]
+  project_id: string | null
+  task_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -221,6 +251,7 @@ export interface Database {
           link?: string | null
           read?: boolean
           created_at?: string
+          task_id?: string | null
         }
         Update: {
           id?: string
@@ -230,6 +261,71 @@ export interface Database {
           link?: string | null
           read?: boolean
           created_at?: string
+          task_id?: string | null
+        }
+        Relationships: []
+      }
+      hub_links: {
+        Row: HubLink
+        Insert: {
+          id?: string
+          title: string
+          url: string
+          description?: string | null
+          tags?: string[]
+          project_id?: string | null
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          url?: string
+          description?: string | null
+          tags?: string[]
+          project_id?: string | null
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      hub_documents: {
+        Row: HubDocument
+        Insert: {
+          id?: string
+          title: string
+          file_name: string
+          file_type: string
+          file_size?: number
+          file_key: string
+          file_url: string
+          extracted_text?: string | null
+          tags?: string[]
+          project_id?: string | null
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          file_name?: string
+          file_type?: string
+          file_size?: number
+          file_key?: string
+          file_url?: string
+          extracted_text?: string | null
+          tags?: string[]
+          project_id?: string | null
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }

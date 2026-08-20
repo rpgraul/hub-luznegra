@@ -35,6 +35,7 @@ interface AIAction {
     | 'send_email'
     | 'send_notification'
     | 'draft_email'
+    | 'create_link'
     | 'none'
   params?: Record<string, unknown>
 }
@@ -90,7 +91,6 @@ Deno.serve(async (req) => {
     // Lista de membros e e-mails (para envio de e-mails e menções/notificações)
     const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 })
     const emailByUser = new Map((authUsers?.users ?? []).map((u) => [u.id, u.email]))
-    const userByEmail = new Map((authUsers?.users ?? []).map((u) => [u.email?.toLowerCase(), u.id]))
 
     const { data: members } = await admin
       .from('profiles')
@@ -124,6 +124,17 @@ Deno.serve(async (req) => {
     const { data: tasks } = await taskQuery.limit(80)
     currentProjectTasks = tasks ?? []
 
+    // 1.1 Links e Documentos cadastrados no Hub
+    const { data: hubLinks } = await admin
+      .from('hub_links')
+      .select('id, title, url, description, tags, project_id')
+      .limit(40)
+
+    const { data: hubDocs } = await admin
+      .from('hub_documents')
+      .select('id, title, file_name, file_type, tags, project_id, file_url, extracted_text')
+      .limit(30)
+
     const membersMap = membersWithEmail
       .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
       .join('\n')
@@ -131,6 +142,17 @@ Deno.serve(async (req) => {
     const tasksSnippet = currentProjectTasks
       .slice(0, 40)
       .map((t) => `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}, responsável_id: ${t.assigned_to || 'nenhum'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`)
+      .join('\n')
+
+    const linksSnippet = (hubLinks ?? [])
+      .map((l) => `- [${l.id}] "${l.title}" (URL: ${l.url}, Tags: [${(l.tags || []).join(', ')}], Descrição: "${l.description || 's/desc'}", ProjetoID: ${l.project_id || 'Geral'})`)
+      .join('\n')
+
+    const docsSnippet = (hubDocs ?? [])
+      .map((d) => {
+        const textSummary = d.extracted_text ? d.extracted_text.slice(0, 200).replace(/\n+/g, ' ') : 's/texto'
+        return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url}, Trecho: "${textSummary}...")`
+      })
       .join('\n')
 
     // 2. Monta o system prompt completo
@@ -146,10 +168,27 @@ ${membersMap || 'Nenhum'}
 Tarefas existentes (use os IDs e títulos reais para coletar dados, links e referenciar):
 ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 
+Links úteis cadastrados (indique links e URLs para os usuários quando perguntarem sobre drives, artes, sites, etc.):
+${linksSnippet || 'Nenhum link cadastrado.'}
+
+Documentos cadastrados (indique arquivos, contratos, relatórios e use os trechos de texto para responder):
+${docsSnippet || 'Nenhum documento cadastrado.'}
+
 DIRETRIZES DE RESPOSTA E PODERES:
 - Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
 - NÃO use emojis em nenhuma hipótese.
 - Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
+- Quando o usuário perguntar por links (ex: artes, drive, post, financiamento), cite o título e a URL com markdown: [Nome do Link](URL).
+- Quando o usuário perguntar sobre documentos cadastrados ou pedir para localizar arquivos, cite o título do documento e sua URL.
+- CRIAR LINK ÚTIL (create_link):
+  Se o usuário pedir para salvar um link útil (ex: "Salve o link do drive https://... com título Artes 2026"):
+  action: create_link, params: {
+    "title": string,
+    "url": string,
+    "description"?: string,
+    "tags"?: string[],
+    "project_id"?: string
+  }
 - ENVIAR E-MAIL IMEDIATO (send_email):
   Quando o usuário pedir para enviar e-mail (ex: "Envie um e-mail para o Raul sobre a tarefa X", "mande um email com o prazo da tarefa Y para o diego"):
   1. Identifique o destinatário na lista de membros (por nome, username ou @username). Se ele não tiver e-mail ou não for encontrado, informe na resposta.
@@ -180,7 +219,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 {
   "reply": "Explicação curta e direta sobre o que foi executado.",
   "action": {
-    "type": "send_email" | "send_notification" | "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "none",
+    "type": "send_email" | "send_notification" | "create_link" | "create_task" | "create_project" | "update_task" | "update_tasks" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "list_overdue" | "bulk_status_update" | "create_user" | "none",
     "params": { ... }
   }
 }`
@@ -534,6 +573,25 @@ FORMATO OBRIGATÓRIO (JSON puro):
         }
 
         actionResult = { success: true, project: createdProj }
+      } else if (type === 'create_link' && params.title && params.url) {
+        const { data: createdLink, error: linkError } = await admin
+          .from('hub_links')
+          .insert({
+            title: String(params.title).trim(),
+            url: String(params.url).trim(),
+            description: (params.description as string) || null,
+            tags: Array.isArray(params.tags) ? params.tags : [],
+            project_id: (params.project_id as string) || context.projectId || null,
+            created_by: userId,
+          })
+          .select()
+          .single()
+
+        if (linkError) {
+          console.error('Link create error:', linkError)
+        } else {
+          actionResult = { success: true, link: createdLink }
+        }
       } else if (type === 'duplicate_task') {
         const sourceTitle = params.source_task_title as string
         if (sourceTitle) {

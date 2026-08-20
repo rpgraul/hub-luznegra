@@ -14,9 +14,13 @@ export default function AppRoutes() {
       <Route path="/redefinir-senha" element={<ResetPasswordPage />} />
       <Route path="/dashboard" element={<ProtectedRoute />}>
         <Route index element={<DashboardPage />} />
+        <Route path="links" element={<DashboardPage />} />
+        <Route path="documentos" element={<DashboardPage />} />
         <Route path="task/:taskId" element={<TaskPage />} />
         <Route path="admin/users" element={<UserManagement />} />
       </Route>
+      <Route path="/links" element={<Navigate to="/dashboard/links" replace />} />
+      <Route path="/documentos" element={<Navigate to="/dashboard/documentos" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
