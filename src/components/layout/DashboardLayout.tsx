@@ -116,11 +116,19 @@ export default function DashboardLayout({
     enabled: !!user,
   })
 
-  if (!user) return null
+  function handleProjectChange(projectId: string | null) {
+    setProject(projectId)
+    if (activeTab !== 'tasks') {
+      handleSelectTab('tasks')
+    }
+  }
 
   function handleProjectSaved(project: Project) {
     void queryClient.invalidateQueries({ queryKey: ['projects'] })
     setProject(project.id)
+    if (activeTab !== 'tasks') {
+      handleSelectTab('tasks')
+    }
     setEditingProject(null)
   }
 
@@ -198,13 +206,15 @@ export default function DashboardLayout({
     }
   }
 
+  if (!user) return null
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* ClickUp-style Left Sidebar */}
       <Sidebar
         projects={projects}
         activeProjectId={preferences?.active_project_id ?? null}
-        onProjectChange={setProject}
+        onProjectChange={handleProjectChange}
         onCreateProject={() => {
           setEditingProject(null)
           setProjectModalOpen(true)
