@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
       .map((l) => `- [${l.id}] "${l.title}" (URL: ${l.url}, Tags: [${(l.tags || []).join(', ')}], Descrição: "${l.description || 's/desc'}", ProjetoID: ${l.project_id || 'Geral'})`)
       .join('\n')
 
-    const lastUserMsg = (messages[messages.length - 1]?.content || '').toLowerCase()
+    const lastUserMsg = (message || '').toLowerCase()
 
     const docsSnippet = (hubDocs ?? [])
       .map((d) => {
