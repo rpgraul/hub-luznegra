@@ -351,7 +351,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
     "type": "update_task" | "update_tasks" | "create_task" | "create_project" | "create_link" | "send_email" | "send_notification" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "none",
     "params": { ... }
   }
-}``
+}`
 
     // 3. Chamada ao DeepSeek / OpenAI
     const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
