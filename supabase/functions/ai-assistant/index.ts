@@ -78,14 +78,14 @@ Deno.serve(async (req) => {
     // 1. Coleta contexto do banco de dados (projetos, membros, tarefas recentes)
     const { data: requesterProfile } = await admin
       .from('profiles')
-      .select('role')
+      .select('id, username, full_name, role')
       .eq('id', userId)
       .maybeSingle()
     const isUserAdmin = requesterProfile?.role === 'admin'
 
     const { data: projects } = await admin
       .from('projects')
-      .select('id, name')
+      .select('id, name, color')
       .eq('archived', false)
 
     // Lista de membros e e-mails (para envio de e-mails e menções/notificações)
@@ -101,6 +101,13 @@ Deno.serve(async (req) => {
       email: emailByUser.get(m.id) || null,
     }))
 
+    // Buscar tarefas recentes de todos os projetos ordenadas por última modificação (updated_at DESC)
+    const { data: allRecentTasks } = await admin
+      .from('tasks')
+      .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, created_at, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(160)
+
     let currentProjectTasks: Array<{
       id: string
       title: string
@@ -109,20 +116,12 @@ Deno.serve(async (req) => {
       due_date: string | null
       start_date: string | null
       assigned_to: string | null
+      assignees?: string[] | null
       parent_id: string | null
       project_id: string
-    }> = []
-
-    let taskQuery = admin
-      .from('tasks')
-      .select('id, title, status, priority, due_date, start_date, assigned_to, parent_id, project_id')
-
-    if (context.projectId) {
-      taskQuery = taskQuery.eq('project_id', context.projectId)
-    }
-
-    const { data: tasks } = await taskQuery.limit(80)
-    currentProjectTasks = tasks ?? []
+      created_at: string
+      updated_at: string
+    }> = (allRecentTasks as any) ?? []
 
     // 1.1 Links e Documentos cadastrados no Hub
     const { data: hubLinks } = await admin
@@ -139,15 +138,69 @@ Deno.serve(async (req) => {
       .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
       .join('\n')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
+    const projectNameById = new Map((projects ?? []).map((p) => [p.id, p.name]))
     const memberNameById = new Map(
       (members ?? []).map((m) => [m.id, `@${m.username} (${m.full_name || m.username})`])
     )
+
+    function formatDateTimePtBr(isoStr: string | null | undefined): string {
+      if (!isoStr) return 's/data'
+      try {
+        const d = new Date(isoStr)
+        if (isNaN(d.getTime())) return isoStr
+        return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'medium' })
+      } catch {
+        return isoStr
+      }
+    }
+
+    function formatPtBrDate(dateStr: string | null | undefined): string {
+      if (!dateStr) return 's/data'
+      const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`
+      return dateStr
+    }
+
+    const statusPtBr: Record<string, string> = {
+      backlog: 'Backlog',
+      todo: 'A Fazer',
+      in_progress: 'Em Andamento',
+      review: 'Revisão',
+      done: 'Concluído',
+    }
+
+    const priorityPtBr: Record<string, string> = {
+      urgent: 'Urgente',
+      high: 'Alta',
+      medium: 'Normal/Média',
+      low: 'Baixa',
+    }
+
     const tasksSnippet = currentProjectTasks
-      .slice(0, 60)
-      .map(
-        (t) =>
-          `[${t.id}] "${t.title}" (status: ${t.status}, prioridade: ${t.priority}, início: ${t.start_date || 's/data'}, fim: ${t.due_date || 's/data'}, responsável: ${t.assigned_to ? memberNameById.get(t.assigned_to) || t.assigned_to : 'nenhum'}${t.parent_id ? `, pai_id: ${t.parent_id}` : ''})`
-      )
+      .slice(0, 100)
+      .map((t) => {
+        const projName = projectNameById.get(t.project_id) || 'Sem projeto'
+        const assignedNames: string[] = []
+        if (t.assigned_to) {
+          assignedNames.push(memberNameById.get(t.assigned_to) || t.assigned_to)
+        }
+        if (Array.isArray(t.assignees)) {
+          for (const uid of t.assignees) {
+            if (uid && uid !== t.assigned_to) {
+              assignedNames.push(memberNameById.get(uid) || uid)
+            }
+          }
+        }
+        const respStr = assignedNames.length > 0 ? assignedNames.join(', ') : 'Nenhum'
+        const createdStr = formatDateTimePtBr(t.created_at)
+        const updatedStr = formatDateTimePtBr(t.updated_at)
+        const startStr = formatPtBrDate(t.start_date)
+        const dueStr = formatPtBrDate(t.due_date)
+        const statusLabel = statusPtBr[t.status] || t.status
+        const priorityLabel = priorityPtBr[t.priority] || t.priority
+
+        return `- [ID: ${t.id}] "${t.title}" (Projeto: "${projName}", Status: ${statusLabel} [${t.status}], Prioridade: ${priorityLabel} [${t.priority}], Responsáveis: ${respStr}, Início: ${startStr}, Prazo: ${dueStr}, Criada em: ${createdStr} [${t.created_at}], Última atualização: ${updatedStr} [${t.updated_at}]${t.parent_id ? `, Subtarefa de: ${t.parent_id}` : ''})`
+      })
       .join('\n')
 
     const linksSnippet = (hubLinks ?? [])
@@ -176,110 +229,129 @@ Deno.serve(async (req) => {
       })
       .join('\n\n')
 
+    const now = new Date()
+    const nowPtBr = now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'full', timeStyle: 'medium' })
+    const nowIso = now.toISOString()
+
     // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
-Hoje: ${new Date().toISOString().slice(0, 10)}. Usuário logado ID: ${userId}. Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
+Data e hora atual (Horário de Brasília): ${nowPtBr} (ISO: ${nowIso}).
+Hoje: ${nowIso.slice(0, 10)}. Usuário logado: ${requesterProfile ? `@${requesterProfile.username} (${requesterProfile.full_name || requesterProfile.username})` : userId} (ID: ${userId}). Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
 Projetos cadastrados:
 ${projectsMap || 'Nenhum'}
 
-Membros da equipe (reconheça nomes, usernames e e-mails para atribuição e mensagens):
+Membros da equipe (reconheça nomes, usernames e e-mails para atribuição, filtros e mensagens):
 ${membersMap || 'Nenhum'}
 
-Tarefas existentes (use os IDs e títulos reais para atualizar, atribuir responsáveis, sequenciar ou consultar):
+Tarefas cadastradas no Hub (ordenadas pelas atualizações mais recentes; use os campos 'Última atualização' e 'Criada em' para responder com precisão sobre modificações recentes, mudanças de status, novos itens ou prazos):
 ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
 
-Links úteis cadastrados (indique links e URLs para os usuários quando perguntarem sobre drives, artes, sites, etc.):
+Links úteis cadastrados:
 ${linksSnippet || 'Nenhum link cadastrado.'}
 
-Documentos e Contratos cadastrados (use o Conteúdo Integral Extraído abaixo para responder com precisão sobre contratos, valores, partes, prazos, etc.):
+Documentos e Contratos cadastrados:
 ${docsSnippet || 'Nenhum documento cadastrado.'}
 
 DIRETRIZES DE RESPOSTA E PODERES:
-- Responda em Português do Brasil de forma extremamente DIRETA, OBJETIVA e CONCISA.
+- Responda sempre em Português do Brasil de forma clara, prestativa e estruturada.
 - NÃO use emojis em nenhuma hipótese.
-- Máximo de 1 a 3 frases explicando o que foi feito ou o motivo caso não tenha sido possível.
-- ATRIBUIR / ALTERAR RESPONSÁVEL OU ATUALIZAR TAREFA (update_task):
-  Quando o usuário pedir para atribuir, trocar ou adicionar responsável a uma tarefa existente, delegar, alterar status, prioridade ou prazos:
-  (Exemplos: "Adicione Raul como responsável da tarefa Revisão", "Atribua a tarefa Diagramação para o Diego", "Coloque Diego na tarefa X", "Passe a tarefa Y para @diego", "Mude o status de X para in_progress", "Coloque prioridade alta na tarefa Y"):
-  action: update_task, params: {
-    "task_id"?: string (ID real da tarefa se identificado),
-    "task_title"?: string (título da tarefa para localização),
-    "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
-    "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
-    "priority"?: "urgent" | "high" | "normal" | "low",
-    "due_date"?: "YYYY-MM-DD",
-    "start_date"?: "YYYY-MM-DD"
-  }
-- ATUALIZAR VÁRIAS TAREFAS / SEQUENCIAR (update_tasks):
-  Quando o usuário pedir para sequenciar ou ajustar prazos/responsáveis de múltiplas tarefas:
-  action: update_tasks, params: {
-    "tasks": [
-      {
-        "task_id"?: string,
-        "task_title"?: string,
-        "assigned_to"?: string,
-        "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
-        "priority"?: "urgent" | "high" | "normal" | "low",
-        "start_date"?: "YYYY-MM-DD",
-        "due_date"?: "YYYY-MM-DD"
-      }
-    ]
-  }
-- CRIAR TAREFA OU SUBTAREFAS (create_task):
-  action: create_task, params: {
-    "title": string,
-    "assigned_to"?: string (username ou nome do membro),
-    "priority"?: "urgent" | "high" | "normal" | "low",
-    "due_date"?: "YYYY-MM-DD",
-    "start_date"?: "YYYY-MM-DD",
-    "subtasks"?: string[]
-  }
-- CONSULTA A DOCUMENTOS E CONTRATOS:
-  Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
-  OBRIGATÓRIO: Sempre que responder sobre um documento ou contrato, inclua no final da resposta o botão/link interativo no formato exato: [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO) para que o usuário possa clicar e conferir o arquivo no modal com 1 clique.
-- LINKS ÚTEIS E WEBSITES:
-  Sempre que o usuário perguntar por links ou quando você citar drives, artes, sites ou páginas cadastradas, inclua o link clicável no formato markdown [Nome do Link](URL) para que o usuário possa abrir com 1 clique.
-- CRIAR LINK ÚTIL (create_link):
-  Se o usuário pedir para salvar um link útil (ex: "Salve o link do drive https://... com título Artes 2026"):
-  action: create_link, params: {
-    "title": string,
-    "url": string,
-    "description"?: string,
-    "tags"?: string[]
-  }
-- ENVIAR E-MAIL IMEDIATO (send_email):
-  Quando o usuário pedir para enviar e-mail (ex: "Envie um e-mail para o Raul sobre a tarefa X", "mande um email com o prazo da tarefa Y para o diego"):
-  1. Identifique o destinatário na lista de membros (por nome, username ou @username). Se ele não tiver e-mail ou não for encontrado, informe na resposta.
-  2. Identifique a tarefa mencionada na lista de tarefas para extrair seus dados (título, prazo, status, link https://hub.luznegra.com.br/task/{id}).
-  3. Formate SEMPRE as datas no padrão brasileiro DD/MM/YYYY (ex: 20/09/2026).
-  4. SEMPRE use a ação "send_email" para disparo real imediato (NÃO use rascunho/draft).
-     action: send_email, params: {
-       "recipient": string (username, nome, ou e-mail),
-       "subject": string (assunto do e-mail),
-       "body": string (mensagem em texto claro com detalhes da tarefa; destaque o título da tarefa em negrito e datas em DD/MM/YYYY),
-       "task_id"?: string (ID da tarefa vinculada se houver)
-     }
-- ENVIAR NOTIFICAÇÃO IN-APP (send_notification):
-  Quando o usuário pedir para alertar/notificar um membro na plataforma:
-  action: send_notification, params: {
-    "recipient": string (username, nome, ou user_id),
-    "type": "mention" | "task_assigned" | "due_date_reminder",
-    "content": string (texto da notificação),
-    "task_id"?: string (ID da tarefa para gerar o link direto)
-  }
-- CRIAR PROJETO (create_project):
-  action: create_project, params: { "name": string, "color"?: string }
-- Se o usuário pedir algo que você NÃO encontrou no banco (ex: tarefa inexistente ou usuário não encontrado), explique na "reply" com clareza ("Não encontrei a tarefa 'X'." ou "Usuário 'Y' não encontrado.") e retorne "action": { "type": "none" }.
+
+- CONSULTAS, LISTAGENS E RELATÓRIOS SOBRE TAREFAS (action: { "type": "none" }):
+  Quando o usuário fizer perguntas ou pedir listagens, relatórios, checagens sobre tarefas, status, prazos, membros ou atualizações recentes:
+  (Exemplos: "quais tarefas foram atualizadas ou criadas nos ultimos 2 dias?", "mudei o status de uma tarefa hoje mesmo", "pode checar os itens que tiveram status alterado?", "listar tarefas de todos os usuarios", "quais tarefas estão em andamento?", "quais tarefas foram criadas hoje?"):
+  1. NÃO faça nenhuma ação de mutação no banco de dados. Retorne action: { "type": "none" }.
+  2. Analise atentamente os campos "Criada em" e "Última atualização" de TODAS as tarefas fornecidas no contexto, comparando com a "Data e hora atual" (${nowPtBr}).
+  3. Identifique com exatidão quais tarefas foram modificadas ou criadas no período solicitado pelo usuário (ou que foram alteradas recentemente/hoje).
+  4. Responda no campo "reply" com uma listagem detalhada e organizada em Markdown:
+     - Para cada tarefa encontrada:
+       - **Título da Tarefa** (Projeto: Nome do Projeto)
+         - Status atual: Status da tarefa (ex: Em Andamento, Concluído, etc.)
+         - Responsável(is): Nome/username dos responsáveis
+         - Última atualização: DD/MM/YYYY às HH:mm
+         - Criada em: DD/MM/YYYY às HH:mm
+         - Prazo: DD/MM/YYYY (se houver)
+  5. Se nenhuma tarefa atender ao critério, explique com clareza informando as datas consideradas e quando ocorreu a tarefa atualizada mais recente.
+  6. NUNCA responda apenas "Comando processado com sucesso." para perguntas, listagens, relatórios ou dúvidas!
+
+- AÇÕES NO BANCO DE DADOS (apenas quando expressamente solicitado para criar, alterar ou excluir dados):
+  - ATRIBUIR / ALTERAR RESPONSÁVEL OU ATUALIZAR TAREFA (update_task):
+    Quando o usuário pedir para atribuir, trocar responsável, delegar, alterar status, prioridade ou prazos:
+    (Exemplos: "Adicione Raul como responsável da tarefa Revisão", "Atribua a tarefa Diagramação para o Diego", "Coloque Diego na tarefa X", "Passe a tarefa Y para @diego", "Mude o status de X para in_progress", "Coloque prioridade alta na tarefa Y"):
+    action: update_task, params: {
+      "task_id"?: string (ID real da tarefa se identificado),
+      "task_title"?: string (título da tarefa para localização),
+      "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
+      "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+      "priority"?: "urgent" | "high" | "normal" | "low",
+      "due_date"?: "YYYY-MM-DD",
+      "start_date"?: "YYYY-MM-DD"
+    }
+  - ATUALIZAR VÁRIAS TAREFAS / SEQUENCIAR (update_tasks):
+    Quando o usuário pedir para sequenciar ou ajustar prazos/responsáveis de múltiplas tarefas:
+    action: update_tasks, params: {
+      "tasks": [
+        {
+          "task_id"?: string,
+          "task_title"?: string,
+          "assigned_to"?: string,
+          "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+          "priority"?: "urgent" | "high" | "normal" | "low",
+          "start_date"?: "YYYY-MM-DD",
+          "due_date"?: "YYYY-MM-DD"
+        }
+      ]
+    }
+  - CRIAR TAREFA OU SUBTAREFAS (create_task):
+    action: create_task, params: {
+      "title": string,
+      "assigned_to"?: string (username ou nome do membro),
+      "priority"?: "urgent" | "high" | "normal" | "low",
+      "due_date"?: "YYYY-MM-DD",
+      "start_date"?: "YYYY-MM-DD",
+      "subtasks"?: string[]
+    }
+  - CONSULTA A DOCUMENTOS E CONTRATOS:
+    Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
+    OBRIGATÓRIO: Sempre que responder sobre um documento ou contrato, inclua no final da resposta o botão/link interativo no formato exato: [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO) para que o usuário possa clicar e conferir o arquivo no modal com 1 clique.
+  - LINKS ÚTEIS E WEBSITES:
+    Sempre que o usuário perguntar por links ou quando você citar drives, artes, sites ou páginas cadastradas, inclua o link clicável no formato markdown [Nome do Link](URL) para que o usuário possa abrir com 1 clique.
+  - CRIAR LINK ÚTIL (create_link):
+    Se o usuário pedir para salvar um link útil (ex: "Salve o link do drive https://... com título Artes 2026"):
+    action: create_link, params: {
+      "title": string,
+      "url": string,
+      "description"?: string,
+      "tags"?: string[]
+    }
+  - ENVIAR E-MAIL IMEDIATO (send_email):
+    Quando o usuário pedir para enviar e-mail:
+    action: send_email, params: {
+      "recipient": string (username, nome, ou e-mail),
+      "subject": string (assunto do e-mail),
+      "body": string (mensagem em texto claro com detalhes da tarefa; destaque o título da tarefa em negrito e datas em DD/MM/YYYY),
+      "task_id"?: string (ID da tarefa vinculada se houver)
+    }
+  - ENVIAR NOTIFICAÇÃO IN-APP (send_notification):
+    Quando o usuário pedir para alertar/notificar um membro na plataforma:
+    action: send_notification, params: {
+      "recipient": string (username, nome, ou user_id),
+      "type": "mention" | "task_assigned" | "due_date_reminder",
+      "content": string (texto da notificação),
+      "task_id"?: string (ID da tarefa para gerar o link direto)
+    }
+  - CRIAR PROJETO (create_project):
+    action: create_project, params: { "name": string, "color"?: string }
+  - Se o usuário pedir algo que você NÃO encontrou no banco (ex: tarefa inexistente ou usuário não encontrado), explique na "reply" com clareza ("Não encontrei a tarefa 'X'." ou "Usuário 'Y' não encontrado.") e retorne "action": { "type": "none" }.
 
 FORMATO OBRIGATÓRIO (JSON puro):
 {
-  "reply": "Explicação curta e direta sobre o que foi executado.",
+  "reply": "Texto de resposta detalhado, relatório ou explicação sobre o que foi executado.",
   "action": {
     "type": "update_task" | "update_tasks" | "create_task" | "create_project" | "create_link" | "send_email" | "send_notification" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "none",
     "params": { ... }
   }
-}`
+}``
 
     // 3. Chamada ao DeepSeek / OpenAI
     const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
@@ -431,13 +503,80 @@ FORMATO OBRIGATÓRIO (JSON puro):
           reply: `Verifiquei as suas tarefas. Todas as tarefas com prazo anterior à data de hoje foram listadas na visualização.`,
           action: { type: 'list_overdue' },
         }
+      } else if (
+        lower.includes('atualizad') ||
+        lower.includes('criad') ||
+        lower.includes('modificad') ||
+        lower.includes('alterad') ||
+        lower.includes('status') ||
+        lower.includes('últimos') ||
+        lower.includes('ultimos') ||
+        lower.includes('hoje')
+      ) {
+        let days = 2
+        const daysMatch = lower.match(/(?:últimos|ultimos|ultimas|últimas)\s+(\d+)\s+dias?/i)
+        if (daysMatch) {
+          days = parseInt(daysMatch[1], 10) || 2
+        } else if (lower.includes('hoje')) {
+          days = 1
+        }
+
+        const cutoffTime = Date.now() - days * 24 * 60 * 60 * 1000
+        const isTodayOnly = lower.includes('hoje')
+
+        const matchedTasks = currentProjectTasks.filter((t) => {
+          const uTime = new Date(t.updated_at).getTime()
+          const cTime = new Date(t.created_at).getTime()
+          if (isTodayOnly) {
+            const todayStart = new Date().setHours(0, 0, 0, 0)
+            return uTime >= todayStart || cTime >= todayStart
+          }
+          return uTime >= cutoffTime || cTime >= cutoffTime
+        })
+
+        if (matchedTasks.length > 0) {
+          const listText = matchedTasks
+            .map((t) => {
+              const proj = projectNameById.get(t.project_id) || 'Sem projeto'
+              const assignedNames: string[] = []
+              if (t.assigned_to) {
+                assignedNames.push(memberNameById.get(t.assigned_to) || t.assigned_to)
+              }
+              if (Array.isArray(t.assignees)) {
+                for (const uid of t.assignees) {
+                  if (uid && uid !== t.assigned_to) {
+                    assignedNames.push(memberNameById.get(uid) || uid)
+                  }
+                }
+              }
+              const resp = assignedNames.length > 0 ? assignedNames.join(', ') : 'Nenhum'
+              const st = statusPtBr[t.status] || t.status
+              const upStr = formatDateTimePtBr(t.updated_at)
+              const crStr = formatDateTimePtBr(t.created_at)
+
+              return `• **${t.title}** (Projeto: *${proj}*)\n  - Status: **${st}**\n  - Responsável: ${resp}\n  - Última atualização: ${upStr}\n  - Criada em: ${crStr}`
+            })
+            .join('\n\n')
+
+          aiParsed = {
+            reply: `Encontrei **${matchedTasks.length} tarefa(s)** atualizada(s) ou criada(s) ${isTodayOnly ? 'hoje' : `nos últimos ${days} dias`}:\n\n${listText}`,
+            action: { type: 'none' },
+          }
+        } else {
+          aiParsed = {
+            reply: `Não foram encontradas tarefas atualizadas ou criadas ${isTodayOnly ? 'hoje' : `nos últimos ${days} dias`}.`,
+            action: { type: 'none' },
+          }
+        }
       } else {
         aiParsed = {
-          reply: `Olá! Sou o Assistente IA do Hub. Você pode me pedir para:
+          reply: `Olá! Sou o Lorde Camarão, assistente do Hub. Você pode me pedir para:
+- *Listar tarefas atualizadas ou criadas recentemente*
+- *Verificar tarefas por responsável ou status*
 - *Criar projetos ou tarefas*
 - *Quebrar tarefas em subtarefas*
 - *Alterar responsáveis, prazos ou prioridades*
-- *Concluir ou atualizar tarefas em lote*`,
+- *Enviar e-mails ou notificações*`,
           action: { type: 'none' },
         }
       }
@@ -1203,7 +1342,9 @@ FORMATO OBRIGATÓRIO (JSON puro):
                     ? 'Tarefa excluída com sucesso.'
                     : aiParsed.action?.type === 'duplicate_task'
                       ? 'Tarefa duplicada com sucesso.'
-                      : 'Comando processado com sucesso.')
+                      : aiParsed.action?.type === 'none'
+                        ? 'Não identifiquei nenhuma tarefa ou ação para os parâmetros informados.'
+                        : 'Comando processado com sucesso.')
 
     return json({
       reply: finalReply,

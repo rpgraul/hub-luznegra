@@ -28,7 +28,7 @@ function MarkdownMessage({
   onOpenDoc?: (docId: string) => void
 }) {
   if (!content || typeof content !== 'string') {
-    return <div className="text-xs text-foreground">Comando processado com sucesso.</div>
+    return <div className="text-xs text-muted-foreground">Nenhuma mensagem disponível.</div>
   }
 
   const lines = content.split('\n')
