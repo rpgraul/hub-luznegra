@@ -11,6 +11,7 @@ import {
   type FeriasTask,
 } from '@/lib/supabaseClient'
 import FeriasAlert from '@/components/profile/FeriasAlert'
+import DateInput from '@/components/ui/DateInput'
 
 interface ProfileModalProps {
   open: boolean
@@ -238,14 +239,25 @@ export default function ProfileModal({ open, onOpenChange }: ProfileModalProps) 
                 <div className="space-y-3 rounded-md border p-4">
                   <h2 className="text-sm font-medium">Férias</h2>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <TextField.Root value={feriasInicio} onChange={setFeriasInicio} type="date">
+                    <div>
                       <Label>Início</Label>
-                      <Input />
-                    </TextField.Root>
-                    <TextField.Root value={feriasFim} onChange={setFeriasFim} type="date">
+                      <DateInput
+                        value={feriasInicio}
+                        onChange={setFeriasInicio}
+                        ariaLabel="Início das férias"
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                    <div>
                       <Label>Fim</Label>
-                      <Input />
-                    </TextField.Root>
+                      <DateInput
+                        value={feriasFim}
+                        min={feriasInicio || undefined}
+                        onChange={setFeriasFim}
+                        ariaLabel="Fim das férias"
+                        className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground focus:border-primary focus:outline-none"
+                      />
+                    </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Ao salvar, você será avisado sobre tarefas atribuídas no

@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { toast, Label, Input } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
 import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import {
@@ -272,19 +273,20 @@ export default function ProfileDrawer({ open, onOpenChange }: ProfileDrawerProps
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground">Início</label>
-                <input
-                  type="date"
+                <DateInput
                   value={feriasInicio}
-                  onChange={(e) => setFeriasInicio(e.target.value)}
+                  onChange={setFeriasInicio}
+                  ariaLabel="Início das férias"
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none shadow-2xs"
                 />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-muted-foreground">Fim</label>
-                <input
-                  type="date"
+                <DateInput
                   value={feriasFim}
-                  onChange={(e) => setFeriasFim(e.target.value)}
+                  min={feriasInicio || undefined}
+                  onChange={setFeriasFim}
+                  ariaLabel="Fim das férias"
                   className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-1.5 text-xs text-foreground focus:border-primary focus:outline-none shadow-2xs"
                 />
               </div>

@@ -84,6 +84,16 @@ export default function KanbanView({
     }
   }
 
+  function persistColumnOrder(ordered: Task[]) {
+    ordered.forEach((task, index) => {
+      if (task.order_index !== index) {
+        void reorderTask({ id: task.id, orderIndex: index }).catch(() =>
+          toast.danger('Erro ao salvar a nova ordem.'),
+        )
+      }
+    })
+  }
+
   function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
     if (!destination) return
@@ -95,10 +105,23 @@ export default function KanbanView({
 
     try {
       if (fromStatus === toStatus) {
-        void reorderTask({ id: draggableId, orderIndex: destination.index })
+        const columnTasks = displayTasks
+          .filter((task) => task.status === fromStatus)
+          .sort((a, b) => a.order_index - b.order_index)
+        const movedIndex = columnTasks.findIndex((task) => task.id === draggableId)
+        if (movedIndex === -1) return
+        const [moved] = columnTasks.splice(movedIndex, 1)
+        columnTasks.splice(destination.index, 0, moved)
+        persistColumnOrder(columnTasks)
       } else {
         void moveTaskStatus({ id: draggableId, status: toStatus }).then(() => {
-          void reorderTask({ id: draggableId, orderIndex: destination.index })
+          const destTasks = displayTasks
+            .filter((task) => task.status === toStatus && task.id !== draggableId)
+            .sort((a, b) => a.order_index - b.order_index)
+          const moved = taskById.get(draggableId)
+          if (!moved) return
+          destTasks.splice(destination.index, 0, { ...moved, status: toStatus })
+          persistColumnOrder(destTasks)
         })
       }
     } catch (error) {

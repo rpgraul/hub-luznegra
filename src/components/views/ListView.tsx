@@ -1,5 +1,13 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DraggableProvided,
+  type DropResult,
+} from '@hello-pangea/dnd'
 import { toast, Button } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
 import { userColor } from '@/utils/colors'
 import { formatDate, todayIso } from '@/utils/format'
 import {
@@ -22,7 +30,7 @@ interface ListViewProps {
   deleteTask: (id: string) => Promise<unknown>
 }
 
-type SortField = 'status' | 'due_date' | 'priority' | 'title'
+type SortField = 'manual' | 'status' | 'due_date' | 'priority' | 'title'
 type SortDirection = 'asc' | 'desc'
 type EditableField = 'title' | 'description' | 'due_date' | 'priority'
 
@@ -102,6 +110,12 @@ function buildSimpleLexicalJson(text: string): Json {
   } as unknown as Json
 }
 
+const UNGROUPED_DROPPABLE_ID = 'lista-todas'
+
+function droppableIdForSection(projectId: string | null): string {
+  return `lista-projeto-${projectId ?? 'sem-projeto'}`
+}
+
 function AssigneesCell({
   task,
   memberLookup,
@@ -165,6 +179,11 @@ interface TaskRowProps {
   onOpen: () => void
   projectName?: string | null
   projectColor?: string | null
+  manualMode?: boolean
+  dragging?: boolean
+  dragRef?: React.Ref<HTMLTableRowElement>
+  dragProps?: React.HTMLAttributes<HTMLTableRowElement>
+  handleProps?: React.HTMLAttributes<HTMLElement> | null
 }
 
 function TaskRow({
@@ -178,6 +197,11 @@ function TaskRow({
   onOpen,
   projectName,
   projectColor,
+  manualMode = false,
+  dragging = false,
+  dragRef,
+  dragProps,
+  handleProps,
 }: TaskRowProps) {
   const isChild = depth > 0
   const isDone = task.status === 'done'
@@ -237,9 +261,30 @@ function TaskRow({
 
   return (
     <tr
+      ref={dragRef}
+      {...dragProps}
       onDoubleClick={onOpen}
-      className={`group border-b border-border/60 transition-colors select-none ${rowBgClass}`}
+      className={`group border-b border-border/60 transition-colors select-none ${rowBgClass} ${dragging ? 'bg-primary/10 shadow-lg' : ''}`}
     >
+      {/* Drag handle (modo Manual, apenas tarefas de topo) */}
+      <td className="w-8 px-1 py-2 text-center">
+        {handleProps ? (
+          <span
+            {...handleProps}
+            title="Arrastar para reordenar"
+            className="inline-flex cursor-grab items-center justify-center rounded p-1 text-muted-foreground/50 transition hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          >
+            <i className="fa-solid fa-grip-vertical text-[11px]" />
+          </span>
+        ) : (
+          <span
+            title={manualMode ? 'Subtarefas acompanham a tarefa pai' : 'Mude para a ordem Manual para arrastar e reordenar'}
+            className="inline-flex items-center justify-center p-1 text-muted-foreground/25"
+          >
+            <i className={`fa-solid ${manualMode ? 'fa-turn-down' : 'fa-lock'} text-[10px]`} />
+          </span>
+        )}
+      </td>
       {/* Quick Done Checkbox */}
       <td onClick={(e) => e.stopPropagation()} className="w-8 px-2 py-2 text-center">
         <button
@@ -409,14 +454,13 @@ function TaskRow({
       {/* Due Date (Inline Editable on 2 Clicks / Date Input) */}
       <td className="px-3 py-2">
         {editingField === 'due_date' ? (
-          <input
-            ref={inputRef}
-            type="date"
+          <DateInput
+            inputRef={inputRef}
             value={draftValue}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => setDraftValue(e.target.value)}
+            onChange={setDraftValue}
             onKeyDown={handleKeyDown}
             onBlur={commitEdit}
+            ariaLabel="Editar data de vencimento"
             className="rounded-md border border-[#7b68ee] bg-background px-1.5 py-0.5 text-xs font-semibold text-foreground focus:outline-none shadow-xs"
           />
         ) : (
@@ -464,6 +508,8 @@ interface TasksTableProps {
   onSortBy: (field: SortField) => void
   currentSortField: SortField
   currentSortDir: SortDirection
+  droppableId: string
+  manualMode: boolean
 }
 
 function TasksTable({
@@ -479,6 +525,8 @@ function TasksTable({
   onSortBy,
   currentSortField,
   currentSortDir,
+  droppableId,
+  manualMode,
 }: TasksTableProps) {
   function renderSortIcon(field: SortField) {
     if (currentSortField !== field) {
@@ -504,6 +552,10 @@ function TasksTable({
       <table className="w-full border-collapse text-xs">
         <thead className="border-b border-border bg-slate-100 dark:bg-slate-800">
           <tr className="text-slate-800 dark:text-slate-100">
+            <th className="w-8 px-1 py-2.5 text-center font-bold" title={manualMode ? 'Arrastar para reordenar' : 'Ordem Manual para reordenar'}>
+              <i className={`fa-solid ${manualMode ? 'fa-grip-vertical' : 'fa-lock'} text-[10px] opacity-50`} />
+              <span className="sr-only">Reordenar</span>
+            </th>
             <th className="w-8 px-2 py-2.5 text-center font-bold">
               <span className="sr-only">Concluir</span>
             </th>
@@ -555,39 +607,63 @@ function TasksTable({
             </th>
           </tr>
         </thead>
-        <tbody>
-          {rows.length === 0 && (
-            <tr>
-              <td
-                colSpan={7}
-                className="py-10 text-center text-sm text-muted-foreground"
-              >
-                {emptyMessage}
-              </td>
-            </tr>
+        <Droppable droppableId={droppableId} isDropDisabled={!manualMode}>
+          {(dropProvided) => (
+            <tbody ref={dropProvided.innerRef} {...dropProvided.droppableProps}>
+              {rows.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    {emptyMessage}
+                  </td>
+                </tr>
+              )}
+              {(() => {
+                let topIndex = -1
+                return rows.map(({ task, depth }) => {
+                  const project =
+                    task.project_id && projectById
+                      ? projectById.get(task.project_id)
+                      : null
+                  const rowProps = {
+                    task,
+                    depth,
+                    childrenCount: countSubtasks(task),
+                    memberOf,
+                    onToggleDone,
+                    onChangeStatus,
+                    onCommitField,
+                    onOpen: () => onOpen(task),
+                    projectName: project?.name,
+                    projectColor: project?.color,
+                    manualMode,
+                  }
+                  if (manualMode && depth === 0) {
+                    topIndex += 1
+                    const dragIndex = topIndex
+                    return (
+                      <Draggable key={task.id} draggableId={task.id} index={dragIndex}>
+                        {(dragProvided: DraggableProvided, snapshot) => (
+                          <TaskRow
+                            {...rowProps}
+                            dragging={snapshot.isDragging}
+                            dragRef={dragProvided.innerRef}
+                            dragProps={dragProvided.draggableProps}
+                            handleProps={dragProvided.dragHandleProps}
+                          />
+                        )}
+                      </Draggable>
+                    )
+                  }
+                  return <TaskRow key={task.id} {...rowProps} />
+                })
+              })()}
+              {dropProvided.placeholder}
+            </tbody>
           )}
-          {rows.map(({ task, depth }) => {
-            const project =
-              task.project_id && projectById
-                ? projectById.get(task.project_id)
-                : null
-            return (
-              <TaskRow
-                key={task.id}
-                task={task}
-                depth={depth}
-                childrenCount={countSubtasks(task)}
-                memberOf={memberOf}
-                onToggleDone={onToggleDone}
-                onChangeStatus={onChangeStatus}
-                onCommitField={onCommitField}
-                onOpen={() => onOpen(task)}
-                projectName={project?.name}
-                projectColor={project?.color}
-              />
-            )
-          })}
-        </tbody>
+        </Droppable>
       </table>
     </div>
   )
@@ -750,6 +826,44 @@ export default function ListView({
     return tasks.filter((t) => t.parent_id === task.id).length
   }
 
+  function rowsForDroppable(droppableId: string): Array<{ task: Task; depth: number }> {
+    if (droppableId === UNGROUPED_DROPPABLE_ID) return rows
+    const section = sections.find((s) => droppableIdForSection(s.project?.id ?? null) === droppableId)
+    return section?.sectionTasks ?? []
+  }
+
+  function handleDragEnd(result: DropResult) {
+    const { source, destination, draggableId } = result
+    if (!destination) return
+    if (source.droppableId !== destination.droppableId) {
+      toast.danger('Arraste apenas dentro da mesma lista.')
+      return
+    }
+    if (source.index === destination.index) return
+    if (!updateTask) return
+
+    const list = rowsForDroppable(source.droppableId)
+      .filter((r) => r.depth === 0)
+      .map((r) => r.task)
+    const movedIndex = list.findIndex((t) => t.id === draggableId)
+    if (movedIndex === -1) return
+    const [moved] = list.splice(movedIndex, 1)
+    list.splice(destination.index, 0, moved)
+
+    const updates = list
+      .map((task, index) => ({ task, index }))
+      .filter(({ task, index }) => task.order_index !== index)
+    if (updates.length === 0) return
+
+    void Promise.all(
+      updates.map(({ task, index }) =>
+        updateTask({ id: task.id, patch: { order_index: index } }),
+      ),
+    )
+      .then(() => toast.success('Ordem atualizada!'))
+      .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
+  }
+
   const emptyMessage = grouped
     ? 'Nenhuma tarefa por aqui.'
     : 'Nenhuma tarefa neste projeto.'
@@ -763,6 +877,15 @@ export default function ListView({
             Ordenar por:
           </span>
           <div className="flex items-center gap-1">
+            <Button
+              size="sm"
+              variant={sortField === 'manual' ? 'secondary' : 'outline'}
+              className="h-7 px-2 text-xs rounded-md font-semibold"
+              onPress={() => handleSortBy('manual')}
+            >
+              <i className="fa-solid fa-grip-vertical mr-1 text-[10px]" />
+              Manual
+            </Button>
             <Button
               size="sm"
               variant={sortField === 'status' ? 'secondary' : 'outline'}
@@ -807,6 +930,7 @@ export default function ListView({
 
       {/* Main Table Area */}
       <div className="flex-1 overflow-y-auto p-4">
+        <DragDropContext onDragEnd={handleDragEnd}>
         {grouped ? (
           <div className="space-y-6">
             {sections.length === 0 && (
@@ -862,6 +986,8 @@ export default function ListView({
                         onSortBy={handleSortBy}
                         currentSortField={sortField}
                         currentSortDir={sortDirection}
+                        droppableId={droppableIdForSection(project?.id ?? null)}
+                        manualMode={sortField === 'manual'}
                       />
                     </div>
                   )}
@@ -884,9 +1010,12 @@ export default function ListView({
               onSortBy={handleSortBy}
               currentSortField={sortField}
               currentSortDir={sortDirection}
+              droppableId={UNGROUPED_DROPPABLE_ID}
+              manualMode={sortField === 'manual'}
             />
           </div>
         )}
+        </DragDropContext>
       </div>
 
       {/* Shortcuts & Quick Commands Footer */}
@@ -909,6 +1038,12 @@ export default function ListView({
               Círculo
             </kbd>
             <span>Concluir / Reabrir</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs font-bold text-foreground">
+              Arrastar pela alça
+            </kbd>
+            <span>Reordenar no modo Manual</span>
           </span>
         </div>
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Modal } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
@@ -358,20 +359,20 @@ export default function NewTaskModal({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-foreground/70">Início</label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
+                      onChange={setStartDate}
+                      ariaLabel="Data de início"
                       className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                   </div>
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-foreground/70">Conclusão</label>
-                    <input
-                      type="date"
+                    <DateInput
                       value={dueDate}
                       min={startDate || undefined}
-                      onChange={(e) => setDueDate(e.target.value)}
+                      onChange={setDueDate}
+                      ariaLabel="Data de conclusão"
                       className={`w-full rounded-lg border bg-background px-3 py-2 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20 ${
                         startDate && dueDate && dueDate < startDate
                           ? 'border-destructive text-destructive'
@@ -442,13 +443,12 @@ export default function NewTaskModal({
                     className="flex-1 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
                   />
                   <div className="flex gap-2">
-                    <input
-                      type="date"
+                    <DateInput
                       value={subtaskDueDate}
                       min={startDate || undefined}
-                      onChange={(e) => setSubtaskDueDate(e.target.value)}
+                      onChange={setSubtaskDueDate}
                       title="Data final da subtarefa"
-                      aria-label="Data final da subtarefa"
+                      ariaLabel="Data final da subtarefa"
                       className="rounded-xl border border-border bg-background px-3 py-2.5 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                     <button
@@ -470,19 +470,18 @@ export default function NewTaskModal({
                       >
                         <i className="fa-regular fa-circle text-[10px] text-muted-foreground/50 shrink-0" />
                         <span className="min-w-0 flex-1 truncate text-foreground/90">{subtask.title}</span>
-                        <input
-                          type="date"
+                        <DateInput
                           value={subtask.due_date ?? ''}
                           min={startDate || undefined}
-                          onChange={(e) =>
+                          onChange={(iso) =>
                             setSubtasks((prev) =>
                               prev.map((s, j) =>
-                                j === index ? { ...s, due_date: e.target.value || null } : s,
+                                j === index ? { ...s, due_date: iso || null } : s,
                               ),
                             )
                           }
                           title="Data final da subtarefa"
-                          aria-label={`Data final de ${subtask.title}`}
+                          ariaLabel={`Data final de ${subtask.title}`}
                           className="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-[11px] text-foreground outline-none transition hover:border-primary/50 focus:border-primary"
                         />
                         <button

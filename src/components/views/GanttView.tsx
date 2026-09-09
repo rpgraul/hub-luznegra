@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Gantt from 'frappe-gantt'
 import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { todayIso, formatDate } from '@/utils/format'
@@ -880,12 +881,14 @@ export default function GanttView({
                                 <span className="text-[10px] text-muted-foreground italic">subtarefa</span>
                               </td>
                               <td className="w-32 px-1.5">
-                                <input type="date" value={inlineSubtask.startDate} onChange={(e) => setInlineSubtask((s) => ({ ...s, startDate: e.target.value }))}
+                                <DateInput value={inlineSubtask.startDate} onChange={(iso) => setInlineSubtask((s) => ({ ...s, startDate: iso }))}
+                                  ariaLabel="Início da subtarefa"
                                   className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
                               </td>
                               <td className="w-32 px-1.5 pr-2">
                                 <div className="flex gap-1 items-center">
-                                  <input type="date" value={inlineSubtask.dueDate} onChange={(e) => setInlineSubtask((s) => ({ ...s, dueDate: e.target.value }))}
+                                  <DateInput value={inlineSubtask.dueDate} onChange={(iso) => setInlineSubtask((s) => ({ ...s, dueDate: iso }))}
+                                    ariaLabel="Conclusão da subtarefa"
                                     className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
                                   <button type="button" onClick={cancelAddingSubtask} title="Cancelar (Esc)" className="shrink-0 text-muted-foreground hover:text-destructive transition">
                                     <i className="fa-solid fa-xmark text-xs" />
@@ -1023,15 +1026,15 @@ export default function GanttView({
 
                           {/* Start date */}
                           <td className="px-1.5">
-                            <input type="date" value={task.start_date ?? ''} aria-label={`Início de ${task.title}`}
-                              onChange={(e) => handleDateChange(task, 'start_date', e.target.value)}
+                            <DateInput value={task.start_date ?? ''} ariaLabel={`Início de ${task.title}`}
+                              onChange={(iso) => handleDateChange(task, 'start_date', iso)}
                               className="w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary" />
                           </td>
 
                           {/* Due date */}
                           <td className="px-1.5 pr-2">
-                            <input type="date" value={task.due_date ?? ''} aria-label={`Conclusão de ${task.title}`}
-                              onChange={(e) => handleDateChange(task, 'due_date', e.target.value)}
+                            <DateInput value={task.due_date ?? ''} ariaLabel={`Conclusão de ${task.title}`}
+                              onChange={(iso) => handleDateChange(task, 'due_date', iso)}
                               className={`w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''}`} />
                           </td>
                         </tr>
@@ -1052,7 +1055,7 @@ export default function GanttView({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Botão do Meio</kbd>
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Botão do Meio / Ctrl + Arraste</kbd>
             <span>Pan</span>
           </span>
           <span className="flex items-center gap-1.5">
