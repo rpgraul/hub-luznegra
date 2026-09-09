@@ -111,10 +111,6 @@ export default function DateInput({
   const [text, setText] = useState(() => formatIsoToBr(value))
   const [invalid, setInvalid] = useState(false)
   const [open, setOpen] = useState(false)
-  // Container do portal: dentro do overlay do modal quando o campo está
-  // em um HeroUI Modal (fora do diálogo o react-aria marca tudo como
-  // `inert` e o popup morre), senão document.body.
-  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null)
   const [view, setView] = useState(() => {
     const now = new Date()
     return { y: now.getFullYear(), m: now.getMonth() }
@@ -172,11 +168,7 @@ export default function DateInput({
 
   function openCalendar() {
     if (disabled) return
-    const root = rootRef.current
-    // Portal dentro do overlay do modal (sem `inert`, sem clipping) ou body.
-    const overlay = root?.closest('.modal__backdrop')
-    setPortalEl(overlay instanceof HTMLElement ? overlay : document.body)
-    const rect = root?.getBoundingClientRect()
+    const rect = rootRef.current?.getBoundingClientRect()
     if (rect) {
       const POPUP_W = 236
       const POPUP_H = 288
@@ -326,6 +318,12 @@ export default function DateInput({
     return createPortal(
       <div
         ref={popupRef}
+        // Escape hatch oficial do react-aria (mesmo dos toasts): sem ele,
+        // o `ariaHideOutside` do modal marca o popup como `inert` e os
+        // cliques atravessam. Com ele, o popup fica clicável de verdade,
+        // inclusive por cima de modais.
+        // Ref: @react-aria/overlays `ariaHideOutside` → `isAlwaysVisibleNode`.
+        data-react-aria-top-layer
         onMouseDown={(e) => e.preventDefault()}
         className="fixed z-[300] w-[236px] rounded-xl border border-border bg-popover p-2.5 text-foreground shadow-xl"
         style={{ top: pos.top, left: pos.left }}
@@ -397,7 +395,7 @@ export default function DateInput({
           Hoje
         </button>
       </div>,
-      portalEl ?? document.body,
+      document.body,
     )
   }
 
