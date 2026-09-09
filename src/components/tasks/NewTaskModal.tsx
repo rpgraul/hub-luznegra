@@ -148,7 +148,7 @@ export default function NewTaskModal({
   const selectedProject = projects.find((p) => p.id === projectId)
 
   return (
-    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
+    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} isDismissable={false}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-2xl">
           {/* Header */}
