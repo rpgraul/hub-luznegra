@@ -136,10 +136,16 @@ export default function DateInput({
     }
   }, [])
 
-  // Fecha o calendário em clique fora, scroll ou resize
+  // Fecha o calendário em clique fora ou Escape.
+  // (Sem auto-close em scroll: o focus() ao abrir pode gerar scroll e
+  // matar o popup imediatamente; o popup é transitório e fecha em
+  // clique fora, Escape ou seleção.)
   useEffect(() => {
     if (!open) return
     function handlePointerDown(e: MouseEvent) {
+      // Cliques no próprio campo, no ícone ou dentro do popup usam
+      // preventDefault — nunca devem fechar o calendário.
+      if (e.defaultPrevented) return
       const target = e.target as Node | null
       if (
         rootRef.current?.contains(target) ||
@@ -149,16 +155,9 @@ export default function DateInput({
       }
       setOpen(false)
     }
-    function handleScroll() {
-      setOpen(false)
-    }
     document.addEventListener('mousedown', handlePointerDown)
-    window.addEventListener('scroll', handleScroll, true)
-    window.addEventListener('resize', handleScroll)
     return () => {
       document.removeEventListener('mousedown', handlePointerDown)
-      window.removeEventListener('scroll', handleScroll, true)
-      window.removeEventListener('resize', handleScroll)
     }
   }, [open ])
 
@@ -422,12 +421,10 @@ export default function DateInput({
         onMouseDown={(e) => e.preventDefault()}
         onClick={(e) => {
           e.stopPropagation()
-          if (open) {
-            setOpen(false)
-          } else {
-            openCalendar()
-            innerInputRef.current?.focus()
-          }
+          // Sempre abre (sem toggle): clicar no ícone com o popup
+          // aberto não deve fechá-lo.
+          openCalendar()
+          innerInputRef.current?.focus()
         }}
         title="Abrir calendário"
         aria-label="Abrir calendário"
