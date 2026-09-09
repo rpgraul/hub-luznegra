@@ -676,7 +676,7 @@ export default function GanttView({
     }
 
     function handleMouseDown(e: MouseEvent) {
-      if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      if (e.button === 1 || (e.button === 0 && (e.altKey || e.ctrlKey || e.metaKey))) {
         e.preventDefault()
         e.stopPropagation()
         const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
