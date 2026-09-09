@@ -429,11 +429,16 @@ export default function GanttView({
 
   async function handleDuplicate(task: Task) {
     if (!createTask) return
+    const pid = task.project_id ?? activeProjectId
+    if (!pid) {
+      toast.danger('Projeto não identificado para duplicação')
+      return
+    }
     setContextMenu(null)
     try {
       const newTask = await createTask({
         title: `${task.title} (Cópia)`,
-        project_id: task.project_id,
+        project_id: pid,
         parent_id: task.parent_id ?? null,
         status: task.status,
         priority: task.priority,
@@ -448,7 +453,7 @@ export default function GanttView({
           directChildren.map((child) =>
             createTask({
               title: child.title,
-              project_id: task.project_id,
+              project_id: pid,
               parent_id: newTask.id,
               status: child.status,
               priority: child.priority,

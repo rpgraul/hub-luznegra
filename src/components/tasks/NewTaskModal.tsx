@@ -460,3 +460,4 @@ export default function NewTaskModal({
       </Modal.Container>
     </Modal.Backdrop>
   )
+}
