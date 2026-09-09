@@ -271,8 +271,7 @@ export default function TopBar({
       </div>
 
       {/* Save Preset Modal */}
-      <Modal.Root isOpen={savePresetOpen} onOpenChange={setSavePresetOpen}>
-        <Modal.Backdrop />
+      <Modal.Backdrop isOpen={savePresetOpen} onOpenChange={setSavePresetOpen}>
         <Modal.Container>
           <Modal.Dialog className="sm:max-w-sm">
             <Modal.Header>
@@ -311,7 +310,7 @@ export default function TopBar({
             <Modal.CloseTrigger />
           </Modal.Dialog>
         </Modal.Container>
-      </Modal.Root>
+      </Modal.Backdrop>
     </header>
   )
 }

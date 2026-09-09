@@ -134,8 +134,7 @@ export default function NewTaskModal({
   const canSubmit = !submitting && title.trim() !== '' && projectId !== ''
 
   return (
-    <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
-      <Modal.Backdrop />
+    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-2xl">
           <Modal.Header>
@@ -368,6 +367,6 @@ export default function NewTaskModal({
           <Modal.CloseTrigger />
         </Modal.Dialog>
       </Modal.Container>
-    </Modal.Root>
+    </Modal.Backdrop>
   )
 }

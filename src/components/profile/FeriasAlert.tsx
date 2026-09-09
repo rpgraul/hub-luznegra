@@ -18,8 +18,7 @@ export default function FeriasAlert({
   tasks,
 }: FeriasAlertProps) {
   return (
-    <Modal.Root isOpen={open} onOpenChange={onOpenChange}>
-      <Modal.Backdrop />
+    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-md">
           <Modal.Header>
@@ -57,6 +56,6 @@ export default function FeriasAlert({
           <Modal.CloseTrigger />
         </Modal.Dialog>
       </Modal.Container>
-    </Modal.Root>
+    </Modal.Backdrop>
   )
 }
