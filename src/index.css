@@ -268,3 +268,14 @@
   margin-bottom: 6px !important;
   color: var(--foreground) !important;
 }
+
+/* HeroUI modal close button */
+.close-button {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+
+.close-button:hover {
+  background-color: #222 !important;
+  color: #fff !important;
+}

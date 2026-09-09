@@ -245,7 +245,7 @@ export default function NewTaskModal({
                           key={p}
                           type="button"
                           onClick={() => setPriority(p)}
-                          className="flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition"
+                          className="flex-1 rounded-lg border border-border px-2 py-1.5 text-[10px] font-semibold text-foreground transition"
                           style={{
                             borderColor: priority === p ? PRIORITY_COLORS[p] : undefined,
                             backgroundColor: priority === p ? `${PRIORITY_COLORS[p]}15` : undefined,
