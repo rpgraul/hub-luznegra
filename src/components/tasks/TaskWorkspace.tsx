@@ -270,6 +270,7 @@ export default function TaskWorkspace({
             moveTaskStatus={tasksApi.moveTaskStatus}
             createTask={tasksApi.createTask}
             deleteTask={tasksApi.deleteTask}
+            currentUserId={user!.id}
           />
         )
       case 'kanban':

@@ -3,6 +3,7 @@ import Gantt from 'frappe-gantt'
 import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
+import SubtaskModal from '@/components/tasks/SubtaskModal'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { todayIso, formatDate } from '@/utils/format'
@@ -18,6 +19,7 @@ interface GanttViewProps {
   moveTaskStatus?: (args: { id: string; status: TaskStatus }) => Promise<unknown>
   createTask?: (input: NewTaskInput) => Promise<Task>
   deleteTask?: (id: string) => Promise<unknown>
+  currentUserId?: string
 }
 
 const BAR_HEIGHT = 24
@@ -115,12 +117,6 @@ interface ContextMenuState {
   task: Task
 }
 
-interface InlineSubtask {
-  title: string
-  startDate: string
-  dueDate: string
-}
-
 export default function GanttView({
   tasks,
   projects = [],
@@ -130,14 +126,13 @@ export default function GanttView({
   moveTaskStatus,
   createTask,
   deleteTask,
+  currentUserId,
 }: GanttViewProps) {
   const [zoomIndex, setZoomIndex] = useState(2)
   const [showTable, setShowTable] = useState(true)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
-  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null)
-  const [inlineSubtask, setInlineSubtask] = useState<InlineSubtask>({ title: '', startDate: '', dueDate: '' })
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [submittingSubtask, setSubmittingSubtask] = useState(false)
+  const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
 
   const { memberOf } = useProjectMembers(null)
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
@@ -148,7 +143,6 @@ export default function GanttView({
   const isSyncingScroll = useRef(false)
   const isInteractingRef = useRef(false)
   const pendingChangeRef = useRef<{ taskId: string; start: string; due: string } | null>(null)
-  const inlineTitleRef = useRef<HTMLInputElement>(null)
 
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
@@ -380,7 +374,6 @@ export default function GanttView({
       const next = new Set(prev)
       if (next.has(taskId)) {
         next.delete(taskId)
-        setAddingSubtaskFor((cur) => (cur === taskId ? null : cur))
       } else {
         next.add(taskId)
       }
@@ -388,38 +381,10 @@ export default function GanttView({
     })
   }, [])
 
-  function startAddingSubtask(parentId: string, parentStartDate?: string | null, parentDueDate?: string | null) {
-    setAddingSubtaskFor(parentId)
-    setInlineSubtask({ title: '', startDate: parentStartDate ?? '', dueDate: parentDueDate ?? '' })
-    setTimeout(() => inlineTitleRef.current?.focus(), 50)
-  }
-
-  function cancelAddingSubtask() {
-    setAddingSubtaskFor(null)
-    setInlineSubtask({ title: '', startDate: '', dueDate: '' })
-  }
-
-  async function handleSubmitSubtask(parentId: string, projectId: string | null) {
-    if (!createTask || !inlineSubtask.title.trim()) return
-    const pid = projectId ?? activeProjectId ?? ''
-    if (!pid) { toast.danger('Selecione um projeto antes de criar subtarefas.'); return }
-    setSubmittingSubtask(true)
-    try {
-      await createTask({
-        title: inlineSubtask.title.trim(),
-        project_id: pid,
-        parent_id: parentId,
-        status: 'todo',
-        start_date: inlineSubtask.startDate || null,
-        due_date: inlineSubtask.dueDate || null,
-      })
-      toast.success('Subtarefa criada!')
-      cancelAddingSubtask()
-    } catch (err) {
-      toast.danger(err instanceof Error ? err.message : 'Erro ao criar subtarefa.')
-    } finally {
-      setSubmittingSubtask(false)
-    }
+  function openSubtaskModal(parent: Task) {
+    setContextMenu(null)
+    setExpandedIds((prev) => new Set([...prev, parent.id]))
+    setSubtaskModalParent(parent)
   }
 
   function handleContextMenu(e: React.MouseEvent, task: Task) {
@@ -843,65 +808,14 @@ export default function GanttView({
                     <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">Nenhuma tarefa encontrada.</td></tr>
                   ) : (
                     rows.map((row, rowIndex) => {
-                      // ---- Add-subtask row ----
+                      // ---- Add-subtask row (abre o modal de subtarefa) ----
                       if (row.kind === 'add-subtask') {
-                        const parentTask = tasks.find((t) => t.id === row.parentId)
-                        const isAdding = addingSubtaskFor === row.parentId
-
-                        if (isAdding) {
-                          return (
-                            <tr key={`adding-${row.parentId}`} style={{ height: ROW_HEIGHT + 8 }} className="border-b border-border/50 bg-primary/[0.03]">
-                              <td className="w-8 px-1 text-center">
-                                {submittingSubtask ? (
-                                  <i className="fa-solid fa-spinner fa-spin text-primary text-xs" />
-                                ) : (
-                                  <button type="button" onClick={() => void handleSubmitSubtask(row.parentId, parentTask?.project_id ?? null)} title="Confirmar (Enter)"
-                                    className="flex size-5 mx-auto items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:scale-110">
-                                    <i className="fa-solid fa-check text-[9px]" />
-                                  </button>
-                                )}
-                              </td>
-                              <td className="px-2 overflow-hidden" style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
-                                <input
-                                  ref={inlineTitleRef}
-                                  type="text"
-                                  value={inlineSubtask.title}
-                                  onChange={(e) => setInlineSubtask((s) => ({ ...s, title: e.target.value }))}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); void handleSubmitSubtask(row.parentId, parentTask?.project_id ?? null) }
-                                    if (e.key === 'Escape') cancelAddingSubtask()
-                                  }}
-                                  placeholder="Título da subtarefa…"
-                                  className="w-full rounded border border-primary/50 bg-background px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
-                                  disabled={submittingSubtask}
-                                />
-                              </td>
-                              <td className="w-16 px-1 text-center" />
-                              <td className="w-28 px-1.5">
-                                <span className="text-[10px] text-muted-foreground italic">subtarefa</span>
-                              </td>
-                              <td className="w-32 px-1.5">
-                                <DateInput value={inlineSubtask.startDate} onChange={(iso) => setInlineSubtask((s) => ({ ...s, startDate: iso }))}
-                                  ariaLabel="Início da subtarefa"
-                                  className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
-                              </td>
-                              <td className="w-32 px-1.5 pr-2">
-                                <div className="flex gap-1 items-center">
-                                  <DateInput value={inlineSubtask.dueDate} onChange={(iso) => setInlineSubtask((s) => ({ ...s, dueDate: iso }))}
-                                    ariaLabel="Conclusão da subtarefa"
-                                    className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
-                                  <button type="button" onClick={cancelAddingSubtask} title="Cancelar (Esc)" className="shrink-0 text-muted-foreground hover:text-destructive transition">
-                                    <i className="fa-solid fa-xmark text-xs" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        }
-
                         return (
                           <tr key={`add-${row.parentId}-${rowIndex}`} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
-                            onClick={() => startAddingSubtask(row.parentId, parentTask?.start_date, parentTask?.due_date)}>
+                            onClick={() => {
+                              const parentTask = tasks.find((t) => t.id === row.parentId)
+                              if (parentTask) openSubtaskModal(parentTask)
+                            }}>
                             <td colSpan={6}>
                               <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 group-hover/addrow:text-primary transition"
                                 style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
@@ -1104,9 +1018,7 @@ export default function GanttView({
             <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted"
               onClick={() => {
                 const task = contextMenu.task
-                setContextMenu(null)
-                setExpandedIds((prev) => new Set([...prev, task.id]))
-                startAddingSubtask(task.id, task.start_date, task.due_date)
+                openSubtaskModal(task)
               }}>
               <i className="fa-solid fa-plus w-3.5 text-center text-muted-foreground" /><span>Adicionar subtarefa</span>
             </button>
@@ -1128,6 +1040,23 @@ export default function GanttView({
             </button>
           )}
         </div>
+      )}
+
+      {/* Modal de nova subtarefa */}
+      {createTask && (
+        <SubtaskModal
+          open={subtaskModalParent !== null}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setSubtaskModalParent(null)
+          }}
+          parent={subtaskModalParent}
+          projects={projects}
+          currentUserId={currentUserId ?? ''}
+          createTask={createTask}
+          onCreated={() => {
+            toast.success('Subtarefa criada!')
+          }}
+        />
       )}
     </div>
   )

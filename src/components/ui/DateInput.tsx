@@ -111,6 +111,10 @@ export default function DateInput({
   const [text, setText] = useState(() => formatIsoToBr(value))
   const [invalid, setInvalid] = useState(false)
   const [open, setOpen] = useState(false)
+  // Container do portal: dentro do overlay do modal quando o campo está
+  // em um HeroUI Modal (fora do diálogo o react-aria marca tudo como
+  // `inert` e o popup morre), senão document.body.
+  const [portalEl, setPortalEl] = useState<HTMLElement | null>(null)
   const [view, setView] = useState(() => {
     const now = new Date()
     return { y: now.getFullYear(), m: now.getMonth() }
@@ -168,7 +172,11 @@ export default function DateInput({
 
   function openCalendar() {
     if (disabled) return
-    const rect = rootRef.current?.getBoundingClientRect()
+    const root = rootRef.current
+    // Portal dentro do overlay do modal (sem `inert`, sem clipping) ou body.
+    const overlay = root?.closest('.modal__backdrop')
+    setPortalEl(overlay instanceof HTMLElement ? overlay : document.body)
+    const rect = root?.getBoundingClientRect()
     if (rect) {
       const POPUP_W = 236
       const POPUP_H = 288
@@ -389,7 +397,7 @@ export default function DateInput({
           Hoje
         </button>
       </div>,
-      document.body,
+      portalEl ?? document.body,
     )
   }
 
