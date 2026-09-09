@@ -16,7 +16,10 @@ import type {
   TaskStatus,
 } from '@/types/database'
 
-const NO_ASSIGNEE = '__none__'
+export interface NewSubtaskInput {
+  title: string
+  due_date: string | null
+}
 
 export interface NewTaskInput {
   title: string
@@ -24,11 +27,12 @@ export interface NewTaskInput {
   status: TaskStatus
   priority: TaskPriority
   assigned_to: string | null
+  assignees: string[]
   start_date: string | null
   due_date: string | null
   estimated_hours: number | null
   description: SerializedEditorState | null
-  subtasks: string[]
+  subtasks: NewSubtaskInput[]
 }
 
 interface NewTaskModalProps {
@@ -69,14 +73,15 @@ export default function NewTaskModal({
   const [title, setTitle] = useState('')
   const [status, setStatus] = useState<TaskStatus>('todo')
   const [priority, setPriority] = useState<TaskPriority>('medium')
-  const [assignedTo, setAssignedTo] = useState<string>(NO_ASSIGNEE)
+  const [assignees, setAssignees] = useState<string[]>([])
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [hours, setHours] = useState('')
   const [description, setDescription] =
     useState<SerializedEditorState | null>(null)
-  const [subtasks, setSubtasks] = useState<string[]>([])
+  const [subtasks, setSubtasks] = useState<NewSubtaskInput[]>([])
   const [subtaskInput, setSubtaskInput] = useState('')
+  const [subtaskDueDate, setSubtaskDueDate] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -89,7 +94,7 @@ export default function NewTaskModal({
     setTitle('')
     setStatus('todo')
     setPriority('medium')
-    setAssignedTo(currentUserId)
+    setAssignees(currentUserId ? [currentUserId] : [])
     const initDate = initialStartDate ? initialStartDate.slice(0, 10) : ''
     setStartDate(initDate)
     setDueDate(initDate)
@@ -97,16 +102,29 @@ export default function NewTaskModal({
     setDescription(null)
     setSubtasks([])
     setSubtaskInput('')
+    setSubtaskDueDate('')
     setError(null)
     setSubmitting(false)
     setTimeout(() => titleRef.current?.focus(), 80)
   }, [open, initialProjectId, initialStartDate, projects, currentUserId])
 
+  function toggleAssignee(userId: string) {
+    setAssignees((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
+    )
+  }
+
   function addSubtask() {
     const value = subtaskInput.trim()
     if (!value) return
-    setSubtasks((prev) => [...prev, value])
+    setSubtasks((prev) => [
+      ...prev,
+      { title: value, due_date: subtaskDueDate || null },
+    ])
     setSubtaskInput('')
+    setSubtaskDueDate('')
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -130,7 +148,8 @@ export default function NewTaskModal({
         project_id: projectId,
         status,
         priority,
-        assigned_to: assignedTo === NO_ASSIGNEE ? null : assignedTo,
+        assigned_to: assignees.length > 0 ? assignees[0] : null,
+        assignees,
         start_date: startDate || null,
         due_date: dueDate || null,
         estimated_hours,
@@ -150,9 +169,9 @@ export default function NewTaskModal({
   return (
     <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange} isDismissable={false}>
       <Modal.Container>
-        <Modal.Dialog className="sm:max-w-2xl">
+        <Modal.Dialog className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
           {/* Header */}
-          <Modal.Header className="border-b border-border pb-3">
+          <Modal.Header className="shrink-0 border-b border-border pb-3">
             <div className="flex items-center gap-2.5">
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
                 <i className="fa-solid fa-list-check text-sm text-primary" />
@@ -169,8 +188,8 @@ export default function NewTaskModal({
             </div>
           </Modal.Header>
 
-          <form onSubmit={handleSubmit}>
-            <Modal.Body className="space-y-5 py-5">
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <Modal.Body className="min-h-0 flex-1 space-y-5 overflow-y-auto py-5">
 
               {/* ── Título ── */}
               <div className="space-y-1.5">
@@ -258,34 +277,74 @@ export default function NewTaskModal({
                     </div>
                   </div>
 
-                  {/* Responsável */}
-                  <div className="space-y-1">
-                    <label className="block text-xs font-medium text-foreground/70">Responsável</label>
-                    <select
-                      value={assignedTo}
-                      onChange={(e) => setAssignedTo(e.target.value)}
-                      className="w-full cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
-                    >
-                      <option value={NO_ASSIGNEE}>Sem responsável</option>
-                      {members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name ?? m.username}
-                        </option>
-                      ))}
-                    </select>
-                    {/* Avatar preview */}
-                    {assignedTo !== NO_ASSIGNEE && (() => {
-                      const m = members.find((x) => x.id === assignedTo)
-                      if (!m) return null
-                      return (
-                        <div className="flex items-center gap-1.5 px-0.5">
-                          <span className="flex size-4 items-center justify-center rounded-full text-[8px] font-bold text-white" style={{ backgroundColor: userColor(m.id) }}>
-                            {(m.full_name ?? m.username).charAt(0).toUpperCase()}
+                  {/* Responsáveis */}
+                  <div className="col-span-2 space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">
+                      Responsáveis
+                      {assignees.length > 0 && (
+                        <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-bold text-primary">
+                          {assignees.length}
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2">
+                      {assignees.length === 0 && (
+                        <span className="mr-1 text-[11px] text-muted-foreground italic">
+                          — nenhum responsável —
+                        </span>
+                      )}
+                      {assignees.map((userId) => {
+                        const m = members.find((x) => x.id === userId)
+                        const name = m?.full_name ?? m?.username ?? 'Usuário'
+                        return (
+                          <span
+                            key={userId}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-foreground"
+                          >
+                            <span
+                              className="flex size-4 items-center justify-center rounded-full text-[8px] font-bold text-white"
+                              style={{ backgroundColor: userColor(userId) }}
+                            >
+                              {name.charAt(0).toUpperCase()}
+                            </span>
+                            <span>{name}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleAssignee(userId)}
+                              className="cursor-pointer text-muted-foreground transition hover:text-red-500"
+                              title="Remover responsável"
+                            >
+                              <i className="fa-solid fa-xmark text-[10px]" />
+                            </button>
                           </span>
-                          <span className="text-[10px] text-muted-foreground">{m.full_name ?? m.username}</span>
-                        </div>
-                      )
-                    })()}
+                        )
+                      })}
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            toggleAssignee(e.target.value)
+                            e.target.value = ''
+                          }
+                        }}
+                        aria-label="Adicionar responsável"
+                        className="cursor-pointer rounded-md border border-border/80 bg-background px-2 py-1 text-[11px] font-semibold text-[#7b68ee] hover:bg-muted/50"
+                      >
+                        <option value="" disabled>
+                          + Adicionar…
+                        </option>
+                        {members.map((m) => (
+                          <option
+                            key={m.id}
+                            value={m.id}
+                            disabled={assignees.includes(m.id)}
+                          >
+                            {m.full_name ?? m.username}{' '}
+                            {assignees.includes(m.id) ? '✓' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -371,7 +430,7 @@ export default function NewTaskModal({
                     </span>
                   )}
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
                     value={subtaskInput}
@@ -382,27 +441,53 @@ export default function NewTaskModal({
                     }}
                     className="flex-1 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
                   />
-                  <button
-                    type="button"
-                    onClick={addSubtask}
-                    disabled={!subtaskInput.trim()}
-                    className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition hover:border-primary hover:bg-primary/5 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <i className="fa-solid fa-plus text-sm" />
-                  </button>
+                  <div className="flex gap-2">
+                    <input
+                      type="date"
+                      value={subtaskDueDate}
+                      min={startDate || undefined}
+                      onChange={(e) => setSubtaskDueDate(e.target.value)}
+                      title="Data final da subtarefa"
+                      aria-label="Data final da subtarefa"
+                      className="rounded-xl border border-border bg-background px-3 py-2.5 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={addSubtask}
+                      disabled={!subtaskInput.trim()}
+                      className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition hover:border-primary hover:bg-primary/5 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <i className="fa-solid fa-plus text-sm" />
+                    </button>
+                  </div>
                 </div>
                 {subtasks.length > 0 && (
                   <div className="space-y-1.5">
                     {subtasks.map((subtask, index) => (
                       <div
-                        key={`${index}-${subtask}`}
+                        key={`${index}-${subtask.title}`}
                         className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm transition hover:border-border"
                       >
                         <i className="fa-regular fa-circle text-[10px] text-muted-foreground/50 shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-foreground/90">{subtask}</span>
+                        <span className="min-w-0 flex-1 truncate text-foreground/90">{subtask.title}</span>
+                        <input
+                          type="date"
+                          value={subtask.due_date ?? ''}
+                          min={startDate || undefined}
+                          onChange={(e) =>
+                            setSubtasks((prev) =>
+                              prev.map((s, j) =>
+                                j === index ? { ...s, due_date: e.target.value || null } : s,
+                              ),
+                            )
+                          }
+                          title="Data final da subtarefa"
+                          aria-label={`Data final de ${subtask.title}`}
+                          className="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-[11px] text-foreground outline-none transition hover:border-primary/50 focus:border-primary"
+                        />
                         <button
                           type="button"
-                          aria-label={`Remover ${subtask}`}
+                          aria-label={`Remover ${subtask.title}`}
                           onClick={() =>
                             setSubtasks((prev) => prev.filter((_, j) => j !== index))
                           }
@@ -425,7 +510,7 @@ export default function NewTaskModal({
               )}
             </Modal.Body>
 
-            <Modal.Footer className="border-t border-border pt-3">
+            <Modal.Footer className="shrink-0 border-t border-border pt-3">
               <Button
                 variant="outline"
                 type="button"

@@ -177,19 +177,26 @@ export default function DashboardLayout({
         status: input.status,
         priority: input.priority,
         assigned_to: input.assigned_to,
+        assignees: input.assignees.length > 0 ? input.assignees : null,
         start_date: input.start_date,
         due_date: input.due_date,
         estimated_hours: input.estimated_hours,
         description: input.description as unknown as Json,
       })
 
-      for (const subtaskTitle of input.subtasks) {
+      for (const subtask of input.subtasks) {
+        const subtaskTitle =
+          typeof subtask === 'string' ? subtask : subtask.title
+        const subtaskDueDate =
+          typeof subtask === 'string' ? null : (subtask.due_date ?? null)
         await tasksApi.createTask({
           title: subtaskTitle,
           project_id: input.project_id,
           parent_id: parent.id,
           status: input.status,
           assigned_to: input.assigned_to,
+          assignees: input.assignees.length > 0 ? input.assignees : null,
+          due_date: subtaskDueDate,
         })
       }
 
