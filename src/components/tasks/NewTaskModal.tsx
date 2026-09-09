@@ -449,7 +449,8 @@ export default function NewTaskModal({
                       onChange={setSubtaskDueDate}
                       title="Data final da subtarefa"
                       ariaLabel="Data final da subtarefa"
-                      className="rounded-xl border border-border bg-background px-3 py-2.5 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                      wrapperClassName="flex-1"
+                      className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
                     />
                     <button
                       type="button"
@@ -482,7 +483,8 @@ export default function NewTaskModal({
                           }
                           title="Data final da subtarefa"
                           ariaLabel={`Data final de ${subtask.title}`}
-                          className="shrink-0 rounded-md border border-border bg-background px-1.5 py-1 text-[11px] text-foreground outline-none transition hover:border-primary/50 focus:border-primary"
+                          wrapperClassName="shrink-0"
+                          className="rounded-md border border-border bg-background px-1.5 py-1 text-[11px] text-foreground outline-none transition hover:border-primary/50 focus:border-primary"
                         />
                         <button
                           type="button"
