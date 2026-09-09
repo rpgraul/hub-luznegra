@@ -1,13 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import {
-  Button,
-  Modal,
-  TextField,
-  Label,
-  Input,
-  Select,
-  ListBox,
-} from '@heroui/react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Button, Modal } from '@heroui/react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
@@ -49,6 +41,21 @@ interface NewTaskModalProps {
   onCreate: (input: NewTaskInput) => Promise<void>
 }
 
+const STATUS_COLORS: Record<TaskStatus, string> = {
+  backlog: '#64748b',
+  todo: '#0284c7',
+  in_progress: '#7c3aed',
+  review: '#a855f7',
+  done: '#10b981',
+}
+
+const PRIORITY_COLORS: Record<TaskPriority, string> = {
+  low: '#22c55e',
+  medium: '#f59e0b',
+  high: '#f97316',
+  urgent: '#ef4444',
+}
+
 export default function NewTaskModal({
   open,
   onOpenChange,
@@ -73,6 +80,7 @@ export default function NewTaskModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const titleRef = useRef<HTMLInputElement>(null)
   const { members } = useProjectMembers(projectId || null)
 
   useEffect(() => {
@@ -91,6 +99,7 @@ export default function NewTaskModal({
     setSubtaskInput('')
     setError(null)
     setSubmitting(false)
+    setTimeout(() => titleRef.current?.focus(), 80)
   }, [open, initialProjectId, initialStartDate, projects, currentUserId])
 
   function addSubtask() {
@@ -104,6 +113,10 @@ export default function NewTaskModal({
     e.preventDefault()
     if (!title.trim() || !projectId) {
       setError('Preencha o título e selecione um projeto.')
+      return
+    }
+    if (startDate && dueDate && startDate > dueDate) {
+      setError('A data de início não pode ser depois da conclusão.')
       return
     }
     setSubmitting(true)
@@ -132,235 +145,313 @@ export default function NewTaskModal({
   }
 
   const canSubmit = !submitting && title.trim() !== '' && projectId !== ''
+  const selectedProject = projects.find((p) => p.id === projectId)
 
   return (
     <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
       <Modal.Container>
         <Modal.Dialog className="sm:max-w-2xl">
-          <Modal.Header>
-            <Modal.Heading>Nova tarefa</Modal.Heading>
+          {/* Header */}
+          <Modal.Header className="border-b border-border pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
+                <i className="fa-solid fa-list-check text-sm text-primary" />
+              </div>
+              <div>
+                <Modal.Heading className="text-base font-bold">Nova tarefa</Modal.Heading>
+                {selectedProject && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                    <span className="size-2 rounded-full" style={{ backgroundColor: selectedProject.color }} />
+                    {selectedProject.name}
+                  </p>
+                )}
+              </div>
+            </div>
           </Modal.Header>
+
           <form onSubmit={handleSubmit}>
-            <Modal.Body className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <TextField.Root
-                    value={title}
-                    onChange={setTitle}
-                    autoFocus
-                    isRequired
-                  >
-                    <Label>Título</Label>
-                    <Input placeholder="O que precisa ser feito?" />
-                  </TextField.Root>
-                </div>
+            <Modal.Body className="space-y-5 py-5">
 
-                <Select.Root
-                  selectedKey={projectId || null}
-                  onSelectionChange={(value) =>
-                    setProjectId(typeof value === 'string' ? value : '')
-                  }
-                  placeholder="Selecione o projeto"
-                >
-                  <Label>Projeto</Label>
-                  <Select.Trigger className="w-full">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox.Root>
-                      {projects.map((project) => (
-                        <ListBox.Item
-                          key={project.id}
-                          id={project.id}
-                          textValue={project.name}
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="size-2.5 rounded-full"
-                              style={{ backgroundColor: project.color }}
-                            />
-                            {project.name}
-                          </span>
-                        </ListBox.Item>
-                      ))}
-                    </ListBox.Root>
-                  </Select.Popover>
-                </Select.Root>
+              {/* ── Título ── */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                  Título <span className="text-destructive">*</span>
+                </label>
+                <input
+                  ref={titleRef}
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="O que precisa ser feito?"
+                  required
+                  className="w-full rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm font-medium text-foreground placeholder:text-muted-foreground/50 outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
 
-                <Select.Root
-                  selectedKey={status}
-                  onSelectionChange={(value) =>
-                    setStatus((value as TaskStatus) ?? 'todo')
-                  }
-                >
-                  <Label>Status</Label>
-                  <Select.Trigger className="w-full">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox.Root>
-                      {TASK_STATUSES.map((s) => (
-                        <ListBox.Item key={s} id={s} textValue={STATUS_LABELS[s]}>
-                          {STATUS_LABELS[s]}
-                        </ListBox.Item>
-                      ))}
-                    </ListBox.Root>
-                  </Select.Popover>
-                </Select.Root>
+              {/* ── Seção: Projeto / Status / Prioridade / Responsável ── */}
+              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-sliders text-[10px]" />
+                  Configurações
+                </p>
 
-                <Select.Root
-                  selectedKey={priority}
-                  onSelectionChange={(value) =>
-                    setPriority((value as TaskPriority) ?? 'medium')
-                  }
-                >
-                  <Label>Prioridade</Label>
-                  <Select.Trigger className="w-full">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox.Root>
-                      {TASK_PRIORITIES.map((p) => (
-                        <ListBox.Item key={p} id={p} textValue={PRIORITY_LABELS[p]}>
-                          {PRIORITY_LABELS[p]}
-                        </ListBox.Item>
-                      ))}
-                    </ListBox.Root>
-                  </Select.Popover>
-                </Select.Root>
-
-                <Select.Root
-                  selectedKey={assignedTo}
-                  onSelectionChange={(value) =>
-                    setAssignedTo(typeof value === 'string' ? value : NO_ASSIGNEE)
-                  }
-                >
-                  <Label>Responsável</Label>
-                  <Select.Trigger className="w-full">
-                    <Select.Value />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox.Root>
-                      <ListBox.Item id={NO_ASSIGNEE} textValue="Sem responsável">
-                        Sem responsável
-                      </ListBox.Item>
-                      {members.map((member) => (
-                        <ListBox.Item
-                          key={member.id}
-                          id={member.id}
-                          textValue={member.username}
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="flex size-5 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-                              style={{ backgroundColor: userColor(member.id) }}
-                            >
-                              {(member.full_name ?? member.username)
-                                .charAt(0)
-                                .toUpperCase()}
-                            </span>
-                            {member.full_name ?? member.username}
-                          </span>
-                        </ListBox.Item>
-                      ))}
-                    </ListBox.Root>
-                  </Select.Popover>
-                </Select.Root>
-
-                <TextField.Root value={hours} onChange={setHours} type="number">
-                  <Label>Horas estimadas</Label>
-                  <Input placeholder="Ex.: 4" />
-                </TextField.Root>
-
-                <TextField.Root
-                  value={startDate}
-                  onChange={setStartDate}
-                  type="date"
-                >
-                  <Label>Início</Label>
-                  <Input />
-                </TextField.Root>
-
-                <TextField.Root value={dueDate} onChange={setDueDate} type="date">
-                  <Label>Conclusão</Label>
-                  <Input />
-                </TextField.Root>
-
-                <div className="sm:col-span-2">
-                  <Label htmlFor="new-task-description">Descrição</Label>
-                  <LexicalEditor
-                    initialValue={null}
-                    onChange={setDescription}
-                    placeholder="Descreva a tarefa…"
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <Label>Subtarefas</Label>
-                  <div className="flex gap-2">
-                    <TextField.Root
-                      value={subtaskInput}
-                      onChange={setSubtaskInput}
-                      className="flex-1"
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Projeto */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Projeto</label>
+                    <select
+                      value={projectId}
+                      onChange={(e) => setProjectId(e.target.value)}
+                      required
+                      className="w-full cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
                     >
-                      <Input
-                        placeholder="Nova subtarefa… (Enter para adicionar)"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            addSubtask()
-                          }
-                        }}
-                      />
-                    </TextField.Root>
-                    <Button
-                      isIconOnly
-                      onPress={addSubtask}
-                      aria-label="Adicionar subtarefa"
-                    >
-                      <i className="fa-solid fa-plus" />
-                    </Button>
+                      <option value="" disabled>Selecione…</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {/* Color swatch preview */}
+                    {selectedProject && (
+                      <div className="flex items-center gap-1.5 px-0.5">
+                        <span className="size-2 rounded-full" style={{ backgroundColor: selectedProject.color }} />
+                        <span className="text-[10px] text-muted-foreground">{selectedProject.name}</span>
+                      </div>
+                    )}
                   </div>
-                  {subtasks.length > 0 && (
-                    <div className="mt-2 space-y-1.5">
-                      {subtasks.map((subtask, index) => (
-                        <div
-                          key={`${index}-${subtask}`}
-                          className="flex items-center justify-between gap-2 rounded-md bg-muted px-3 py-1.5 text-sm"
+
+                  {/* Status */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                      className="w-full cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                      style={{ color: STATUS_COLORS[status] }}
+                    >
+                      {TASK_STATUSES.map((s) => (
+                        <option key={s} value={s} style={{ color: STATUS_COLORS[s] }}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Prioridade */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Prioridade</label>
+                    <div className="flex gap-1.5">
+                      {TASK_PRIORITIES.map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setPriority(p)}
+                          className="flex-1 rounded-lg border px-2 py-1.5 text-[10px] font-semibold transition"
+                          style={{
+                            borderColor: priority === p ? PRIORITY_COLORS[p] : undefined,
+                            backgroundColor: priority === p ? `${PRIORITY_COLORS[p]}15` : undefined,
+                            color: priority === p ? PRIORITY_COLORS[p] : undefined,
+                          }}
                         >
-                          <span className="min-w-0 truncate">{subtask}</span>
-                          <button
-                            type="button"
-                            aria-label={`Remover ${subtask}`}
-                            className="text-muted-foreground hover:text-destructive"
-                            onClick={() =>
-                              setSubtasks((prev) =>
-                                prev.filter((_, j) => j !== index),
-                              )
-                            }
-                          >
-                            <i className="fa-solid fa-xmark" />
-                          </button>
-                        </div>
+                          {PRIORITY_LABELS[p]}
+                        </button>
                       ))}
                     </div>
-                  )}
+                  </div>
+
+                  {/* Responsável */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Responsável</label>
+                    <select
+                      value={assignedTo}
+                      onChange={(e) => setAssignedTo(e.target.value)}
+                      className="w-full cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                    >
+                      <option value={NO_ASSIGNEE}>Sem responsável</option>
+                      {members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.full_name ?? m.username}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Avatar preview */}
+                    {assignedTo !== NO_ASSIGNEE && (() => {
+                      const m = members.find((x) => x.id === assignedTo)
+                      if (!m) return null
+                      return (
+                        <div className="flex items-center gap-1.5 px-0.5">
+                          <span className="flex size-4 items-center justify-center rounded-full text-[8px] font-bold text-white" style={{ backgroundColor: userColor(m.id) }}>
+                            {(m.full_name ?? m.username).charAt(0).toUpperCase()}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">{m.full_name ?? m.username}</span>
+                        </div>
+                      )
+                    })()}
+                  </div>
                 </div>
               </div>
 
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {/* ── Seção: Datas & Horas ── */}
+              <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <i className="fa-regular fa-calendar text-[10px]" />
+                  Prazo & Esforço
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Início</label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Conclusão</label>
+                    <input
+                      type="date"
+                      value={dueDate}
+                      min={startDate || undefined}
+                      onChange={(e) => setDueDate(e.target.value)}
+                      className={`w-full rounded-lg border bg-background px-3 py-2 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20 ${
+                        startDate && dueDate && dueDate < startDate
+                          ? 'border-destructive text-destructive'
+                          : 'border-border'
+                      }`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">Horas est.</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        value={hours}
+                        onChange={(e) => setHours(e.target.value)}
+                        placeholder="Ex.: 4"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 pr-8 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
+                      />
+                      <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">h</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Date validation warning */}
+                {startDate && dueDate && dueDate < startDate && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-destructive">
+                    <i className="fa-solid fa-triangle-exclamation text-[10px]" />
+                    A data de conclusão está antes do início
+                  </p>
+                )}
+              </div>
+
+              {/* ── Seção: Descrição ── */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                  <i className="fa-regular fa-file-lines mr-1.5 text-[10px]" />
+                  Descrição
+                </label>
+                <div className="rounded-xl border border-border bg-background overflow-hidden">
+                  <LexicalEditor
+                    initialValue={null}
+                    onChange={setDescription}
+                    placeholder="Descreva a tarefa, contexto, links úteis…"
+                  />
+                </div>
+              </div>
+
+              {/* ── Seção: Subtarefas ── */}
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-foreground/80 uppercase tracking-wide">
+                  <i className="fa-solid fa-list-check mr-1.5 text-[10px]" />
+                  Subtarefas
+                  {subtasks.length > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center rounded-full bg-primary/15 px-1.5 py-0 text-[9px] font-bold text-primary normal-case tracking-normal">
+                      {subtasks.length}
+                    </span>
+                  )}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={subtaskInput}
+                    onChange={(e) => setSubtaskInput(e.target.value)}
+                    placeholder="Adicione uma subtarefa e pressione Enter…"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); addSubtask() }
+                    }}
+                    className="flex-1 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={addSubtask}
+                    disabled={!subtaskInput.trim()}
+                    className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-background text-muted-foreground transition hover:border-primary hover:bg-primary/5 hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <i className="fa-solid fa-plus text-sm" />
+                  </button>
+                </div>
+                {subtasks.length > 0 && (
+                  <div className="space-y-1.5">
+                    {subtasks.map((subtask, index) => (
+                      <div
+                        key={`${index}-${subtask}`}
+                        className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm transition hover:border-border"
+                      >
+                        <i className="fa-regular fa-circle text-[10px] text-muted-foreground/50 shrink-0" />
+                        <span className="min-w-0 flex-1 truncate text-foreground/90">{subtask}</span>
+                        <button
+                          type="button"
+                          aria-label={`Remover ${subtask}`}
+                          onClick={() =>
+                            setSubtasks((prev) => prev.filter((_, j) => j !== index))
+                          }
+                          className="shrink-0 text-muted-foreground/40 transition hover:text-destructive group-hover:opacity-100"
+                        >
+                          <i className="fa-solid fa-xmark text-xs" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Erro */}
+              {error && (
+                <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2.5 text-sm text-destructive">
+                  <i className="fa-solid fa-circle-exclamation shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
             </Modal.Body>
-            <Modal.Footer>
+
+            <Modal.Footer className="border-t border-border pt-3">
               <Button
                 variant="outline"
                 type="button"
+                size="sm"
+                className="rounded-xl border-border px-4 text-xs font-semibold"
                 onPress={() => onOpenChange(false)}
               >
                 Cancelar
               </Button>
-              <Button type="submit" isDisabled={!canSubmit}>
-                <i className="fa-solid fa-plus mr-2" />
-                {submitting ? 'Criando…' : 'Criar tarefa'}
+              <Button
+                type="submit"
+                size="sm"
+                isDisabled={!canSubmit}
+                className="rounded-xl bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90 disabled:opacity-50"
+              >
+                {submitting ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin mr-2" />
+                    Criando…
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-plus mr-2" />
+                    Criar tarefa
+                  </>
+                )}
               </Button>
             </Modal.Footer>
           </form>
@@ -369,4 +460,3 @@ export default function NewTaskModal({
       </Modal.Container>
     </Modal.Backdrop>
   )
-}

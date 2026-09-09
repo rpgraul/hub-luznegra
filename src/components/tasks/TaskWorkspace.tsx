@@ -257,9 +257,12 @@ export default function TaskWorkspace({
           <GanttView
             tasks={visibleTasks}
             projects={projects}
+            activeProjectId={activeProjectId}
             onOpenTask={openTask}
             updateTask={tasksApi.updateTask}
             moveTaskStatus={tasksApi.moveTaskStatus}
+            createTask={tasksApi.createTask}
+            deleteTask={tasksApi.deleteTask}
           />
         )
       case 'kanban':

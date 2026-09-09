@@ -6,21 +6,25 @@ import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
+import type { NewTaskInput } from '@/lib/api/tasks'
 
 interface GanttViewProps {
   tasks: Task[]
   projects?: Project[]
+  activeProjectId?: string | null
   onOpenTask: (task: Task) => void
   updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
   moveTaskStatus?: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+  createTask?: (input: NewTaskInput) => Promise<Task>
+  deleteTask?: (id: string) => Promise<unknown>
 }
 
 const BAR_HEIGHT = 24
 const PADDING = 12
-const ROW_HEIGHT = BAR_HEIGHT + PADDING // 36px
+const ROW_HEIGHT = BAR_HEIGHT + PADDING
 const UPPER_HEADER_HEIGHT = 28
 const LOWER_HEADER_HEIGHT = 28
-const HEADER_HEIGHT = UPPER_HEADER_HEIGHT + LOWER_HEADER_HEIGHT // 56px
+const HEADER_HEIGHT = UPPER_HEADER_HEIGHT + LOWER_HEADER_HEIGHT
 
 interface ZoomConfig {
   name: string
@@ -32,46 +36,11 @@ interface ZoomConfig {
 }
 
 const ZOOM_CONFIGS: ZoomConfig[] = [
-  {
-    name: 'Day-Detail',
-    label: 'Dia (Detalhado)',
-    shortLabel: 'Dia +',
-    view_mode: 'Day',
-    column_width: 44,
-    snap_at: '1d',
-  },
-  {
-    name: 'Day',
-    label: 'Dia',
-    shortLabel: 'Dia',
-    view_mode: 'Day',
-    column_width: 34,
-    snap_at: '1d',
-  },
-  {
-    name: 'Week',
-    label: 'Semana',
-    shortLabel: 'Semana',
-    view_mode: 'Week',
-    column_width: 56,
-    snap_at: '1d',
-  },
-  {
-    name: 'Month',
-    label: 'Mês',
-    shortLabel: 'Mês',
-    view_mode: 'Month',
-    column_width: 86,
-    snap_at: '1d',
-  },
-  {
-    name: 'Year',
-    label: 'Ano',
-    shortLabel: 'Ano',
-    view_mode: 'Year',
-    column_width: 110,
-    snap_at: '1d',
-  },
+  { name: 'Day-Detail', label: 'Dia (Detalhado)', shortLabel: 'Dia +', view_mode: 'Day', column_width: 44, snap_at: '1d' },
+  { name: 'Day', label: 'Dia', shortLabel: 'Dia', view_mode: 'Day', column_width: 34, snap_at: '1d' },
+  { name: 'Week', label: 'Semana', shortLabel: 'Semana', view_mode: 'Week', column_width: 56, snap_at: '1d' },
+  { name: 'Month', label: 'Mês', shortLabel: 'Mês', view_mode: 'Month', column_width: 86, snap_at: '1d' },
+  { name: 'Year', label: 'Ano', shortLabel: 'Ano', view_mode: 'Year', column_width: 110, snap_at: '1d' },
 ]
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -121,41 +90,73 @@ function diffDaysLocal(startIso: string, endIso: string): number {
   return Math.round((d2 - d1) / (1000 * 60 * 60 * 24))
 }
 
+interface TaskRow {
+  kind: 'task'
+  task: Task
+  undated: boolean
+  depth: number
+  hasChildren: boolean
+  isSubtask: boolean
+  childCount: number
+}
+
+interface AddSubtaskRow {
+  kind: 'add-subtask'
+  parentId: string
+  depth: number
+}
+
+type GanttRow = TaskRow | AddSubtaskRow
+
+interface ContextMenuState {
+  x: number
+  y: number
+  task: Task
+}
+
+interface InlineSubtask {
+  title: string
+  startDate: string
+  dueDate: string
+}
+
 export default function GanttView({
   tasks,
   projects = [],
+  activeProjectId,
   onOpenTask,
   updateTask,
   moveTaskStatus,
+  createTask,
+  deleteTask,
 }: GanttViewProps) {
-  const [zoomIndex, setZoomIndex] = useState(2) // Default: Week
+  const [zoomIndex, setZoomIndex] = useState(2)
   const [showTable, setShowTable] = useState(true)
-  const { memberOf } = useProjectMembers(null)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null)
+  const [inlineSubtask, setInlineSubtask] = useState<InlineSubtask>({ title: '', startDate: '', dueDate: '' })
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [submittingSubtask, setSubmittingSubtask] = useState(false)
 
-  const projectById = useMemo(
-    () => new Map(projects.map((p) => [p.id, p])),
-    [projects],
-  )
+  const { memberOf } = useProjectMembers(null)
+  const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const ganttInstanceRef = useRef<Gantt | null>(null)
   const lastZoomRef = useRef<string | null>(null)
   const isSyncingScroll = useRef(false)
   const isInteractingRef = useRef(false)
-  const pendingChangeRef = useRef<{
-    taskId: string
-    start: string
-    due: string
-  } | null>(null)
+  const pendingChangeRef = useRef<{ taskId: string; start: string; due: string } | null>(null)
+  const inlineTitleRef = useRef<HTMLInputElement>(null)
 
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
 
-  const rows = useMemo(() => {
+  // Build rows — respects expandedIds
+  const rows = useMemo<GanttRow[]>(() => {
     const byParent = new Map<string | null, Task[]>()
     const allIds = new Set(tasks.map((t) => t.id))
 
-    // Group tasks by parent_id
     for (const t of tasks) {
       const pId = t.parent_id && allIds.has(t.parent_id) ? t.parent_id : null
       const list = byParent.get(pId) || []
@@ -163,13 +164,7 @@ export default function GanttView({
       byParent.set(pId, list)
     }
 
-    const result: Array<{
-      task: Task
-      undated: boolean
-      depth: number
-      hasChildren: boolean
-      isSubtask: boolean
-    }> = []
+    const result: GanttRow[] = []
 
     function traverse(pId: string | null, depth: number) {
       const children = byParent.get(pId) || []
@@ -178,38 +173,31 @@ export default function GanttView({
         const childList = byParent.get(task.id) || []
         const hasChildren = childList.length > 0
         const isSubtask = depth > 0
+        const isExpanded = expandedIds.has(task.id)
 
-        result.push({
-          task,
-          undated,
-          depth,
-          hasChildren,
-          isSubtask,
-        })
+        result.push({ kind: 'task', task, undated, depth, hasChildren, isSubtask, childCount: childList.length })
 
-        traverse(task.id, depth + 1)
+        if (hasChildren && isExpanded) {
+          traverse(task.id, depth + 1)
+          result.push({ kind: 'add-subtask', parentId: task.id, depth: depth + 1 })
+        }
       }
     }
 
     traverse(null, 0)
     return result
-  }, [tasks])
+  }, [tasks, expandedIds])
+
+  const taskRows = useMemo(() => rows.filter((r): r is TaskRow => r.kind === 'task'), [rows])
 
   const ganttTasks = useMemo(
     () =>
-      rows.map(({ task, undated, isSubtask }) => {
+      taskRows.map(({ task, undated, isSubtask }) => {
         const rawStart = task.start_date ?? today
         const rawEnd = task.due_date ?? task.start_date ?? today
-
         let start = rawStart
         let end = rawEnd
-
-        // Ensure start is not after end
-        if (start > end) {
-          start = end
-        }
-
-        // Add 1 day to end for Frappe Gantt boundary (must strictly be > start)
+        if (start > end) start = end
         const finalEnd = addDaysLocal(end, 1)
 
         let progress = 0
@@ -230,23 +218,14 @@ export default function GanttView({
 
         let customClass = ''
         if (isSubtask) {
-          if (task.status === 'done') {
-            customClass = 'gantt-subtask-done'
-          } else if (isOverdue) {
-            customClass = 'gantt-subtask-overdue'
-          } else if (undated) {
-            customClass = 'gantt-subtask-undated'
-          } else {
-            customClass = 'gantt-subtask-bar'
-          }
+          if (task.status === 'done') customClass = 'gantt-subtask-done'
+          else if (isOverdue) customClass = 'gantt-subtask-overdue'
+          else if (undated) customClass = 'gantt-subtask-undated'
+          else customClass = 'gantt-subtask-bar'
         } else {
-          if (task.status === 'done') {
-            customClass = 'gantt-done'
-          } else if (isOverdue) {
-            customClass = 'gantt-overdue'
-          } else if (undated) {
-            customClass = 'gantt-undated'
-          }
+          if (task.status === 'done') customClass = 'gantt-done'
+          else if (isOverdue) customClass = 'gantt-overdue'
+          else if (undated) customClass = 'gantt-undated'
         }
 
         const taskTitle = isSubtask
@@ -273,10 +252,27 @@ export default function GanttView({
                   : STATUS_COLORS[task.status] || '#7b68ee',
         }
       }),
-    [rows, today],
+    [taskRows, today],
   )
 
-  // Commit pending date changes after user finishes dragging
+  // Close context menu on outside click / Escape
+  useEffect(() => {
+    if (!contextMenu) return
+    function handleOutsideClick(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-context-menu]')) setContextMenu(null)
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape') setContextMenu(null)
+    }
+    document.addEventListener('mousedown', handleOutsideClick)
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick)
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [contextMenu])
+
   const commitPendingDateChange = useCallback(() => {
     if (!pendingChangeRef.current) return
     const { taskId, start: nextStart, due: nextDue } = pendingChangeRef.current
@@ -284,37 +280,25 @@ export default function GanttView({
 
     const task = tasks.find((t) => t.id === taskId)
     if (!task) return
-
     if (task.start_date === nextStart && task.due_date === nextDue) return
 
     const oldStart = task.start_date ?? today
     const deltaDays = diffDaysLocal(oldStart, nextStart)
 
     const promises: Promise<unknown>[] = [
-      updateTask({
-        id: task.id,
-        patch: { start_date: nextStart, due_date: nextDue },
-      }),
+      updateTask({ id: task.id, patch: { start_date: nextStart, due_date: nextDue } }),
     ]
 
-    // Cascade Parent -> Children
     const directChildren = tasks.filter((t) => t.parent_id === task.id)
     if (directChildren.length > 0 && deltaDays !== 0) {
       for (const child of directChildren) {
         const childPatch: Partial<Task> = {}
-        if (child.start_date) {
-          childPatch.start_date = addDaysLocal(child.start_date, deltaDays)
-        }
-        if (child.due_date) {
-          childPatch.due_date = addDaysLocal(child.due_date, deltaDays)
-        }
-        if (Object.keys(childPatch).length > 0) {
-          promises.push(updateTask({ id: child.id, patch: childPatch }))
-        }
+        if (child.start_date) childPatch.start_date = addDaysLocal(child.start_date, deltaDays)
+        if (child.due_date) childPatch.due_date = addDaysLocal(child.due_date, deltaDays)
+        if (Object.keys(childPatch).length > 0) promises.push(updateTask({ id: child.id, patch: childPatch }))
       }
     }
 
-    // Cascade Child -> Parent
     if (task.parent_id) {
       const parentTask = tasks.find((t) => t.id === task.parent_id)
       if (parentTask) {
@@ -322,38 +306,20 @@ export default function GanttView({
         let parentDue = parentTask.due_date
         let parentChanged = false
 
-        if (!parentStart || nextStart < parentStart) {
-          parentStart = nextStart
-          parentChanged = true
-        }
-        if (!parentDue || nextDue > parentDue) {
-          parentDue = nextDue
-          parentChanged = true
-        }
+        if (!parentStart || nextStart < parentStart) { parentStart = nextStart; parentChanged = true }
+        if (!parentDue || nextDue > parentDue) { parentDue = nextDue; parentChanged = true }
 
         if (parentChanged) {
-          promises.push(
-            updateTask({
-              id: parentTask.id,
-              patch: { start_date: parentStart, due_date: parentDue },
-            }),
-          )
+          promises.push(updateTask({ id: parentTask.id, patch: { start_date: parentStart, due_date: parentDue } }))
         }
       }
     }
 
     void Promise.all(promises)
-      .then(() => {
-        toast.success(
-          directChildren.length > 0 && deltaDays !== 0
-            ? `Tarefa e ${directChildren.length} subtarefa(s) atualizadas!`
-            : 'Prazos atualizados!',
-        )
-      })
+      .then(() => toast.success(directChildren.length > 0 && deltaDays !== 0 ? `Tarefa e ${directChildren.length} subtarefa(s) atualizadas!` : 'Prazos atualizados!'))
       .catch(() => toast.danger('Erro ao salvar as alterações de prazo.'))
   }, [tasks, today, updateTask])
 
-  // Global mouse up listener on window
   useEffect(() => {
     function handleWindowMouseUp() {
       if (isInteractingRef.current) {
@@ -361,7 +327,6 @@ export default function GanttView({
         commitPendingDateChange()
       }
     }
-
     window.addEventListener('mouseup', handleWindowMouseUp)
     window.addEventListener('pointerup', handleWindowMouseUp)
     return () => {
@@ -370,77 +335,151 @@ export default function GanttView({
     }
   }, [commitPendingDateChange])
 
-
-
-  // Scroll timeline to today
   const scrollToToday = useCallback((smooth = true) => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
     const container = wrapper.querySelector('.gantt-container') as HTMLElement | null
     if (!container) return
-
-    const todayEl = container.querySelector(
-      '.current-highlight, .current-ball-highlight',
-    ) as HTMLElement | null
-
+    const todayEl = container.querySelector('.current-highlight, .current-ball-highlight') as HTMLElement | null
     if (todayEl) {
       const targetLeft = Math.max(0, todayEl.offsetLeft - 120)
-      container.scrollTo({
-        left: targetLeft,
-        behavior: smooth ? 'smooth' : 'auto',
-      })
+      container.scrollTo({ left: targetLeft, behavior: smooth ? 'smooth' : 'auto' })
       return
     }
-
     if (ganttInstanceRef.current) {
       try {
-        const instance = ganttInstanceRef.current as unknown as {
-          scroll_current?: () => void
-        }
+        const instance = ganttInstanceRef.current as unknown as { scroll_current?: () => void }
         instance.scroll_current?.()
-      } catch {
-        // ignore
-      }
+      } catch { /* ignore */ }
     }
   }, [])
 
-  // Zoom handlers
-  const handleZoomIn = useCallback(() => {
-    setZoomIndex((prev) => Math.max(0, prev - 1))
-  }, [])
+  const handleZoomIn = useCallback(() => setZoomIndex((prev) => Math.max(0, prev - 1)), [])
+  const handleZoomOut = useCallback(() => setZoomIndex((prev) => Math.min(ZOOM_CONFIGS.length - 1, prev + 1)), [])
 
-  const handleZoomOut = useCallback(() => {
-    setZoomIndex((prev) => Math.min(ZOOM_CONFIGS.length - 1, prev + 1))
-  }, [])
-
-  // Toggle Done status
   const handleToggleDone = useCallback(
     (task: Task) => {
       const isDone = task.status === 'done'
       const nextStatus: TaskStatus = isDone ? 'todo' : 'done'
-
       if (moveTaskStatus) {
         void moveTaskStatus({ id: task.id, status: nextStatus })
-          .then(() =>
-            toast.success(
-              isDone ? 'Tarefa reaberta.' : 'Tarefa concluída com sucesso!',
-            ),
-          )
+          .then(() => toast.success(isDone ? 'Tarefa reaberta.' : 'Tarefa concluída com sucesso!'))
           .catch(() => toast.danger('Erro ao alterar status da tarefa.'))
       } else {
         void updateTask({ id: task.id, patch: { status: nextStatus } })
-          .then(() =>
-            toast.success(
-              isDone ? 'Tarefa reaberta.' : 'Tarefa concluída com sucesso!',
-            ),
-          )
+          .then(() => toast.success(isDone ? 'Tarefa reaberta.' : 'Tarefa concluída com sucesso!'))
           .catch(() => toast.danger('Erro ao alterar status da tarefa.'))
       }
     },
     [moveTaskStatus, updateTask],
   )
 
-  // Initialize and update Gantt smoothly
+  const handleToggleExpand = useCallback((taskId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(taskId)) {
+        next.delete(taskId)
+        setAddingSubtaskFor((cur) => (cur === taskId ? null : cur))
+      } else {
+        next.add(taskId)
+      }
+      return next
+    })
+  }, [])
+
+  function startAddingSubtask(parentId: string, parentStartDate?: string | null, parentDueDate?: string | null) {
+    setAddingSubtaskFor(parentId)
+    setInlineSubtask({ title: '', startDate: parentStartDate ?? '', dueDate: parentDueDate ?? '' })
+    setTimeout(() => inlineTitleRef.current?.focus(), 50)
+  }
+
+  function cancelAddingSubtask() {
+    setAddingSubtaskFor(null)
+    setInlineSubtask({ title: '', startDate: '', dueDate: '' })
+  }
+
+  async function handleSubmitSubtask(parentId: string, projectId: string | null) {
+    if (!createTask || !inlineSubtask.title.trim()) return
+    const pid = projectId ?? activeProjectId ?? ''
+    if (!pid) { toast.danger('Selecione um projeto antes de criar subtarefas.'); return }
+    setSubmittingSubtask(true)
+    try {
+      await createTask({
+        title: inlineSubtask.title.trim(),
+        project_id: pid,
+        parent_id: parentId,
+        status: 'todo',
+        start_date: inlineSubtask.startDate || null,
+        due_date: inlineSubtask.dueDate || null,
+      })
+      toast.success('Subtarefa criada!')
+      cancelAddingSubtask()
+    } catch (err) {
+      toast.danger(err instanceof Error ? err.message : 'Erro ao criar subtarefa.')
+    } finally {
+      setSubmittingSubtask(false)
+    }
+  }
+
+  function handleContextMenu(e: React.MouseEvent, task: Task) {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ x: e.clientX, y: e.clientY, task })
+  }
+
+  async function handleDuplicate(task: Task) {
+    if (!createTask) return
+    setContextMenu(null)
+    try {
+      const newTask = await createTask({
+        title: `${task.title} (Cópia)`,
+        project_id: task.project_id,
+        parent_id: task.parent_id ?? null,
+        status: task.status,
+        priority: task.priority,
+        assigned_to: task.assigned_to ?? null,
+        start_date: task.start_date ?? null,
+        due_date: task.due_date ?? null,
+        estimated_hours: task.estimated_hours ?? null,
+      })
+      const directChildren = tasks.filter((t) => t.parent_id === task.id)
+      if (directChildren.length > 0) {
+        await Promise.all(
+          directChildren.map((child) =>
+            createTask({
+              title: child.title,
+              project_id: task.project_id,
+              parent_id: newTask.id,
+              status: child.status,
+              priority: child.priority,
+              assigned_to: child.assigned_to ?? null,
+              start_date: child.start_date ?? null,
+              due_date: child.due_date ?? null,
+            }),
+          ),
+        )
+        toast.success(`Tarefa e ${directChildren.length} subtarefa(s) duplicadas!`)
+      } else {
+        toast.success('Tarefa duplicada!')
+      }
+    } catch (err) {
+      toast.danger(err instanceof Error ? err.message : 'Erro ao duplicar.')
+    }
+  }
+
+  async function handleDelete(task: Task) {
+    if (!deleteTask) return
+    setContextMenu(null)
+    try {
+      await deleteTask(task.id)
+      setExpandedIds((prev) => { const next = new Set(prev); next.delete(task.id); return next })
+      toast.success('Tarefa excluída.')
+    } catch (err) {
+      toast.danger(err instanceof Error ? err.message : 'Erro ao excluir.')
+    }
+  }
+
+  // Initialize and update Gantt
   useEffect(() => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
@@ -452,24 +491,18 @@ export default function GanttView({
       return
     }
 
-    // If user is actively dragging, do not refresh or destroy Gantt
     if (isInteractingRef.current) return
 
-    const tasksById = new Map(rows.map(({ task }) => [task.id, task]))
-    const undatedById = new Map(
-      rows.map(({ task, undated }) => [task.id, undated]),
-    )
+    const tasksById = new Map(taskRows.map(({ task }) => [task.id, task]))
+    const undatedById = new Map(taskRows.map(({ task, undated }) => [task.id, undated]))
 
     const isZoomChange = lastZoomRef.current !== currentZoom.name
 
-    // If instance exists and zoom didn't change, perform in-place refresh without destroying DOM
     if (ganttInstanceRef.current && !isZoomChange) {
       try {
         ganttInstanceRef.current.refresh(ganttTasks)
         return
-      } catch {
-        // fallback to full recreate if refresh fails
-      }
+      } catch { /* fallback */ }
     }
 
     lastZoomRef.current = currentZoom.name
@@ -512,11 +545,7 @@ export default function GanttView({
             const elapsed = diffDaysLocal(task.start_date, today) + 1
             const pct = Math.min(100, Math.max(0, Math.round((elapsed / totalDays) * 100)))
             const remaining = totalDays - elapsed
-            durationHtml = `
-              <div style="margin-top:3px;font-size:11px;color:var(--g-text-dark);">
-                Tempo decorrido: <strong>${pct}%</strong> (Dia ${elapsed} de ${totalDays}) • Faltam ${remaining} dia(s)
-              </div>
-            `
+            durationHtml = `<div style="margin-top:3px;font-size:11px;color:var(--g-text-dark);">Tempo decorrido: <strong>${pct}%</strong> (Dia ${elapsed} de ${totalDays}) • Faltam ${remaining} dia(s)</div>`
           } else {
             const daysUntilStart = diffDaysLocal(today, task.start_date)
             durationHtml = `<div style="margin-top:3px;font-size:11px;color:var(--g-text-muted);">Inicia em ${daysUntilStart} dia(s) • Duração: ${totalDays} dias</div>`
@@ -528,23 +557,17 @@ export default function GanttView({
           : ''
 
         return `
-          <div class="gantt-popup" style="font-family: inherit; min-width: 220px; line-height: 1.4;">
+          <div class="gantt-popup" style="font-family:inherit;min-width:220px;line-height:1.4;">
             <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:var(--g-text-dark);">${task.title}</div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background-color:${statusColor}20;color:${statusColor};border:1px solid ${statusColor}40;">
-                ${statusLabel}
-              </span>
-              <span style="font-size:10px;color:var(--g-text-muted);">
-                • Prioridade: ${priorityLabel}
-              </span>
+              <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background-color:${statusColor}20;color:${statusColor};border:1px solid ${statusColor}40;">${statusLabel}</span>
+              <span style="font-size:10px;color:var(--g-text-muted);">• Prioridade: ${priorityLabel}</span>
             </div>
-            <div style="font-size:11px;color:var(--g-text-dark);margin-bottom:3px;">
-              ${dateRange}
-            </div>
+            <div style="font-size:11px;color:var(--g-text-dark);margin-bottom:3px;">${dateRange}</div>
             ${durationHtml}
             ${tagsHtml}
-            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--g-border-color);font-size:10px;color:var(--g-text-muted);display:flex;align-items:center;justify-content:space-between;">
-              <span><i class="fa-solid fa-arrow-pointer" style="margin-right:3px;"></i> Duplo clique para detalhes</span>
+            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--g-border-color);font-size:10px;color:var(--g-text-muted);">
+              <i class="fa-solid fa-arrow-pointer" style="margin-right:3px;"></i> Duplo clique para detalhes &nbsp;|&nbsp; <i class="fa-solid fa-computer-mouse" style="margin-right:3px;"></i> Clique direito para opções
             </div>
           </div>
         `
@@ -553,11 +576,7 @@ export default function GanttView({
         isInteractingRef.current = true
         const nextStart = formatLocalDate(start)
         const nextDue = addDaysLocal(formatLocalDate(end), -1)
-        pendingChangeRef.current = {
-          taskId: String(gTask.id),
-          start: nextStart,
-          due: nextDue,
-        }
+        pendingChangeRef.current = { taskId: String(gTask.id), start: nextStart, due: nextDue }
       },
     })
 
@@ -565,9 +584,7 @@ export default function GanttView({
 
     function handleTimelineMouseDown(e: MouseEvent) {
       const target = e.target as HTMLElement | null
-      if (target?.closest('.bar-wrapper, .handle')) {
-        isInteractingRef.current = true
-      }
+      if (target?.closest('.bar-wrapper, .handle')) isInteractingRef.current = true
     }
 
     function handleDoubleClick(event: MouseEvent) {
@@ -581,7 +598,6 @@ export default function GanttView({
 
     const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
     if (ganttContainer) {
-      // Clear Frappe Gantt's inline height so container matches wrapper and scrolls vertically
       ganttContainer.style.height = ''
       ganttContainer.style.maxHeight = '100%'
     }
@@ -590,73 +606,50 @@ export default function GanttView({
       if (isSyncingScroll.current) return
       isSyncingScroll.current = true
       const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
-      if (gContainer && tableRef.current) {
-        gContainer.scrollTop = tableRef.current.scrollTop
-      }
-      requestAnimationFrame(() => {
-        isSyncingScroll.current = false
-      })
+      if (gContainer && tableRef.current) gContainer.scrollTop = tableRef.current.scrollTop
+      requestAnimationFrame(() => { isSyncingScroll.current = false })
     }
 
     function onGanttScroll() {
       if (isSyncingScroll.current) return
       isSyncingScroll.current = true
       const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
-      if (tableRef.current && gContainer) {
-        tableRef.current.scrollTop = gContainer.scrollTop
-      }
-      requestAnimationFrame(() => {
-        isSyncingScroll.current = false
-      })
+      if (tableRef.current && gContainer) tableRef.current.scrollTop = gContainer.scrollTop
+      requestAnimationFrame(() => { isSyncingScroll.current = false })
     }
 
     const tableEl = tableRef.current
-    if (tableEl) {
-      tableEl.addEventListener('scroll', onTableScroll, { passive: true })
-    }
+    if (tableEl) tableEl.addEventListener('scroll', onTableScroll, { passive: true })
     if (ganttContainer) {
       ganttContainer.addEventListener('scroll', onGanttScroll, { passive: true })
-      if (tableEl) {
-        ganttContainer.scrollTop = tableEl.scrollTop
-      }
+      if (tableEl) ganttContainer.scrollTop = tableEl.scrollTop
     }
 
     wrapper.addEventListener('mousedown', handleTimelineMouseDown)
     wrapper.addEventListener('dblclick', handleDoubleClick)
 
-    const timer = setTimeout(() => {
-      scrollToToday(false)
-    }, 60)
+    const timer = setTimeout(() => scrollToToday(false), 60)
 
     return () => {
       clearTimeout(timer)
-      if (tableEl) {
-        tableEl.removeEventListener('scroll', onTableScroll)
-      }
-      if (ganttContainer) {
-        ganttContainer.removeEventListener('scroll', onGanttScroll)
-      }
+      if (tableEl) tableEl.removeEventListener('scroll', onTableScroll)
+      if (ganttContainer) ganttContainer.removeEventListener('scroll', onGanttScroll)
       wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
       wrapper.removeEventListener('dblclick', handleDoubleClick)
-      if (gantt) {
-        gantt.clear()
-        gantt.unselect_all()
-      }
+      if (gantt) { gantt.clear(); gantt.unselect_all() }
       wrapper.innerHTML = ''
       ganttInstanceRef.current = null
       lastZoomRef.current = null
     }
-  }, [ganttTasks, rows, currentZoom, onOpenTask, scrollToToday, today, showTable])
+  }, [ganttTasks, taskRows, currentZoom, onOpenTask, scrollToToday, today, showTable])
 
-  // Zoom & Smooth 2D Scroll + Middle-Click Pan listener
+  // Zoom & Pan
   useEffect(() => {
     const wrapper = wrapperRef.current
     const table = tableRef.current
     if (!wrapper) return
 
     let lastZoomTime = 0
-
-    // Middle-click Pan State
     let isPanning = false
     let startX = 0
     let startY = 0
@@ -665,30 +658,19 @@ export default function GanttView({
 
     function handleWheel(e: WheelEvent) {
       const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
-
       if (e.ctrlKey || e.metaKey) {
-        // Ctrl + Scroll: Zoom in / Zoom out
         e.preventDefault()
         const now = Date.now()
         if (now - lastZoomTime < 140) return
         lastZoomTime = now
-
-        if (e.deltaY < 0) {
-          handleZoomIn()
-        } else if (e.deltaY > 0) {
-          handleZoomOut()
-        }
+        if (e.deltaY < 0) handleZoomIn()
+        else if (e.deltaY > 0) handleZoomOut()
       } else if (e.shiftKey) {
-        // Shift + Scroll: Force horizontal scroll
-        if (container) {
-          e.preventDefault()
-          container.scrollLeft += e.deltaY || e.deltaX
-        }
+        if (container) { e.preventDefault(); container.scrollLeft += e.deltaY || e.deltaX }
       }
     }
 
     function handleMouseDown(e: MouseEvent) {
-      // Middle Click (button === 1) or Left Click with Alt
       if (e.button === 1 || (e.button === 0 && e.altKey)) {
         e.preventDefault()
         e.stopPropagation()
@@ -709,31 +691,20 @@ export default function GanttView({
       const container = wrapper?.querySelector('.gantt-container') as HTMLElement | null
       const dx = e.clientX - startX
       const dy = e.clientY - startY
-
-      if (container) {
-        container.scrollLeft = scrollStartLeft - dx
-        container.scrollTop = scrollStartTop - dy
-      }
-      if (table) {
-        table.scrollTop = scrollStartTop - dy
-      }
+      if (container) { container.scrollLeft = scrollStartLeft - dx; container.scrollTop = scrollStartTop - dy }
+      if (table) table.scrollTop = scrollStartTop - dy
     }
 
     function handleMouseUp(e: MouseEvent) {
-      if (isPanning) {
-        if (e.button === 1 || e.button === 0) {
-          isPanning = false
-          document.body.style.cursor = ''
-          document.body.style.userSelect = ''
-        }
+      if (isPanning && (e.button === 1 || e.button === 0)) {
+        isPanning = false
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
       }
     }
 
-    // Prevent default auxclick (middle click autoscroll icon in some browsers)
     function handleAuxClick(e: MouseEvent) {
-      if (e.button === 1) {
-        e.preventDefault()
-      }
+      if (e.button === 1) e.preventDefault()
     }
 
     wrapper.addEventListener('wheel', handleWheel, { passive: false })
@@ -741,7 +712,6 @@ export default function GanttView({
     wrapper.addEventListener('auxclick', handleAuxClick)
     window.addEventListener('mousemove', handleMouseMove, { passive: false })
     window.addEventListener('mouseup', handleMouseUp)
-
     if (table) {
       table.addEventListener('wheel', handleWheel, { passive: false })
       table.addEventListener('mousedown', handleMouseDown)
@@ -764,11 +734,7 @@ export default function GanttView({
     }
   }, [handleZoomIn, handleZoomOut])
 
-  function handleDateChange(
-    task: Task,
-    field: 'start_date' | 'due_date',
-    value: string,
-  ) {
+  function handleDateChange(task: Task, field: 'start_date' | 'due_date', value: string) {
     const next = value || null
     const nextStart = field === 'start_date' ? next : task.start_date
     const nextDue = field === 'due_date' ? next : task.due_date
@@ -776,369 +742,259 @@ export default function GanttView({
       toast.danger('A data de início não pode ser depois da conclusão.')
       return
     }
-
-    const promises: Promise<unknown>[] = [
-      updateTask({ id: task.id, patch: { [field]: next } }),
-    ]
-
+    const promises: Promise<unknown>[] = [updateTask({ id: task.id, patch: { [field]: next } })]
     if (task.parent_id && next) {
       const parentTask = tasks.find((t) => t.id === task.parent_id)
       if (parentTask) {
         let parentStart = parentTask.start_date
         let parentDue = parentTask.due_date
         let parentChanged = false
-
-        if (field === 'start_date' && (!parentStart || next < parentStart)) {
-          parentStart = next
-          parentChanged = true
-        }
-        if (field === 'due_date' && (!parentDue || next > parentDue)) {
-          parentDue = next
-          parentChanged = true
-        }
-        if (parentChanged) {
-          promises.push(
-            updateTask({
-              id: parentTask.id,
-              patch: { start_date: parentStart, due_date: parentDue },
-            }),
-          )
-        }
+        if (field === 'start_date' && (!parentStart || next < parentStart)) { parentStart = next; parentChanged = true }
+        if (field === 'due_date' && (!parentDue || next > parentDue)) { parentDue = next; parentChanged = true }
+        if (parentChanged) promises.push(updateTask({ id: parentTask.id, patch: { start_date: parentStart, due_date: parentDue } }))
       }
     }
-
-    void Promise.all(promises)
-      .then(() => toast.success('Data atualizada.'))
-      .catch(() => toast.danger('Não foi possível salvar a data.'))
+    void Promise.all(promises).then(() => toast.success('Data atualizada.')).catch(() => toast.danger('Não foi possível salvar a data.'))
   }
 
   function handleStatusChange(task: Task, nextStatus: TaskStatus) {
     if (task.status === nextStatus) return
     if (moveTaskStatus) {
       void moveTaskStatus({ id: task.id, status: nextStatus })
-        .then(() =>
-          toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`),
-        )
+        .then(() => toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`))
         .catch(() => toast.danger('Erro ao alterar status.'))
     } else {
       void updateTask({ id: task.id, patch: { status: nextStatus } })
-        .then(() =>
-          toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`),
-        )
+        .then(() => toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`))
         .catch(() => toast.danger('Erro ao alterar status.'))
     }
   }
 
-  const undatedCount = rows.filter(({ undated }) => undated).length
+  const undatedCount = taskRows.filter(({ undated }) => undated).length
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background select-none">
       {/* Top Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs backdrop-blur">
-        {/* Left Side: Stats & Toggle Table */}
         <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={showTable ? 'secondary' : 'outline'}
-            className="h-7 gap-1.5 px-2.5 text-xs font-medium"
-            onPress={() => setShowTable(!showTable)}
-          >
-            <i
-              className={`fa-solid ${showTable ? 'fa-table-columns' : 'fa-table'} text-xs`}
-            />
+          <Button size="sm" variant={showTable ? 'secondary' : 'outline'} className="h-7 gap-1.5 px-2.5 text-xs font-medium" onPress={() => setShowTable(!showTable)}>
+            <i className={`fa-solid ${showTable ? 'fa-table-columns' : 'fa-table'} text-xs`} />
             <span>{showTable ? 'Ocultar Tabela' : 'Mostrar Tabela'}</span>
           </Button>
-
           <span className="text-[11px] text-muted-foreground font-medium">
-            {rows.length} tarefa{rows.length !== 1 ? 's' : ''}
+            {taskRows.length} tarefa{taskRows.length !== 1 ? 's' : ''}
           </span>
-
           {undatedCount > 0 && (
             <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
-              <i className="fa-regular fa-clock" />
-              {undatedCount} sem prazo
+              <i className="fa-regular fa-clock" />{undatedCount} sem prazo
             </span>
           )}
         </div>
-
-        {/* Right Side: Zoom Controls & Today Button */}
         <div className="flex items-center gap-2">
-          {/* Zoom Buttons & Mode Selector */}
           <div className="flex items-center rounded-lg border border-border bg-background/80 p-0.5 shadow-2xs">
-            <button
-              type="button"
-              aria-label="Aumentar Zoom (Ctrl + Scroll para cima)"
-              title="Aumentar Zoom (Ctrl + Scroll para cima)"
-              disabled={zoomIndex === 0}
-              onClick={handleZoomIn}
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30"
-            >
+            <button type="button" aria-label="Aumentar Zoom" title="Aumentar Zoom (Ctrl + Scroll para cima)" disabled={zoomIndex === 0} onClick={handleZoomIn} className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30">
               <i className="fa-solid fa-magnifying-glass-plus text-[11px]" />
             </button>
-
             <div className="mx-1 h-3.5 w-px bg-border" />
-
             <div className="flex items-center gap-0.5 px-1">
               {ZOOM_CONFIGS.map((cfg, idx) => (
-                <button
-                  key={cfg.name}
-                  type="button"
-                  title={`Visualização em ${cfg.label}`}
-                  onClick={() => setZoomIndex(idx)}
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
-                    zoomIndex === idx
-                      ? 'bg-primary text-primary-foreground shadow-2xs'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  }`}
-                >
+                <button key={cfg.name} type="button" title={`Visualização em ${cfg.label}`} onClick={() => setZoomIndex(idx)}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${zoomIndex === idx ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
                   {cfg.shortLabel}
                 </button>
               ))}
             </div>
-
             <div className="mx-1 h-3.5 w-px bg-border" />
-
-            <button
-              type="button"
-              aria-label="Diminuir Zoom (Ctrl + Scroll para baixo)"
-              title="Diminuir Zoom (Ctrl + Scroll para baixo)"
-              disabled={zoomIndex === ZOOM_CONFIGS.length - 1}
-              onClick={handleZoomOut}
-              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30"
-            >
+            <button type="button" aria-label="Diminuir Zoom" title="Diminuir Zoom (Ctrl + Scroll para baixo)" disabled={zoomIndex === ZOOM_CONFIGS.length - 1} onClick={handleZoomOut} className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30">
               <i className="fa-solid fa-magnifying-glass-minus text-[11px]" />
             </button>
           </div>
-
-          {/* Today Button */}
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label="Rolar a linha do tempo para Hoje"
-            className="h-7 gap-1.5 border-primary/40 bg-primary/5 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10"
-            onPress={() => scrollToToday(true)}
-          >
+          <Button size="sm" variant="outline" aria-label="Rolar para Hoje" className="h-7 gap-1.5 border-primary/40 bg-primary/5 px-2.5 text-xs font-semibold text-primary hover:bg-primary/10" onPress={() => scrollToToday(true)}>
             <i className="fa-solid fa-calendar-day text-xs" />
             <span>Hoje</span>
           </Button>
         </div>
       </div>
 
-      {/* Main Content Area: Left Table + Gantt SVG */}
+      {/* Main Content */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
-          {/* Collapsible Left Table with comfortable fit and no horizontal scroll */}
           {showTable && (
-            <div
-              ref={tableRef}
-              className="w-[740px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8"
-            >
+            <div ref={tableRef} className="w-[740px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
               <table className="w-full table-fixed border-collapse text-xs">
                 <thead>
-                  <tr
-                    className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800"
-                    style={{ height: HEADER_HEIGHT }}
-                  >
-                    <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100">
-                      <i className="fa-solid fa-check text-[11px]" title="Concluir" />
-                    </th>
-                    <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">
-                      Tarefa & Tags
-                    </th>
-                    <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">
-                      Resp.
-                    </th>
-                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">
-                      Status
-                    </th>
-                    <th className="w-32 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">
-                      Início
-                    </th>
-                    <th className="w-32 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">
-                      Fim
-                    </th>
+                  <tr className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800" style={{ height: HEADER_HEIGHT }}>
+                    <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100"><i className="fa-solid fa-check text-[11px]" title="Concluir" /></th>
+                    <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">Tarefa & Tags</th>
+                    <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">Resp.</th>
+                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Status</th>
+                    <th className="w-32 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Início</th>
+                    <th className="w-32 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">Fim</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="p-4 text-center text-muted-foreground"
-                      >
-                        Nenhuma tarefa encontrada.
-                      </td>
-                    </tr>
+                    <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">Nenhuma tarefa encontrada.</td></tr>
                   ) : (
-                    rows.map(({ task, undated, depth, hasChildren, isSubtask }) => {
-                      const isDone = task.status === 'done'
-                      const isOverdue = !isDone && task.due_date && today > task.due_date
+                    rows.map((row, rowIndex) => {
+                      // ---- Add-subtask row ----
+                      if (row.kind === 'add-subtask') {
+                        const parentTask = tasks.find((t) => t.id === row.parentId)
+                        const isAdding = addingSubtaskFor === row.parentId
 
+                        if (isAdding) {
+                          return (
+                            <tr key={`adding-${row.parentId}`} style={{ height: ROW_HEIGHT + 8 }} className="border-b border-border/50 bg-primary/[0.03]">
+                              <td className="w-8 px-1 text-center">
+                                {submittingSubtask ? (
+                                  <i className="fa-solid fa-spinner fa-spin text-primary text-xs" />
+                                ) : (
+                                  <button type="button" onClick={() => void handleSubmitSubtask(row.parentId, parentTask?.project_id ?? null)} title="Confirmar (Enter)"
+                                    className="flex size-5 mx-auto items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:scale-110">
+                                    <i className="fa-solid fa-check text-[9px]" />
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-2 overflow-hidden" style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
+                                <input
+                                  ref={inlineTitleRef}
+                                  type="text"
+                                  value={inlineSubtask.title}
+                                  onChange={(e) => setInlineSubtask((s) => ({ ...s, title: e.target.value }))}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); void handleSubmitSubtask(row.parentId, parentTask?.project_id ?? null) }
+                                    if (e.key === 'Escape') cancelAddingSubtask()
+                                  }}
+                                  placeholder="Título da subtarefa…"
+                                  className="w-full rounded border border-primary/50 bg-background px-2 py-0.5 text-xs text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
+                                  disabled={submittingSubtask}
+                                />
+                              </td>
+                              <td className="w-16 px-1 text-center" />
+                              <td className="w-28 px-1.5">
+                                <span className="text-[10px] text-muted-foreground italic">subtarefa</span>
+                              </td>
+                              <td className="w-32 px-1.5">
+                                <input type="date" value={inlineSubtask.startDate} onChange={(e) => setInlineSubtask((s) => ({ ...s, startDate: e.target.value }))}
+                                  className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
+                              </td>
+                              <td className="w-32 px-1.5 pr-2">
+                                <div className="flex gap-1 items-center">
+                                  <input type="date" value={inlineSubtask.dueDate} onChange={(e) => setInlineSubtask((s) => ({ ...s, dueDate: e.target.value }))}
+                                    className="w-full rounded border border-border/50 bg-background px-1.5 py-0.5 text-xs outline-none hover:border-border focus:border-primary" disabled={submittingSubtask} />
+                                  <button type="button" onClick={cancelAddingSubtask} title="Cancelar (Esc)" className="shrink-0 text-muted-foreground hover:text-destructive transition">
+                                    <i className="fa-solid fa-xmark text-xs" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        }
+
+                        return (
+                          <tr key={`add-${row.parentId}-${rowIndex}`} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
+                            onClick={() => startAddingSubtask(row.parentId, parentTask?.start_date, parentTask?.due_date)}>
+                            <td colSpan={6}>
+                              <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 group-hover/addrow:text-primary transition"
+                                style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
+                                <span className="flex size-4 items-center justify-center rounded border border-dashed border-muted-foreground/30 group-hover/addrow:border-primary/50 transition">
+                                  <i className="fa-solid fa-plus text-[9px]" />
+                                </span>
+                                <span>Adicionar subtarefa</span>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      }
+
+                      // ---- Normal task row ----
+                      const { task, undated, depth, hasChildren, isSubtask } = row
+                      const isDone = task.status === 'done'
+                      const isOverdue = !isDone && !!task.due_date && today > task.due_date
+                      const isExpanded = expandedIds.has(task.id)
                       const project = task.project_id ? projectById.get(task.project_id) : null
                       const projectColor = project?.color || '#7b68ee'
-                      const rowBg = task.project_id
-                        ? `${projectColor}14` // ~8% de opacidade para fundo suave
-                        : undefined
+                      const rowBg = task.project_id ? `${projectColor}14` : undefined
 
                       return (
-                        <tr
-                          key={task.id}
-                          onDoubleClick={() => onOpenTask(task)}
-                          className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${
-                            isDone ? 'opacity-70' : ''
-                          }`}
-                          style={{
-                            height: ROW_HEIGHT,
-                            backgroundColor: rowBg,
-                          }}
-                        >
-                          {/* Quick Toggle Done Checkbox */}
+                        <tr key={task.id} onDoubleClick={() => onOpenTask(task)} onContextMenu={(e) => handleContextMenu(e, task)}
+                          className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${isDone ? 'opacity-70' : ''}`}
+                          style={{ height: ROW_HEIGHT, backgroundColor: rowBg }}>
+
+                          {/* Done checkbox */}
                           <td className="w-8 px-1 text-center" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleDone(task)}
-                              title={isDone ? 'Reabrir tarefa' : 'Marcar como concluída'}
-                              className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none"
-                            >
-                              {isDone ? (
-                                <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
-                              ) : (
-                                <i className="fa-regular fa-circle text-muted-foreground/60 group-hover:text-foreground text-xs" />
-                              )}
+                            <button type="button" onClick={() => handleToggleDone(task)} title={isDone ? 'Reabrir tarefa' : 'Marcar como concluída'}
+                              className="flex size-5 mx-auto items-center justify-center rounded-full text-muted-foreground transition hover:scale-110 hover:text-emerald-600 focus:outline-none">
+                              {isDone
+                                ? <i className="fa-solid fa-circle-check text-emerald-500 text-sm" />
+                                : <i className="fa-regular fa-circle text-muted-foreground/60 group-hover:text-foreground text-xs" />}
                             </button>
                           </td>
 
-                          {/* Title & Tags (2 clicks to open) */}
+                          {/* Title */}
                           <td className="px-2 overflow-hidden">
-                            <div
-                              onDoubleClick={() => onOpenTask(task)}
-                              title={`${task.title}\n(Duplo clique para abrir detalhes)`}
-                              style={{ paddingLeft: `${depth * 14}px` }}
-                              className="flex flex-col w-full text-left transition select-none min-w-0"
-                            >
+                            <div onDoubleClick={() => onOpenTask(task)} title={`${task.title}\n(Duplo clique para abrir • Clique direito para opções)`}
+                              style={{ paddingLeft: `${depth * 14}px` }} className="flex flex-col w-full text-left transition select-none min-w-0">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {isSubtask ? (
-                                  <span className="text-muted-foreground/70 text-[11px] font-bold shrink-0 select-none">
-                                    ↳
-                                  </span>
+                                  <span className="text-muted-foreground/70 text-[11px] font-bold shrink-0 select-none">↳</span>
                                 ) : hasChildren ? (
-                                  <i className="fa-solid fa-folder-tree text-[10px] text-primary shrink-0" />
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); handleToggleExpand(task.id) }}
+                                    title={isExpanded ? 'Fechar subtarefas' : `Abrir subtarefas (${row.childCount})`}
+                                    className="flex items-center justify-center shrink-0 size-4 rounded text-primary/70 hover:bg-primary/10 hover:text-primary transition">
+                                    <i className={`fa-solid ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-[9px]`} />
+                                  </button>
                                 ) : (
-                                  <span
-                                    className="h-2 w-2 shrink-0 rounded-full shadow-2xs"
-                                    style={{
-                                      backgroundColor: isDone
-                                        ? '#10b981'
-                                        : isOverdue
-                                            ? '#f43f5e'
-                                            : task.assigned_to
-                                              ? userColor(task.assigned_to)
-                                              : STATUS_COLORS[task.status],
-                                    }}
-                                  />
+                                  <span className="h-2 w-2 shrink-0 rounded-full shadow-2xs" style={{
+                                    backgroundColor: isDone ? '#10b981' : isOverdue ? '#f43f5e' : task.assigned_to ? userColor(task.assigned_to) : STATUS_COLORS[task.status],
+                                  }} />
                                 )}
-                                <span
-                                  className={`truncate ${
-                                    isSubtask ? 'font-normal text-xs text-foreground/90' : 'font-semibold text-xs text-foreground'
-                                  } ${
-                                    isDone
-                                      ? 'line-through text-muted-foreground'
-                                      : isOverdue
-                                          ? 'text-rose-600 font-semibold'
-                                          : ''
-                                  }`}
-                                >
+                                <span className={`truncate ${isSubtask ? 'font-normal text-xs text-foreground/90' : 'font-semibold text-xs text-foreground'} ${isDone ? 'line-through text-muted-foreground' : isOverdue ? 'text-rose-600 font-semibold' : ''}`}>
                                   {task.title}
                                 </span>
-                                {isSubtask && (
-                                  <span className="shrink-0 rounded bg-muted/90 px-1 py-0.2 text-[8px] font-medium text-muted-foreground border border-border/50">
-                                    sub
+                                {hasChildren && !isExpanded && (
+                                  <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0 text-[8px] font-semibold text-primary border border-primary/20 leading-tight">
+                                    {row.childCount}
                                   </span>
                                 )}
-                                {undated && (
-                                  <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-semibold leading-tight text-amber-600 dark:text-amber-400">
-                                    sem prazo
-                                  </span>
-                                )}
-                                {isOverdue && (
-                                  <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[8px] font-bold leading-tight text-rose-600">
-                                    atrasada
-                                  </span>
-                                )}
+                                {isSubtask && <span className="shrink-0 rounded bg-muted/90 px-1 py-0.2 text-[8px] font-medium text-muted-foreground border border-border/50">sub</span>}
+                                {undated && <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-semibold leading-tight text-amber-600 dark:text-amber-400">sem prazo</span>}
+                                {isOverdue && <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[8px] font-bold leading-tight text-rose-600">atrasada</span>}
                               </div>
-
-                              {/* Tags under title */}
                               {(task.tags ?? []).length > 0 && (
-                                <div
-                                  className="flex flex-wrap gap-1 mt-0.5"
-                                  style={{ paddingLeft: isSubtask ? '14px' : '10px' }}
-                                >
+                                <div className="flex flex-wrap gap-1 mt-0.5" style={{ paddingLeft: isSubtask ? '14px' : '10px' }}>
                                   {task.tags!.map((tag) => (
-                                    <span
-                                      key={tag}
-                                      className="rounded bg-[#7b68ee]/10 px-1 text-[8px] font-semibold text-[#7b68ee]"
-                                    >
-                                      #{tag}
-                                    </span>
+                                    <span key={tag} className="rounded bg-[#7b68ee]/10 px-1 text-[8px] font-semibold text-[#7b68ee]">#{tag}</span>
                                   ))}
                                 </div>
                               )}
                             </div>
                           </td>
 
-                          {/* Assignee Avatar */}
+                          {/* Assignee */}
                           <td className="w-16 px-1 text-center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center -space-x-1">
                               {(() => {
-                                const assigneeIds =
-                                  task.assignees && task.assignees.length > 0
-                                    ? task.assignees
-                                    : task.assigned_to
-                                      ? [task.assigned_to]
-                                      : []
-
+                                const assigneeIds = task.assignees && task.assignees.length > 0 ? task.assignees : task.assigned_to ? [task.assigned_to] : []
                                 if (assigneeIds.length === 0) {
                                   return (
-                                    <button
-                                      type="button"
-                                      onClick={() => onOpenTask(task)}
-                                      className="flex size-6 items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground/50 hover:text-primary hover:border-primary transition cursor-pointer text-[9px]"
-                                      title="Atribuir responsável"
-                                    >
+                                    <button type="button" onClick={() => onOpenTask(task)} title="Atribuir responsável"
+                                      className="flex size-6 items-center justify-center rounded-full border border-dashed border-border/80 text-muted-foreground/50 hover:text-primary hover:border-primary transition cursor-pointer text-[9px]">
                                       <i className="fa-solid fa-plus text-[8px]" />
                                     </button>
                                   )
                                 }
-
                                 return assigneeIds.map((userId) => {
                                   const member = memberOf(userId)
                                   const displayName = member?.full_name || member?.username || 'Responsável'
-                                  const initials = (member?.username || displayName || userId)
-                                    .slice(0, 2)
-                                    .toUpperCase()
-
+                                  const initials = (member?.username || displayName || userId).slice(0, 2).toUpperCase()
                                   return (
-                                    <button
-                                      key={userId}
-                                      type="button"
-                                      onClick={() => onOpenTask(task)}
+                                    <button key={userId} type="button" onClick={() => onOpenTask(task)} title={displayName}
                                       className="flex size-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white shadow-2xs transition hover:scale-115 hover:z-10 cursor-pointer ring-1.5 ring-background overflow-hidden"
-                                      style={{ backgroundColor: userColor(userId) }}
-                                      title={displayName}
-                                    >
+                                      style={{ backgroundColor: userColor(userId) }}>
                                       {member?.avatar_url ? (
-                                        <img
-                                          src={member.avatar_url}
-                                          alt={displayName}
-                                          className="size-full object-cover"
-                                          onError={(e) => {
-                                            // fallback to initials on load error
-                                            (e.currentTarget as HTMLElement).style.display = 'none'
-                                          }}
-                                        />
-                                      ) : (
-                                        initials
-                                      )}
+                                        <img src={member.avatar_url} alt={displayName} className="size-full object-cover" onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none' }} />
+                                      ) : initials}
                                     </button>
                                   )
                                 })
@@ -1148,20 +1004,10 @@ export default function GanttView({
 
                           {/* Status */}
                           <td className="px-1.5">
-                            <select
-                              value={task.status}
-                              aria-label={`Status de ${task.title}`}
-                              onChange={(e) =>
-                                handleStatusChange(
-                                  task,
-                                  e.target.value as TaskStatus,
-                                )
-                              }
+                            <select value={task.status} aria-label={`Status de ${task.title}`}
+                              onChange={(e) => handleStatusChange(task, e.target.value as TaskStatus)}
                               className="w-full cursor-pointer rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary focus:outline-none"
-                              style={{
-                                color: STATUS_COLORS[task.status],
-                              }}
-                            >
+                              style={{ color: STATUS_COLORS[task.status] }}>
                               <option value="backlog">Backlog</option>
                               <option value="todo">A Fazer</option>
                               <option value="in_progress">Em Andamento</option>
@@ -1170,36 +1016,18 @@ export default function GanttView({
                             </select>
                           </td>
 
-                          {/* Start Date */}
+                          {/* Start date */}
                           <td className="px-1.5">
-                            <input
-                              type="date"
-                              value={task.start_date ?? ''}
-                              aria-label={`Início de ${task.title}`}
-                              onChange={(e) =>
-                                handleDateChange(
-                                  task,
-                                  'start_date',
-                                  e.target.value,
-                                )
-                              }
-                              className="w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary"
-                            />
+                            <input type="date" value={task.start_date ?? ''} aria-label={`Início de ${task.title}`}
+                              onChange={(e) => handleDateChange(task, 'start_date', e.target.value)}
+                              className="w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary" />
                           </td>
 
-                          {/* Due Date */}
+                          {/* Due date */}
                           <td className="px-1.5 pr-2">
-                            <input
-                              type="date"
-                              value={task.due_date ?? ''}
-                              aria-label={`Conclusão de ${task.title}`}
-                              onChange={(e) =>
-                                handleDateChange(task, 'due_date', e.target.value)
-                              }
-                              className={`w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${
-                                isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''
-                              }`}
-                            />
+                            <input type="date" value={task.due_date ?? ''} aria-label={`Conclusão de ${task.title}`}
+                              onChange={(e) => handleDateChange(task, 'due_date', e.target.value)}
+                              className={`w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''}`} />
                           </td>
                         </tr>
                       )
@@ -1210,56 +1038,89 @@ export default function GanttView({
             </div>
           )}
 
-          {/* Gantt Timeline SVG Container */}
-          <div
-            className="relative min-w-0 flex-1 overflow-hidden pb-8"
-            ref={wrapperRef}
-          />
+          {/* Gantt Timeline */}
+          <div className="relative min-w-0 flex-1 overflow-hidden pb-8" ref={wrapperRef} />
         </div>
       </div>
 
-      {/* Shortcuts & Quick Tips Footer */}
+      {/* Footer shortcuts */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card/40 px-4 py-1.5 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Botão do Meio (Scroll)
-            </kbd>
-            <span>Arrastar para navegar (pan horizontal & vertical)</span>
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Botão do Meio</kbd>
+            <span>Pan</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Ctrl + Scroll
-            </kbd>
-            <span>Zoom na linha do tempo</span>
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Ctrl + Scroll</kbd>
+            <span>Zoom</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Arrastar barra
-            </kbd>
-            <span>Mover período</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Bordas da barra
-            </kbd>
-            <span>Ajustar início / fim dia a dia</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">
-              Duplo clique
-            </kbd>
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Duplo clique</kbd>
             <span>Abrir detalhes</span>
           </span>
-        </div>
-
-        <div>
-          <span className="text-[10px] opacity-75">
-            Modo:{' '}
-            <strong className="text-foreground">{currentZoom.label}</strong>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs">Clique direito</kbd>
+            <span>Duplicar / Editar / Excluir</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <kbd className="rounded border border-border bg-muted/80 px-1 py-0.5 text-[10px] font-mono shadow-2xs"><i className="fa-solid fa-chevron-right text-[9px]" /></kbd>
+            <span>Expandir subtarefas</span>
           </span>
         </div>
+        <div>
+          <span className="text-[10px] opacity-75">Modo: <strong className="text-foreground">{currentZoom.label}</strong></span>
+        </div>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div data-context-menu
+          className="fixed z-[200] min-w-[180px] overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-xl animate-in fade-in-0 zoom-in-95 duration-100"
+          style={{ top: contextMenu.y, left: contextMenu.x }}>
+          <div className="border-b border-border px-3 py-1.5">
+            <p className="truncate text-[11px] font-semibold text-foreground max-w-[200px]">{contextMenu.task.title}</p>
+            <p className="text-[10px] text-muted-foreground">{STATUS_LABELS[contextMenu.task.status]}</p>
+          </div>
+
+          <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted" onClick={() => { onOpenTask(contextMenu.task); setContextMenu(null) }}>
+            <i className="fa-solid fa-pen-to-square w-3.5 text-center text-muted-foreground" /><span>Editar</span>
+          </button>
+
+          {createTask && (
+            <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted" onClick={() => void handleDuplicate(contextMenu.task)}>
+              <i className="fa-solid fa-copy w-3.5 text-center text-muted-foreground" /><span>Duplicar</span>
+            </button>
+          )}
+
+          {createTask && (
+            <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted"
+              onClick={() => {
+                const task = contextMenu.task
+                setContextMenu(null)
+                setExpandedIds((prev) => new Set([...prev, task.id]))
+                startAddingSubtask(task.id, task.start_date, task.due_date)
+              }}>
+              <i className="fa-solid fa-plus w-3.5 text-center text-muted-foreground" /><span>Adicionar subtarefa</span>
+            </button>
+          )}
+
+          {tasks.some((t) => t.parent_id === contextMenu.task.id) && (
+            <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted"
+              onClick={() => { handleToggleExpand(contextMenu.task.id); setContextMenu(null) }}>
+              <i className={`fa-solid ${expandedIds.has(contextMenu.task.id) ? 'fa-chevron-up' : 'fa-chevron-down'} w-3.5 text-center text-muted-foreground`} />
+              <span>{expandedIds.has(contextMenu.task.id) ? 'Fechar subtarefas' : 'Abrir subtarefas'}</span>
+            </button>
+          )}
+
+          <div className="my-1 border-t border-border" />
+
+          {deleteTask && (
+            <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-destructive transition hover:bg-destructive/8" onClick={() => void handleDelete(contextMenu.task)}>
+              <i className="fa-solid fa-trash w-3.5 text-center" /><span>Excluir</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
