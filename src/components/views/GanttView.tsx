@@ -4,10 +4,11 @@ import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
+import StatusSelect from '@/components/tasks/StatusSelect'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
-import { STATUS_COLORS, STATUS_LABELS, statusContrastText } from '@/utils/status'
+import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { categoryColors, parseCategoriesText } from '@/utils/categories'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
@@ -1017,21 +1018,12 @@ export default function GanttView({
 
                           {/* Status */}
                           <td className="px-1.5">
-                            <select value={task.status} aria-label={`Status de ${task.title}`}
-                              onChange={(e) => handleStatusChange(task, e.target.value as TaskStatus)}
-                              className="w-full cursor-pointer rounded-md border px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition focus:outline-none"
-                              style={{
-                                backgroundColor: STATUS_COLORS[task.status],
-                                color: statusContrastText(task.status),
-                                borderColor: STATUS_COLORS[task.status],
-                              }}>
-                              <option value="uncertain" style={{ backgroundColor: STATUS_COLORS.uncertain, color: statusContrastText('uncertain') }}>Incerto</option>
-                              <option value="backlog" style={{ backgroundColor: STATUS_COLORS.backlog, color: statusContrastText('backlog') }}>Backlog</option>
-                              <option value="todo" style={{ backgroundColor: STATUS_COLORS.todo, color: statusContrastText('todo') }}>A Fazer</option>
-                              <option value="in_progress" style={{ backgroundColor: STATUS_COLORS.in_progress, color: statusContrastText('in_progress') }}>Em Andamento</option>
-                              <option value="review" style={{ backgroundColor: STATUS_COLORS.review, color: statusContrastText('review') }}>Revisão</option>
-                              <option value="done" style={{ backgroundColor: STATUS_COLORS.done, color: statusContrastText('done') }}>Concluído</option>
-                            </select>
+                            <StatusSelect
+                              value={task.status}
+                              onChange={(s) => handleStatusChange(task, s)}
+                              ariaLabel={`Status de ${task.title}`}
+                              size="sm"
+                            />
                           </td>
 
                           {/* Categories */}

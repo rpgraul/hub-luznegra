@@ -37,17 +37,16 @@ export function statusColor(status: TaskStatus): string {
 }
 
 /**
- * Cor de texto (preto/branco) com contraste sobre o fundo da cor do status.
- * Usa luminância relativa sRGB — fundo claro → texto escuro, fundo escuro → branco.
+ * Fundo translúcido (~12%) na cor do status — pills sutis.
+ * (As cores são hex de 6 dígitos, então dá para anexar o alfa.)
  */
-export function statusContrastText(status: TaskStatus): string {
-  const hex = STATUS_COLORS[status].replace('#', '')
-  const channel = (i: number) => {
-    const v = parseInt(hex.slice(i, i + 2), 16) / 255
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-  }
-  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
-  return luminance > 0.35 ? '#111827' : '#FFFFFF'
+export function statusSoftBg(status: TaskStatus): string {
+  return `${STATUS_COLORS[status]}1F`
+}
+
+/** Borda suave (~40%) na cor do status — pills sutis. */
+export function statusBorder(status: TaskStatus): string {
+  return `${STATUS_COLORS[status]}66`
 }
 
 export function statusLabel(status: TaskStatus): string {

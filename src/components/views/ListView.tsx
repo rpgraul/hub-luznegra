@@ -9,15 +9,13 @@ import {
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
+import StatusSelect from '@/components/tasks/StatusSelect'
 import { userColor } from '@/utils/colors'
 import { categoryColors } from '@/utils/categories'
 import { formatDate, todayIso } from '@/utils/format'
 import {
-  STATUS_COLORS,
   STATUS_LABELS,
   TASK_PRIORITIES,
-  TASK_STATUSES,
-  statusContrastText,
 } from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
 import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
@@ -495,30 +493,12 @@ function TaskRow({
 
       {/* Status (Clickable Dropdown) */}
       <td onClick={(e) => e.stopPropagation()} className="px-3 py-2">
-        <select
+        <StatusSelect
           value={task.status}
-          onChange={(e) => onChangeStatus(task, e.target.value as TaskStatus)}
-          aria-label={`Status de ${task.title}`}
-          className="cursor-pointer rounded-md border px-2 py-0.5 text-xs font-semibold shadow-2xs transition focus:outline-none"
-          style={{
-            backgroundColor: STATUS_COLORS[task.status],
-            color: statusContrastText(task.status),
-            borderColor: STATUS_COLORS[task.status],
-          }}
-        >
-          {TASK_STATUSES.map((s) => (
-            <option
-              key={s}
-              value={s}
-              style={{
-                backgroundColor: STATUS_COLORS[s],
-                color: statusContrastText(s),
-              }}
-            >
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
+          onChange={(s) => onChangeStatus(task, s)}
+          ariaLabel={`Status de ${task.title}`}
+          size="sm"
+        />
       </td>
 
       {/* Categories (always visible, right after Status) */}

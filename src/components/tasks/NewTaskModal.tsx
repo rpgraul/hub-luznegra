@@ -2,16 +2,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Modal } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
+import StatusSelect from '@/components/tasks/StatusSelect'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
 import {
   PRIORITY_LABELS,
-  STATUS_COLORS,
-  STATUS_LABELS,
   TASK_PRIORITIES,
-  TASK_STATUSES,
-  statusContrastText,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
 import type {
@@ -249,29 +246,12 @@ export default function NewTaskModal({
                   {/* Status */}
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-foreground/70">Status</label>
-                    <select
+                    <StatusSelect
                       value={status}
-                      onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                      className="w-full cursor-pointer rounded-lg border px-3 py-2 text-xs font-semibold outline-none transition focus:ring-1 focus:ring-primary/20"
-                      style={{
-                        backgroundColor: STATUS_COLORS[status],
-                        color: statusContrastText(status),
-                        borderColor: STATUS_COLORS[status],
-                      }}
-                    >
-                      {TASK_STATUSES.map((s) => (
-                        <option
-                          key={s}
-                          value={s}
-                          style={{
-                            backgroundColor: STATUS_COLORS[s],
-                            color: statusContrastText(s),
-                          }}
-                        >
-                          {STATUS_LABELS[s]}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={setStatus}
+                      ariaLabel="Status da nova tarefa"
+                      size="md"
+                    />
                   </div>
 
                   {/* Prioridade */}
