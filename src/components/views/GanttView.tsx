@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Gantt from 'frappe-gantt'
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from '@hello-pangea/dnd'
 import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
@@ -819,6 +825,93 @@ export default function GanttView({
       .catch(() => toast.danger('Não foi possível salvar as categorias.'))
   }
 
+  function persistOrder(ordered: Task[]) {
+    const updates = ordered
+      .map((task, index) => ({ task, index }))
+      .filter(({ task, index }) => task.order_index !== index)
+    if (updates.length === 0) return
+    void Promise.all(
+      updates.map(({ task, index }) =>
+        updateTask({ id: task.id, patch: { order_index: index } }),
+      ),
+    )
+      .then(() => toast.success('Ordem atualizada!'))
+      .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
+  }
+
+  function isDescendantOf(task: Task, ancestorId: string, byId: Map<string, Task>): boolean {
+    let cur = task.parent_id
+    while (cur) {
+      if (cur === ancestorId) return true
+      cur = byId.get(cur)?.parent_id ?? null
+    }
+    return false
+  }
+
+  function handleDragEnd(result: DropResult) {
+    const { source, destination, draggableId } = result
+    if (!destination) return
+    if (source.index === destination.index) return
+
+    const draggedRow = rows[source.index]
+    if (!draggedRow || draggedRow.kind !== 'task') return
+    const dragged = draggedRow.task
+    if (dragged.id !== draggableId) return
+
+    // Rendered rows sem a linha arrastada (destination.index refere-se a essa lista)
+    const reduced = rows.filter((_, i) => i !== source.index)
+    const byId = new Map(filteredTasks.map((t) => [t.id, t]))
+
+    if (draggedRow.depth === 0) {
+      // Tarefa de topo: move livremente; conta topos antes do slot de destino
+      const topLevel = rows
+        .filter((r): r is TaskRow => r.kind === 'task' && r.depth === 0)
+        .map((r) => r.task)
+        .filter((t) => t.id !== dragged.id)
+      let destPos = 0
+      for (let i = 0; i < destination.index && i < reduced.length; i++) {
+        const r = reduced[i]
+        if (r.kind === 'task' && r.depth === 0) destPos++
+      }
+      topLevel.splice(destPos, 0, dragged)
+      persistOrder(topLevel)
+      return
+    }
+
+    // Subtarefa: só pode reordenar dentro do bloco do pai
+    const parentId = dragged.parent_id
+    if (!parentId) return
+    const parentIdx = reduced.findIndex(
+      (r) => r.kind === 'task' && r.task.id === parentId,
+    )
+    if (parentIdx === -1) return
+    let blockEnd = parentIdx
+    for (let i = parentIdx + 1; i < reduced.length; i++) {
+      const r = reduced[i]
+      const inside =
+        (r.kind === 'task' && isDescendantOf(r.task, parentId, byId)) ||
+        (r.kind === 'add-subtask' &&
+          isDescendantOf({ parent_id: r.parentId } as Task, parentId, byId))
+      if (!inside) break
+      blockEnd = i
+    }
+    if (destination.index < parentIdx || destination.index > blockEnd + 1) {
+      toast.danger('Subtarefas só podem ser reordenadas dentro da tarefa pai.')
+      return
+    }
+    const siblings = rows
+      .filter((r): r is TaskRow => r.kind === 'task' && r.task.parent_id === parentId)
+      .map((r) => r.task)
+      .filter((t) => t.id !== dragged.id)
+    let destPos = 0
+    for (let i = 0; i < destination.index && i < reduced.length; i++) {
+      const r = reduced[i]
+      if (r.kind === 'task' && r.task.parent_id === parentId) destPos++
+    }
+    siblings.splice(destPos, 0, dragged)
+    persistOrder(siblings)
+  }
+
   function handleStatusChange(task: Task, nextStatus: TaskStatus) {    if (task.status === nextStatus) return
     if (moveTaskStatus) {
       void moveTaskStatus({ id: task.id, status: nextStatus })
@@ -886,10 +979,12 @@ export default function GanttView({
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
           {showTable && (
-            <div ref={tableRef} className="w-[852px] max-w-[60vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
+            <DragDropContext onDragEnd={handleDragEnd}>
+            <div ref={tableRef} className="w-[880px] max-w-[62vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
               <table className="w-full table-fixed border-collapse text-xs">
                 <thead>
                   <tr className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800" style={{ height: HEADER_HEIGHT }}>
+                    <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100" title="Arrastar para reordenar"><i className="fa-solid fa-grip-vertical text-[10px] opacity-50" /><span className="sr-only">Reordenar</span></th>
                     <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100"><i className="fa-solid fa-check text-[11px]" title="Concluir" /></th>
                     <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">Tarefa & Tags</th>
                     <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">Resp.</th>
@@ -899,19 +994,24 @@ export default function GanttView({
                     <th className="w-28 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">Fim</th>
                   </tr>
                 </thead>
-                <tbody>
+                <Droppable droppableId="gantt-tabela">
+                  {(dropProvided) => (
+                <tbody ref={dropProvided.innerRef} {...dropProvided.droppableProps}>
                   {rows.length === 0 ? (
-                    <tr><td colSpan={7} className="p-4 text-center text-muted-foreground">{categoryFilter.length > 0 ? 'Nenhuma tarefa com essa categoria.' : 'Nenhuma tarefa encontrada.'}</td></tr>
+                    <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">{categoryFilter.length > 0 ? 'Nenhuma tarefa com essa categoria.' : 'Nenhuma tarefa encontrada.'}</td></tr>
                   ) : (
                     rows.map((row, rowIndex) => {
                       // ---- Add-subtask row (abre o modal de subtarefa) ----
                       if (row.kind === 'add-subtask') {
                         return (
-                          <tr key={`add-${row.parentId}-${rowIndex}`} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
+                          <Draggable key={`add-${row.parentId}`} draggableId={`add-${row.parentId}`} index={rowIndex} isDragDisabled>
+                            {(dragProvided) => (
+                          <tr ref={dragProvided.innerRef} {...dragProvided.draggableProps} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
                             onClick={() => {
                               const parentTask = tasks.find((t) => t.id === row.parentId)
                               if (parentTask) openSubtaskModal(parentTask)
                             }}>
+                            <td className="w-8 px-1" />
                             <td colSpan={7}>
                               <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 group-hover/addrow:text-primary transition"
                                 style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
@@ -922,6 +1022,8 @@ export default function GanttView({
                               </div>
                             </td>
                           </tr>
+                            )}
+                          </Draggable>
                         )
                       }
 
@@ -935,9 +1037,22 @@ export default function GanttView({
                       const rowBg = task.project_id ? `${projectColor}14` : undefined
 
                       return (
-                        <tr key={task.id} onDoubleClick={() => onOpenTask(task)} onContextMenu={(e) => handleContextMenu(e, task)}
-                          className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${isDone ? 'opacity-70' : ''}`}
+                        <Draggable key={task.id} draggableId={task.id} index={rowIndex}>
+                          {(dragProvided, snapshot) => (
+                        <tr ref={dragProvided.innerRef} {...dragProvided.draggableProps} onDoubleClick={() => onOpenTask(task)} onContextMenu={(e) => handleContextMenu(e, task)}
+                          className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${isDone ? 'opacity-70' : ''} ${snapshot.isDragging ? 'bg-primary/10 shadow-lg' : ''}`}
                           style={{ height: ROW_HEIGHT, backgroundColor: rowBg }}>
+
+                          {/* Drag handle */}
+                          <td className="w-8 px-1 text-center" onClick={(e) => e.stopPropagation()}>
+                            <span
+                              {...dragProvided.dragHandleProps}
+                              title="Arrastar para reordenar"
+                              className="inline-flex cursor-grab items-center justify-center rounded p-1 text-muted-foreground/50 transition hover:bg-muted hover:text-foreground active:cursor-grabbing"
+                            >
+                              <i className="fa-solid fa-grip-vertical text-[11px]" />
+                            </span>
+                          </td>
 
                           {/* Done checkbox */}
                           <td className="w-8 px-1 text-center" onClick={(e) => e.stopPropagation()}>
@@ -1048,12 +1163,18 @@ export default function GanttView({
                               className={`w-full rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs text-foreground shadow-2xs outline-none transition hover:border-border focus:border-primary ${isOverdue ? 'border-rose-500/60 font-semibold text-rose-600' : ''}`} />
                           </td>
                         </tr>
+                          )}
+                        </Draggable>
                       )
                     })
                   )}
+                  {dropProvided.placeholder}
                 </tbody>
+                  )}
+                </Droppable>
               </table>
             </div>
+            </DragDropContext>
           )}
 
           {/* Gantt Timeline */}
