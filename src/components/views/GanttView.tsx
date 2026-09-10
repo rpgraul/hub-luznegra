@@ -963,11 +963,7 @@ export default function GanttView({
                                     className="flex items-center justify-center shrink-0 size-4 rounded text-primary/70 hover:bg-primary/10 hover:text-primary transition">
                                     <i className={`fa-solid ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-[9px]`} />
                                   </button>
-                                ) : (
-                                  <span className="h-2 w-2 shrink-0 rounded-full shadow-2xs" style={{
-                                    backgroundColor: isDone ? '#10b981' : isOverdue ? '#f43f5e' : task.assigned_to ? userColor(task.assigned_to) : STATUS_COLORS[task.status],
-                                  }} />
-                                )}
+                                ) : null}
                                 <span className={`truncate ${isSubtask ? 'font-normal text-xs text-foreground/90' : 'font-semibold text-xs text-foreground'} ${isDone ? 'line-through text-muted-foreground' : isOverdue ? 'text-rose-600 font-semibold' : ''}`}>
                                   {task.title}
                                 </span>
