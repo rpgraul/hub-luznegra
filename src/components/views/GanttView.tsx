@@ -6,6 +6,7 @@ import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
+import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { categoryColors, parseCategoriesText } from '@/utils/categories'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
@@ -46,24 +47,6 @@ const ZOOM_CONFIGS: ZoomConfig[] = [
   { name: 'Month', label: 'Mês', shortLabel: 'Mês', view_mode: 'Month', column_width: 86, snap_at: '1d' },
   { name: 'Year', label: 'Ano', shortLabel: 'Ano', view_mode: 'Year', column_width: 110, snap_at: '1d' },
 ]
-
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  uncertain: 'Incerto',
-  backlog: 'Backlog',
-  todo: 'A Fazer',
-  in_progress: 'Em Andamento',
-  review: 'Revisão',
-  done: 'Concluído',
-}
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  uncertain: '#9CA3AF',
-  backlog: '#64748b',
-  todo: '#0284c7',
-  in_progress: '#7c3aed',
-  review: '#a855f7',
-  done: '#10b981',
-}
 
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
   low: 'Baixa',
@@ -323,14 +306,8 @@ export default function GanttView({
           progress,
           dependencies: task.parent_id ? [task.parent_id] : undefined,
           custom_class: customClass,
-          color:
-            task.status === 'done'
-              ? '#10b981'
-              : isOverdue
-                ? '#f43f5e'
-                : task.assigned_to
-                  ? userColor(task.assigned_to)
-                  : STATUS_COLORS[task.status] || '#7b68ee',
+          // A cor da barra representa o status da tarefa (fonte única: utils/status)
+          color: STATUS_COLORS[task.status],
         }
       }),
     [taskRows, today],

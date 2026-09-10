@@ -349,11 +349,9 @@ html[data-theme='dark'],
   text-shadow: none !important;
 }
 
-/* Done tasks styling */
+/* Done tasks styling (fill vem do status; aqui só acabamento) */
 .gantt .bar-wrapper.gantt-done .bar,
 .gantt .bar-wrapper.gantt-subtask-done .bar {
-  fill: #10b981 !important;
-  stroke: #059669 !important;
   opacity: 0.95;
 }
 
@@ -362,11 +360,10 @@ html[data-theme='dark'],
   fill: rgba(255, 255, 255, 0.3) !important;
 }
 
-/* Overdue tasks styling */
+/* Overdue: a barra mantém a cor do status; o atraso é sinalizado
+   na tabela (título vermelho + badge "atrasada") */
 .gantt .bar-wrapper.gantt-overdue .bar,
 .gantt .bar-wrapper.gantt-subtask-overdue .bar {
-  fill: #f43f5e !important;
-  stroke: #e11d48 !important;
   stroke-width: 1.5px !important;
 }
 
