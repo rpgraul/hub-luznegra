@@ -7,9 +7,11 @@ import { userColor } from '@/utils/colors'
 import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
 import {
   PRIORITY_LABELS,
+  STATUS_COLORS,
   STATUS_LABELS,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  statusContrastText,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
 import type {
@@ -46,15 +48,6 @@ interface NewTaskModalProps {
   initialStartDate?: string | null
   currentUserId: string
   onCreate: (input: NewTaskInput) => Promise<void>
-}
-
-const STATUS_COLORS: Record<TaskStatus, string> = {
-  uncertain: '#9CA3AF',
-  backlog: '#64748b',
-  todo: '#0284c7',
-  in_progress: '#7c3aed',
-  review: '#a855f7',
-  done: '#10b981',
 }
 
 const PRIORITY_COLORS: Record<TaskPriority, string> = {
@@ -259,11 +252,22 @@ export default function NewTaskModal({
                     <select
                       value={status}
                       onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                      className="w-full cursor-pointer rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
-                      style={{ color: STATUS_COLORS[status] }}
+                      className="w-full cursor-pointer rounded-lg border px-3 py-2 text-xs font-semibold outline-none transition focus:ring-1 focus:ring-primary/20"
+                      style={{
+                        backgroundColor: STATUS_COLORS[status],
+                        color: statusContrastText(status),
+                        borderColor: STATUS_COLORS[status],
+                      }}
                     >
                       {TASK_STATUSES.map((s) => (
-                        <option key={s} value={s} style={{ color: STATUS_COLORS[s] }}>
+                        <option
+                          key={s}
+                          value={s}
+                          style={{
+                            backgroundColor: STATUS_COLORS[s],
+                            color: statusContrastText(s),
+                          }}
+                        >
                           {STATUS_LABELS[s]}
                         </option>
                       ))}

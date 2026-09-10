@@ -36,6 +36,20 @@ export function statusColor(status: TaskStatus): string {
   return STATUS_COLORS[status]
 }
 
+/**
+ * Cor de texto (preto/branco) com contraste sobre o fundo da cor do status.
+ * Usa luminância relativa sRGB — fundo claro → texto escuro, fundo escuro → branco.
+ */
+export function statusContrastText(status: TaskStatus): string {
+  const hex = STATUS_COLORS[status].replace('#', '')
+  const channel = (i: number) => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  return luminance > 0.35 ? '#111827' : '#FFFFFF'
+}
+
 export function statusLabel(status: TaskStatus): string {
   return STATUS_LABELS[status]
 }

@@ -17,9 +17,11 @@ import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
 import { formatDateTime, todayIso } from '@/utils/format'
 import {
   PRIORITY_LABELS,
+  STATUS_COLORS,
   STATUS_LABELS,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  statusContrastText,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
 import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
@@ -655,13 +657,28 @@ export default function TaskDrawer({
                     aria-label="Alterar status"
                     className="w-full"
                   >
-                    <Select.Trigger className="rounded-md border border-border bg-background shadow-2xs">
+                    <Select.Trigger
+                      className="rounded-md border font-semibold shadow-2xs"
+                      style={{
+                        backgroundColor: STATUS_COLORS[currentTask.status],
+                        borderColor: STATUS_COLORS[currentTask.status],
+                        color: statusContrastText(currentTask.status),
+                      }}
+                    >
                       <Select.Value />
                     </Select.Trigger>
                     <Select.Popover>
                       <ListBox.Root className="rounded-md border border-border bg-card">
                         {TASK_STATUSES.map((status) => (
-                          <ListBox.Item key={status} id={status} textValue={STATUS_LABELS[status]}>
+                          <ListBox.Item
+                            key={status}
+                            id={status}
+                            textValue={STATUS_LABELS[status]}
+                            style={{
+                              backgroundColor: STATUS_COLORS[status],
+                              color: statusContrastText(status),
+                            }}
+                          >
                             {STATUS_LABELS[status]}
                           </ListBox.Item>
                         ))}

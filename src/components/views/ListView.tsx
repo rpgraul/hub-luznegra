@@ -16,6 +16,7 @@ import {
   STATUS_LABELS,
   TASK_PRIORITIES,
   TASK_STATUSES,
+  statusContrastText,
 } from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
 import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
@@ -497,11 +498,22 @@ function TaskRow({
           value={task.status}
           onChange={(e) => onChangeStatus(task, e.target.value as TaskStatus)}
           aria-label={`Status de ${task.title}`}
-          className="cursor-pointer rounded-md border border-border/60 bg-background px-2 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary"
-          style={{ color: STATUS_COLORS[task.status] }}
+          className="cursor-pointer rounded-md border px-2 py-0.5 text-xs font-semibold shadow-2xs transition focus:outline-none"
+          style={{
+            backgroundColor: STATUS_COLORS[task.status],
+            color: statusContrastText(task.status),
+            borderColor: STATUS_COLORS[task.status],
+          }}
         >
           {TASK_STATUSES.map((s) => (
-            <option key={s} value={s}>
+            <option
+              key={s}
+              value={s}
+              style={{
+                backgroundColor: STATUS_COLORS[s],
+                color: statusContrastText(s),
+              }}
+            >
               {STATUS_LABELS[s]}
             </option>
           ))}
