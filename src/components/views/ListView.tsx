@@ -35,11 +35,12 @@ type SortDirection = 'asc' | 'desc'
 type EditableField = 'title' | 'description' | 'due_date' | 'priority'
 
 const STATUS_ORDER: Record<Task['status'], number> = {
-  backlog: 0,
-  todo: 1,
-  in_progress: 2,
-  review: 3,
-  done: 4,
+  uncertain: 0,
+  backlog: 1,
+  todo: 2,
+  in_progress: 3,
+  review: 4,
+  done: 5,
 }
 
 const PRIORITY_ORDER: Record<Task['priority'], number> = {

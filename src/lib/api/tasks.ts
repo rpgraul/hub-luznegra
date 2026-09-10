@@ -176,7 +176,7 @@ export async function moveTaskStatus(
             .from('tasks')
             .update({ status: 'done' })
             .eq('id', currentTask.parent_id)
-        } else if (parent && (parent.status === 'todo' || parent.status === 'backlog')) {
+        } else if (parent && (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')) {
           await supabase
             .from('tasks')
             .update({ status: 'in_progress' })

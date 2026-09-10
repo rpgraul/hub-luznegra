@@ -52,6 +52,7 @@ const MESSAGES = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  uncertain: 'Incerto',
   backlog: 'Backlog',
   todo: 'A Fazer',
   in_progress: 'Em Andamento',
@@ -60,6 +61,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
+  uncertain: '#9CA3AF',
   backlog: '#94a3b8',
   todo: '#38bdf8',
   in_progress: '#818cf8',

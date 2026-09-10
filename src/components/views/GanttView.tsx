@@ -47,6 +47,7 @@ const ZOOM_CONFIGS: ZoomConfig[] = [
 ]
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
+  uncertain: 'Incerto',
   backlog: 'Backlog',
   todo: 'A Fazer',
   in_progress: 'Em Andamento',
@@ -55,6 +56,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
+  uncertain: '#9CA3AF',
   backlog: '#64748b',
   todo: '#0284c7',
   in_progress: '#7c3aed',
@@ -930,6 +932,7 @@ export default function GanttView({
                               onChange={(e) => handleStatusChange(task, e.target.value as TaskStatus)}
                               className="w-full cursor-pointer rounded-md border border-border/50 bg-background px-1.5 py-0.5 text-xs font-semibold shadow-2xs transition hover:border-border focus:border-primary focus:outline-none"
                               style={{ color: STATUS_COLORS[task.status] }}>
+                              <option value="uncertain">Incerto</option>
                               <option value="backlog">Backlog</option>
                               <option value="todo">A Fazer</option>
                               <option value="in_progress">Em Andamento</option>

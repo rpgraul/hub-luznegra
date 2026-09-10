@@ -162,6 +162,7 @@ Deno.serve(async (req) => {
     }
 
     const statusPtBr: Record<string, string> = {
+      uncertain: 'Incerto',
       backlog: 'Backlog',
       todo: 'A Fazer',
       in_progress: 'Em Andamento',
@@ -282,7 +283,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "task_id"?: string (ID real da tarefa se identificado),
       "task_title"?: string (título da tarefa para localização),
       "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
-      "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+      "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
       "priority"?: "urgent" | "high" | "normal" | "low",
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD"
@@ -295,7 +296,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
           "task_id"?: string,
           "task_title"?: string,
           "assigned_to"?: string,
-          "status"?: "backlog" | "todo" | "in_progress" | "review" | "done",
+          "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
           "priority"?: "urgent" | "high" | "normal" | "low",
           "start_date"?: "YYYY-MM-DD",
           "due_date"?: "YYYY-MM-DD"

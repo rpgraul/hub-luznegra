@@ -1,6 +1,7 @@
 import type { TaskPriority, TaskStatus } from '@/types/database'
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
+  uncertain: 'Incerto',
   backlog: 'Backlog',
   todo: 'A Fazer',
   in_progress: 'Em Andamento',
@@ -9,6 +10,7 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
 }
 
 export const STATUS_COLORS: Record<TaskStatus, string> = {
+  uncertain: '#9CA3AF',
   backlog: '#6B7280',
   todo: '#3B82F6',
   in_progress: '#D97706',

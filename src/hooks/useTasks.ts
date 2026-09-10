@@ -14,6 +14,7 @@ import {
 import type { Task, TaskStatus } from '@/types/database'
 
 export const TASK_STATUSES = [
+  'uncertain',
   'backlog',
   'todo',
   'in_progress',
@@ -141,7 +142,7 @@ export function useTasks(showAll: boolean) {
                   ? { ...t, status: 'done', updated_at: new Date().toISOString() }
                   : t,
               )
-            } else if (status === 'done' && parent && (parent.status === 'todo' || parent.status === 'backlog')) {
+            } else if (status === 'done' && parent && (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')) {
               nextTasks = nextTasks.map((t) =>
                 t.id === parentId
                   ? { ...t, status: 'in_progress', updated_at: new Date().toISOString() }

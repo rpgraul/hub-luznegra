@@ -47,6 +47,7 @@ interface NewTaskModalProps {
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
+  uncertain: '#9CA3AF',
   backlog: '#64748b',
   todo: '#0284c7',
   in_progress: '#7c3aed',

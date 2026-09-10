@@ -1,0 +1,37 @@
+{
+  "output": {
+    "filePath": ".repomix-map.xml",
+    "style": "xml",
+    "removeComments": true,
+    "removeEmptyLines": true,
+    "compress": true
+  },
+  "include": [
+    "src/**/*.{ts,tsx}",
+    "supabase/functions/**/*.{ts,json}",
+    "AGENTS.md",
+    "prd.md",
+    "tasks.md",
+    "vite.config.ts"
+  ],
+  "ignore": {
+    "useGitignore": true,
+    "customPatterns": [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/public/**",
+      "**/assets/**",
+      "**/*.css",
+      "**/*.csv",
+      "**/*.woff*",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.svg",
+      "**/*lock*.json",
+      "package-lock.json",
+      "supabase/migrations/**",
+      "supabase/snippets/**"
+    ]
+  }
+}
