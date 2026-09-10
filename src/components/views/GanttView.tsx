@@ -1041,7 +1041,7 @@ export default function GanttView({
                           {(dragProvided, snapshot) => (
                         <tr ref={dragProvided.innerRef} {...dragProvided.draggableProps} onDoubleClick={() => onOpenTask(task)} onContextMenu={(e) => handleContextMenu(e, task)}
                           className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${isDone ? 'opacity-70' : ''} ${snapshot.isDragging ? 'bg-primary/10 shadow-lg' : ''}`}
-                          style={{ height: ROW_HEIGHT, backgroundColor: rowBg }}>
+                          style={{ ...dragProvided.draggableProps.style as React.CSSProperties, height: ROW_HEIGHT, backgroundColor: rowBg }}>
 
                           {/* Drag handle */}
                           <td className="w-8 px-1 text-center" onClick={(e) => e.stopPropagation()}>
