@@ -4,6 +4,7 @@ import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
+import CategoryFilter from '@/components/tasks/CategoryFilter'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { STATUS_COLORS, STATUS_LABELS, statusContrastText } from '@/utils/status'
@@ -202,6 +203,7 @@ export default function GanttView({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
 
   const { memberOf } = useProjectMembers(null)
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
@@ -216,12 +218,26 @@ export default function GanttView({
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
 
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>()
+    for (const t of tasks) {
+      for (const cat of t.categories ?? []) set.add(cat)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [tasks])
+
+  const filteredTasks = useMemo(() => {
+    if (categoryFilter.length === 0) return tasks
+    const selected = new Set(categoryFilter)
+    return tasks.filter((t) => (t.categories ?? []).some((cat) => selected.has(cat)))
+  }, [tasks, categoryFilter])
+
   // Build rows — respects expandedIds
   const rows = useMemo<GanttRow[]>(() => {
     const byParent = new Map<string | null, Task[]>()
-    const allIds = new Set(tasks.map((t) => t.id))
+    const allIds = new Set(filteredTasks.map((t) => t.id))
 
-    for (const t of tasks) {
+    for (const t of filteredTasks) {
       const pId = t.parent_id && allIds.has(t.parent_id) ? t.parent_id : null
       const list = byParent.get(pId) || []
       list.push(t)
@@ -250,7 +266,7 @@ export default function GanttView({
 
     traverse(null, 0)
     return result
-  }, [tasks, expandedIds])
+  }, [filteredTasks, expandedIds])
 
   const taskRows = useMemo(() => rows.filter((r): r is TaskRow => r.kind === 'task'), [rows])
 
@@ -833,6 +849,11 @@ export default function GanttView({
               <i className="fa-regular fa-clock" />{undatedCount} sem prazo
             </span>
           )}
+          <CategoryFilter
+            available={availableCategories}
+            selected={categoryFilter}
+            onChange={setCategoryFilter}
+          />
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border border-border bg-background/80 p-0.5 shadow-2xs">
@@ -879,7 +900,7 @@ export default function GanttView({
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr><td colSpan={7} className="p-4 text-center text-muted-foreground">Nenhuma tarefa encontrada.</td></tr>
+                    <tr><td colSpan={7} className="p-4 text-center text-muted-foreground">{categoryFilter.length > 0 ? 'Nenhuma tarefa com essa categoria.' : 'Nenhuma tarefa encontrada.'}</td></tr>
                   ) : (
                     rows.map((row, rowIndex) => {
                       // ---- Add-subtask row (abre o modal de subtarefa) ----

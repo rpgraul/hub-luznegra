@@ -8,6 +8,7 @@ import {
 } from '@hello-pangea/dnd'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
+import CategoryFilter from '@/components/tasks/CategoryFilter'
 import { userColor } from '@/utils/colors'
 import { categoryColors } from '@/utils/categories'
 import { formatDate, todayIso } from '@/utils/format'
@@ -777,6 +778,23 @@ export default function ListView({
   const [sortField, setSortField] = useState<SortField>('status')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
+  const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+
+  const availableCategories = useMemo(() => {
+    const set = new Set<string>()
+    for (const task of tasks) {
+      for (const cat of task.categories ?? []) set.add(cat)
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  }, [tasks])
+
+  const filteredTasks = useMemo(() => {
+    if (categoryFilter.length === 0) return tasks
+    const selected = new Set(categoryFilter)
+    return tasks.filter((task) =>
+      (task.categories ?? []).some((cat) => selected.has(cat)),
+    )
+  }, [tasks, categoryFilter])
 
   const projectById = useMemo(
     () => new Map(projects.map((p) => [p.id, p])),
@@ -827,7 +845,7 @@ export default function ListView({
 
   // Recursive multi-level hierarchy builder
   const rows = useMemo(() => {
-    const rootParents = tasks.filter((task) => !task.parent_id)
+    const rootParents = filteredTasks.filter((task) => !task.parent_id)
 
     rootParents.sort((a, b) => {
       let cmp = 0
@@ -852,7 +870,7 @@ export default function ListView({
     const all: Array<{ task: Task; depth: number }> = []
 
     function appendChildren(parentId: string, depth: number) {
-      const children = tasks
+      const children = filteredTasks
         .filter((task) => task.parent_id === parentId)
         .sort((a, b) => a.order_index - b.order_index)
       for (const child of children) {
@@ -868,7 +886,7 @@ export default function ListView({
 
     // Capture any orphan subtasks
     const addedIds = new Set(all.map((item) => item.task.id))
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       if (!addedIds.has(task.id)) {
         all.push({ task, depth: 0 })
         appendChildren(task.id, 1)
@@ -876,12 +894,12 @@ export default function ListView({
     }
 
     return all
-  }, [tasks, sortField, sortDirection])
+  }, [filteredTasks, sortField, sortDirection])
 
   const sections = useMemo(() => {
     if (!grouped) return []
     const ids = new Set(
-      tasks.map((task) => task.project_id).filter((id): id is string => !!id),
+      filteredTasks.map((task) => task.project_id).filter((id): id is string => !!id),
     )
     const list: Array<{
       project: Project | null
@@ -898,7 +916,7 @@ export default function ListView({
       list.push({ project: null, sectionTasks: orphan })
     }
     return list
-  }, [tasks, projects, grouped, rows])
+  }, [filteredTasks, projects, grouped, rows])
 
   function handleToggleDone(task: Task) {
     const nextStatus: TaskStatus = task.status === 'done' ? 'todo' : 'done'
@@ -921,7 +939,7 @@ export default function ListView({
   }
 
   function countSubtasks(task: Task) {
-    return tasks.filter((t) => t.parent_id === task.id).length
+    return filteredTasks.filter((t) => t.parent_id === task.id).length
   }
 
   function rowsForDroppable(droppableId: string): Array<{ task: Task; depth: number }> {
@@ -962,9 +980,12 @@ export default function ListView({
       .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
   }
 
-  const emptyMessage = grouped
-    ? 'Nenhuma tarefa por aqui.'
-    : 'Nenhuma tarefa neste projeto.'
+  const emptyMessage =
+    categoryFilter.length > 0
+      ? 'Nenhuma tarefa com essa categoria.'
+      : grouped
+        ? 'Nenhuma tarefa por aqui.'
+        : 'Nenhuma tarefa neste projeto.'
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -1018,6 +1039,12 @@ export default function ListView({
             </Button>
           </div>
         </div>
+
+        <CategoryFilter
+          available={availableCategories}
+          selected={categoryFilter}
+          onChange={setCategoryFilter}
+        />
 
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold text-muted-foreground">
