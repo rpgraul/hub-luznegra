@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
     // Buscar tarefas recentes de todos os projetos ordenadas por última modificação (updated_at DESC)
     const { data: allRecentTasks } = await admin
       .from('tasks')
-      .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, created_at, updated_at')
+      .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, categories, created_at, updated_at')
       .order('updated_at', { ascending: false })
       .limit(160)
 
@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
       start_date: string | null
       assigned_to: string | null
       assignees?: string[] | null
+      categories?: string[] | null
       parent_id: string | null
       project_id: string
       created_at: string
@@ -200,7 +201,7 @@ Deno.serve(async (req) => {
         const statusLabel = statusPtBr[t.status] || t.status
         const priorityLabel = priorityPtBr[t.priority] || t.priority
 
-        return `- [ID: ${t.id}] "${t.title}" (Projeto: "${projName}", Status: ${statusLabel} [${t.status}], Prioridade: ${priorityLabel} [${t.priority}], Responsáveis: ${respStr}, Início: ${startStr}, Prazo: ${dueStr}, Criada em: ${createdStr} [${t.created_at}], Última atualização: ${updatedStr} [${t.updated_at}]${t.parent_id ? `, Subtarefa de: ${t.parent_id}` : ''})`
+        return `- [ID: ${t.id}] "${t.title}" (Projeto: "${projName}", Status: ${statusLabel} [${t.status}], Prioridade: ${priorityLabel} [${t.priority}], Responsáveis: ${respStr}, Categorias: [${(t.categories || []).join(', ')}], Início: ${startStr}, Prazo: ${dueStr}, Criada em: ${createdStr} [${t.created_at}], Última atualização: ${updatedStr} [${t.updated_at}]${t.parent_id ? `, Subtarefa de: ${t.parent_id}` : ''})`
       })
       .join('\n')
 
@@ -285,6 +286,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
       "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
       "priority"?: "urgent" | "high" | "normal" | "low",
+      "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD"
     }
@@ -298,6 +300,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
           "assigned_to"?: string,
           "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
           "priority"?: "urgent" | "high" | "normal" | "low",
+          "categories"?: string[],
           "start_date"?: "YYYY-MM-DD",
           "due_date"?: "YYYY-MM-DD"
         }
@@ -308,6 +311,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "title": string,
       "assigned_to"?: string (username ou nome do membro),
       "priority"?: "urgent" | "high" | "normal" | "low",
+      "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD",
       "subtasks"?: string[]
@@ -696,6 +700,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
                 assigned_to: assignedUser,
                 due_date: dueDate,
                 start_date: startDate,
+                categories: Array.isArray(item.categories)
+                  ? (item.categories as string[])
+                  : Array.isArray(params.categories)
+                    ? (params.categories as string[])
+                    : [],
                 created_by: userId,
               })
               .select()
@@ -927,6 +936,9 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           if (params.due_date !== undefined) patch.due_date = normalizeDate(params.due_date)
           if (params.start_date !== undefined) patch.start_date = normalizeDate(params.start_date)
+          if (params.categories !== undefined && Array.isArray(params.categories)) {
+            patch.categories = (params.categories as string[]).map((c) => String(c).toLowerCase())
+          }
 
           const { data: updated, error: updateErr } = await admin
             .from('tasks')
@@ -992,6 +1004,9 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
             if (item.due_date !== undefined) patch.due_date = normalizeDate(item.due_date)
             if (item.start_date !== undefined) patch.start_date = normalizeDate(item.start_date)
+            if (item.categories !== undefined && Array.isArray(item.categories)) {
+              patch.categories = (item.categories as string[]).map((c) => String(c).toLowerCase())
+            }
 
             const { data: updated } = await admin
               .from('tasks')

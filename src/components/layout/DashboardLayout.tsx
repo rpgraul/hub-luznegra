@@ -182,6 +182,7 @@ export default function DashboardLayout({
         due_date: input.due_date,
         estimated_hours: input.estimated_hours,
         description: input.description as unknown as Json,
+        categories: input.categories.length > 0 ? input.categories : null,
       })
 
       for (const subtask of input.subtasks) {

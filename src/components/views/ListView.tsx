@@ -9,6 +9,7 @@ import {
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import { userColor } from '@/utils/colors'
+import { categoryColors } from '@/utils/categories'
 import { formatDate, todayIso } from '@/utils/format'
 import {
   STATUS_COLORS,
@@ -32,7 +33,7 @@ interface ListViewProps {
 
 type SortField = 'manual' | 'status' | 'due_date' | 'priority' | 'title'
 type SortDirection = 'asc' | 'desc'
-type EditableField = 'title' | 'description' | 'due_date' | 'priority'
+type EditableField = 'title' | 'description' | 'due_date' | 'priority' | 'categories'
 
 const STATUS_ORDER: Record<Task['status'], number> = {
   uncertain: 0,
@@ -169,14 +170,85 @@ function AssigneesCell({
   )
 }
 
-interface TaskRowProps {
+function CategoriesCell({
+  task,
+  onCommit,
+}: {
   task: Task
+  onCommit: (categories: string[]) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const categories = task.categories ?? []
+
+  function addFromDraft() {
+    const clean = draft.trim().toLowerCase().replace(/\s+/g, '-')
+    setDraft('')
+    if (!clean || categories.includes(clean)) return
+    onCommit([...categories, clean])
+  }
+
+  function remove(cat: string) {
+    onCommit(categories.filter((c) => c !== cat))
+  }
+
+  return (
+    <div
+      className="flex min-w-[140px] flex-wrap items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {categories.map((cat) => {
+        const colors = categoryColors(cat)
+        return (
+          <span
+            key={cat}
+            className="inline-flex items-center gap-1 rounded-md border px-1.5 py-0.2 text-[10px] font-semibold"
+            style={{
+              color: colors.fg,
+              backgroundColor: colors.bg,
+              borderColor: colors.border,
+            }}
+          >
+            {cat}
+            <button
+              type="button"
+              onClick={() => remove(cat)}
+              title={`Remover categoria ${cat}`}
+              className="cursor-pointer opacity-60 transition hover:opacity-100 hover:text-red-600"
+            >
+              <i className="fa-solid fa-xmark text-[9px]" />
+            </button>
+          </span>
+        )
+      })}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault()
+            e.stopPropagation()
+            addFromDraft()
+          }
+        }}
+        onBlur={() => {
+          if (draft.trim()) addFromDraft()
+        }}
+        placeholder={categories.length === 0 ? '+ categoria...' : '+'}
+        title="Digite e tecle Enter (ex: ig, youtube, rpg)"
+        className="w-20 bg-transparent px-1 py-0.5 text-[11px] text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+      />
+    </div>
+  )
+}
+
+interface TaskRowProps {  task: Task
   depth: number
   childrenCount: number
   memberOf: (id: string | null) => ProjectMember | null
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
-  onCommitField: (taskId: string, field: EditableField, value: string) => void
+  onCommitField: (taskId: string, field: EditableField, value: string | string[]) => void
   onOpen: () => void
   projectName?: string | null
   projectColor?: string | null
@@ -436,6 +508,14 @@ function TaskRow({
         </select>
       </td>
 
+      {/* Categories (always visible, right after Status) */}
+      <td onClick={(e) => e.stopPropagation()} className="px-3 py-2">
+        <CategoriesCell
+          task={task}
+          onCommit={(categories) => onCommitField(task.id, 'categories', categories)}
+        />
+      </td>
+
       {/* Priority (Editable on Click or Select) */}
       <td onClick={(e) => e.stopPropagation()} className="px-3 py-2">
         <select
@@ -501,7 +581,7 @@ interface TasksTableProps {
   emptyMessage: string
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
-  onCommitField: (taskId: string, field: EditableField, value: string) => void
+  onCommitField: (taskId: string, field: EditableField, value: string | string[]) => void
   onOpen: (task: Task) => void
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
@@ -584,6 +664,9 @@ function TasksTable({
               </button>
             </th>
             <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
+              Categoria
+            </th>
+            <th className="px-3 py-2.5 text-left font-bold text-slate-800 dark:text-slate-100">
               <button
                 type="button"
                 onClick={() => onSortBy('priority')}
@@ -614,7 +697,7 @@ function TasksTable({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={9}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     {emptyMessage}
@@ -709,18 +792,20 @@ export default function ListView({
     }
   }
 
-  function handleCommitField(taskId: string, field: EditableField, value: string) {
+  function handleCommitField(taskId: string, field: EditableField, value: string | string[]) {
     if (!updateTask) return
     const patch: Partial<Task> = {}
     if (field === 'title') {
       if (!value) return
-      patch.title = value
+      patch.title = value as string
     } else if (field === 'description') {
-      patch.description = buildSimpleLexicalJson(value)
+      patch.description = buildSimpleLexicalJson(value as string)
     } else if (field === 'due_date') {
-      patch.due_date = value || null
+      patch.due_date = (value as string) || null
     } else if (field === 'priority') {
       patch.priority = value as TaskPriority
+    } else if (field === 'categories') {
+      patch.categories = value as string[]
     }
 
     void updateTask({ id: taskId, patch })

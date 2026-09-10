@@ -6,6 +6,7 @@ import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
+import { categoryColors, parseCategoriesText } from '@/utils/categories'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
 import type { NewTaskInput } from '@/lib/api/tasks'
@@ -112,6 +113,89 @@ interface AddSubtaskRow {
 }
 
 type GanttRow = TaskRow | AddSubtaskRow
+
+function GanttCategoryCell({
+  task,
+  onSave,
+}: {
+  task: Task
+  onSave: (categories: string[]) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const categories = task.categories ?? []
+
+  function commit() {
+    setEditing(false)
+    const next = parseCategoriesText(draft)
+    // Mantém as existentes + adiciona as digitadas (remoção pelo Drawer/Lista)
+    const merged = [...categories]
+    for (const c of next) {
+      if (!merged.includes(c)) merged.push(c)
+    }
+    if (merged.length !== categories.length) onSave(merged)
+  }
+
+  if (!editing) {
+    return (
+      <div
+        onDoubleClick={(e) => {
+          e.stopPropagation()
+          setDraft('')
+          setEditing(true)
+        }}
+        title="2 cliques para adicionar categoria (ex: ig, rpg)"
+        className="flex min-h-[20px] cursor-pointer flex-wrap items-center gap-1"
+      >
+        {categories.length === 0 ? (
+          <span className="text-[10px] italic text-muted-foreground/40">—</span>
+        ) : (
+          categories.map((cat) => {
+            const colors = categoryColors(cat)
+            return (
+              <span
+                key={cat}
+                className="rounded border px-1 text-[8px] font-semibold leading-tight"
+                style={{
+                  color: colors.fg,
+                  backgroundColor: colors.bg,
+                  borderColor: colors.border,
+                }}
+              >
+                {cat}
+              </span>
+            )
+          })
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <input
+      // eslint-disable-next-line jsx-a11y/no-autofocus
+      autoFocus
+      type="text"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          e.stopPropagation()
+          commit()
+        } else if (e.key === 'Escape') {
+          e.preventDefault()
+          e.stopPropagation()
+          setEditing(false)
+        }
+      }}
+      onBlur={commit}
+      onClick={(e) => e.stopPropagation()}
+      placeholder="ig, rpg... (Enter)"
+      className="w-full rounded border border-[#7b68ee] bg-background px-1 py-0.5 text-[10px] text-foreground focus:outline-none"
+    />
+  )
+}
 
 interface ContextMenuState {
   x: number
@@ -529,6 +613,10 @@ export default function GanttView({
           ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${task.tags!.map((tag) => `<span style="padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;background-color:#7b68ee18;color:#7b68ee;border:1px solid #7b68ee30;">#${tag}</span>`).join('')}</div>`
           : ''
 
+        const categoriesHtml = (task.categories ?? []).length > 0
+          ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${task.categories!.map((cat) => `<span style="padding:1px 5px;border-radius:4px;font-size:9px;font-weight:600;background-color:#0d948818;color:#0f766e;border:1px solid #0d948830;">${cat}</span>`).join('')}</div>`
+          : ''
+
         return `
           <div class="gantt-popup" style="font-family:inherit;min-width:220px;line-height:1.4;">
             <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:var(--g-text-dark);">${task.title}</div>
@@ -539,6 +627,7 @@ export default function GanttView({
             <div style="font-size:11px;color:var(--g-text-dark);margin-bottom:3px;">${dateRange}</div>
             ${durationHtml}
             ${tagsHtml}
+            ${categoriesHtml}
             <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--g-border-color);font-size:10px;color:var(--g-text-muted);">
               <i class="fa-solid fa-arrow-pointer" style="margin-right:3px;"></i> Duplo clique para detalhes &nbsp;|&nbsp; <i class="fa-solid fa-computer-mouse" style="margin-right:3px;"></i> Clique direito para opções
             </div>
@@ -730,8 +819,13 @@ export default function GanttView({
     void Promise.all(promises).then(() => toast.success('Data atualizada.')).catch(() => toast.danger('Não foi possível salvar a data.'))
   }
 
-  function handleStatusChange(task: Task, nextStatus: TaskStatus) {
-    if (task.status === nextStatus) return
+  function handleCategoriesChange(task: Task, categories: string[]) {
+    void updateTask({ id: task.id, patch: { categories } })
+      .then(() => toast.success('Categorias atualizadas.'))
+      .catch(() => toast.danger('Não foi possível salvar as categorias.'))
+  }
+
+  function handleStatusChange(task: Task, nextStatus: TaskStatus) {    if (task.status === nextStatus) return
     if (moveTaskStatus) {
       void moveTaskStatus({ id: task.id, status: nextStatus })
         .then(() => toast.success(`Status alterado para ${STATUS_LABELS[nextStatus]}`))
@@ -793,7 +887,7 @@ export default function GanttView({
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full w-full overflow-hidden">
           {showTable && (
-            <div ref={tableRef} className="w-[740px] max-w-[55vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
+            <div ref={tableRef} className="w-[852px] max-w-[60vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
               <table className="w-full table-fixed border-collapse text-xs">
                 <thead>
                   <tr className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800" style={{ height: HEADER_HEIGHT }}>
@@ -801,13 +895,14 @@ export default function GanttView({
                     <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">Tarefa & Tags</th>
                     <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">Resp.</th>
                     <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Status</th>
-                    <th className="w-32 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Início</th>
-                    <th className="w-32 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">Fim</th>
+                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Categoria</th>
+                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Início</th>
+                    <th className="w-28 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">Fim</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.length === 0 ? (
-                    <tr><td colSpan={6} className="p-4 text-center text-muted-foreground">Nenhuma tarefa encontrada.</td></tr>
+                    <tr><td colSpan={7} className="p-4 text-center text-muted-foreground">Nenhuma tarefa encontrada.</td></tr>
                   ) : (
                     rows.map((row, rowIndex) => {
                       // ---- Add-subtask row (abre o modal de subtarefa) ----
@@ -818,7 +913,7 @@ export default function GanttView({
                               const parentTask = tasks.find((t) => t.id === row.parentId)
                               if (parentTask) openSubtaskModal(parentTask)
                             }}>
-                            <td colSpan={6}>
+                            <td colSpan={7}>
                               <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/50 group-hover/addrow:text-primary transition"
                                 style={{ paddingLeft: `${row.depth * 14 + 8}px` }}>
                                 <span className="flex size-4 items-center justify-center rounded border border-dashed border-muted-foreground/30 group-hover/addrow:border-primary/50 transition">
@@ -939,6 +1034,14 @@ export default function GanttView({
                               <option value="review">Revisão</option>
                               <option value="done">Concluído</option>
                             </select>
+                          </td>
+
+                          {/* Categories */}
+                          <td className="px-1.5" onClick={(e) => e.stopPropagation()}>
+                            <GanttCategoryCell
+                              task={task}
+                              onSave={(categories) => handleCategoriesChange(task, categories)}
+                            />
                           </td>
 
                           {/* Start date */}

@@ -13,6 +13,7 @@ import DateInput from '@/components/ui/DateInput'
 import { useTaskComments } from '@/hooks/useTaskComments'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
+import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
 import { formatDateTime, todayIso } from '@/utils/format'
 import {
   PRIORITY_LABELS,
@@ -42,6 +43,7 @@ interface TaskDrawerProps {
       due_date?: string | null
       description?: Json | null
       tags?: string[] | null
+      categories?: string[] | null
     }) => Promise<Task>
     updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
     deleteTask: (id: string) => Promise<unknown>
@@ -137,6 +139,7 @@ export default function TaskDrawer({
 
   const [newComment, setNewComment] = useState('')
   const [tagInput, setTagInput] = useState('')
+  const [categoryInput, setCategoryInput] = useState('')
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -163,6 +166,7 @@ export default function TaskDrawer({
       setNewSubtaskDue('')
       setNewComment('')
       setTagInput('')
+      setCategoryInput('')
       setCreateProjectId(projectId ?? projects[0]?.id ?? null)
       return
     }
@@ -295,6 +299,25 @@ export default function TaskDrawer({
     const currentTags = currentTask.tags ?? []
     const nextTags = currentTags.filter((t) => t !== tagToRemove)
     commitTaskPatch({ tags: nextTags })
+  }
+
+  function handleAddCategory() {
+    if (!currentTask) return
+    const clean = categoryInput.trim().toLowerCase().replace(/\s+/g, '-')
+    if (!clean) return
+    const current = currentTask.categories ?? []
+    if (current.includes(clean)) {
+      setCategoryInput('')
+      return
+    }
+    commitTaskPatch({ categories: [...current, clean] })
+    setCategoryInput('')
+  }
+
+  function handleRemoveCategory(catToRemove: string) {
+    if (!currentTask) return
+    const current = currentTask.categories ?? []
+    commitTaskPatch({ categories: current.filter((c) => c !== catToRemove) })
   }
 
   async function handleCreate() {
@@ -560,6 +583,56 @@ export default function TaskDrawer({
                     }}
                     className="min-w-[130px] flex-1 bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Categorias */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-foreground">Categorias</Label>
+                <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-background p-2 shadow-2xs">
+                  {(currentTask.categories ?? []).map((cat) => {
+                    const colors = categoryColors(cat)
+                    return (
+                      <span
+                        key={cat}
+                        className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold"
+                        style={{
+                          color: colors.fg,
+                          backgroundColor: colors.bg,
+                          borderColor: colors.border,
+                        }}
+                      >
+                        <span>{cat}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCategory(cat)}
+                          className="cursor-pointer opacity-60 transition hover:opacity-100 hover:text-red-500"
+                          title="Remover categoria"
+                        >
+                          <i className="fa-solid fa-xmark text-[10px]" />
+                        </button>
+                      </span>
+                    )
+                  })}
+                  <input
+                    type="text"
+                    placeholder="Adicionar categoria (Enter)..."
+                    value={categoryInput}
+                    onChange={(e) => setCategoryInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault()
+                        handleAddCategory()
+                      }
+                    }}
+                    list="hub-category-suggestions"
+                    className="min-w-[130px] flex-1 bg-transparent px-1 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+                  />
+                  <datalist id="hub-category-suggestions">
+                    {CATEGORY_SUGGESTIONS.map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 

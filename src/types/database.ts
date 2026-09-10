@@ -59,6 +59,7 @@ export type Task = {
   assignees?: string[] | null
   created_by: string | null
   tags?: string[] | null
+  categories?: string[] | null
   created_at: string
   updated_at: string
 }
@@ -196,6 +197,7 @@ export interface Database {
           assignees?: string[] | null
           created_by?: string | null
           tags?: string[] | null
+          categories?: string[] | null
           created_at?: string
           updated_at?: string
         }
@@ -216,6 +218,7 @@ export interface Database {
           assignees?: string[] | null
           created_by?: string | null
           tags?: string[] | null
+          categories?: string[] | null
           created_at?: string
           updated_at?: string
         }

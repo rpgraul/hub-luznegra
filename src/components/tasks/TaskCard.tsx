@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PRIORITY_ICONS } from '@/utils/status'
+import { categoryColors } from '@/utils/categories'
 import { formatDateRange, todayIso } from '@/utils/format'
 import { userColor, userRowColor } from '@/utils/colors'
 import type { ProjectMember } from '@/lib/api/members'
@@ -153,6 +154,23 @@ export default function TaskCard({
             #{tag}
           </span>
         ))}
+
+        {(task.categories ?? []).map((cat) => {
+          const colors = categoryColors(cat)
+          return (
+            <span
+              key={cat}
+              className="inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold"
+              style={{
+                color: colors.fg,
+                backgroundColor: colors.bg,
+                borderColor: colors.border,
+              }}
+            >
+              {cat}
+            </span>
+          )
+        })}
       </div>
 
       {/* Details Row: Dates, Hours, Subtasks, Assignees */}

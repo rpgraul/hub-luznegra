@@ -4,6 +4,7 @@ import DateInput from '@/components/ui/DateInput'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
+import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
 import {
   PRIORITY_LABELS,
   STATUS_LABELS,
@@ -33,6 +34,7 @@ export interface NewTaskInput {
   due_date: string | null
   estimated_hours: number | null
   description: SerializedEditorState | null
+  categories: string[]
   subtasks: NewSubtaskInput[]
 }
 
@@ -81,6 +83,8 @@ export default function NewTaskModal({
   const [hours, setHours] = useState('')
   const [description, setDescription] =
     useState<SerializedEditorState | null>(null)
+  const [categories, setCategories] = useState<string[]>([])
+  const [categoryInput, setCategoryInput] = useState('')
   const [subtasks, setSubtasks] = useState<NewSubtaskInput[]>([])
   const [subtaskInput, setSubtaskInput] = useState('')
   const [subtaskDueDate, setSubtaskDueDate] = useState('')
@@ -102,6 +106,8 @@ export default function NewTaskModal({
     setDueDate(initDate)
     setHours('')
     setDescription(null)
+    setCategories([])
+    setCategoryInput('')
     setSubtasks([])
     setSubtaskInput('')
     setSubtaskDueDate('')
@@ -110,8 +116,14 @@ export default function NewTaskModal({
     setTimeout(() => titleRef.current?.focus(), 80)
   }, [open, initialProjectId, initialStartDate, projects, currentUserId])
 
-  function toggleAssignee(userId: string) {
-    setAssignees((prev) =>
+  function addCategory() {
+    const clean = categoryInput.trim().toLowerCase().replace(/\s+/g, '-')
+    setCategoryInput('')
+    if (!clean || categories.includes(clean)) return
+    setCategories((prev) => [...prev, clean])
+  }
+
+  function toggleAssignee(userId: string) {    setAssignees((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
         : [...prev, userId],
@@ -156,6 +168,7 @@ export default function NewTaskModal({
         due_date: dueDate || null,
         estimated_hours,
         description,
+        categories,
         subtasks,
       })
     } catch (err) {
@@ -346,6 +359,63 @@ export default function NewTaskModal({
                           </option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Categorias */}
+                  <div className="col-span-2 space-y-1">
+                    <label className="block text-xs font-medium text-foreground/70">
+                      Categorias
+                      <span className="ml-1.5 text-[10px] font-normal text-muted-foreground">
+                        (ex: ig, youtube, rpg)
+                      </span>
+                    </label>
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background p-2">
+                      {categories.map((cat) => {
+                        const colors = categoryColors(cat)
+                        return (
+                          <span
+                            key={cat}
+                            className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold"
+                            style={{
+                              color: colors.fg,
+                              backgroundColor: colors.bg,
+                              borderColor: colors.border,
+                            }}
+                          >
+                            {cat}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCategories((prev) => prev.filter((c) => c !== cat))
+                              }
+                              className="cursor-pointer opacity-60 transition hover:opacity-100 hover:text-red-500"
+                              title="Remover categoria"
+                            >
+                              <i className="fa-solid fa-xmark text-[10px]" />
+                            </button>
+                          </span>
+                        )
+                      })}
+                      <input
+                        type="text"
+                        value={categoryInput}
+                        onChange={(e) => setCategoryInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault()
+                            addCategory()
+                          }
+                        }}
+                        list="hub-new-task-categories"
+                        placeholder="+ adicionar..."
+                        className="min-w-[110px] flex-1 bg-transparent px-1 py-0.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+                      />
+                      <datalist id="hub-new-task-categories">
+                        {CATEGORY_SUGGESTIONS.map((s) => (
+                          <option key={s} value={s} />
+                        ))}
+                      </datalist>
                     </div>
                   </div>
                 </div>
