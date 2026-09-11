@@ -281,38 +281,51 @@
 }
 
 /* ---- StatusSelect (pill sólida, minimalista) ---- */
-/* Texto sempre branco no pill fechado + seta, peso 500. */
-.status-select__trigger,
-.status-select__trigger * {
+/* Texto sempre branco no pill fechado + seta, peso 500.
+ * (Só na raiz: a cor herda para a seta e o font-weight 900 próprio do
+ * FontAwesome permanece intacto no ícone — `*` com !important quebrava o
+ * glifo, pois a família FA 6 Free usa o peso para selecionar o estilo.) */
+.status-select__trigger {
   color: #fff !important;
   font-weight: 500;
 }
 
-/* Itens do menu: sem bloco de hover/sombra do tema — só a pill, com
- * realce suave (leve brilho) no hover. */
-.status-select__item.list-box-item {
+/* Popover do StatusSelect: cantos bem menos arredondados e menu denso. */
+.dropdown__popover.status-select__popover {
+  border-radius: 10px;
+}
+.dropdown__popover.status-select__popover .dropdown__menu {
+  padding: 4px;
+  gap: 2px;
+}
+
+/* Itens do menu: sem bloco de hover/sombra/margem do tema — só a pill,
+ * com realce suave (leve brilho) no hover. Seletores sem a classe interna
+ * do HeroUI para não depender dela (o item usa `menu-item`). */
+.dropdown__menu .status-select__item {
   min-height: 0;
   padding: 2px 4px;
+  border-radius: 6px;
   background-color: transparent;
   box-shadow: none;
 }
-.status-select__item.list-box-item:hover,
-.status-select__item.list-box-item[data-hovered='true'] {
+.dropdown__menu .status-select__item:hover,
+.dropdown__menu .status-select__item[data-hovered='true'] {
   background-color: transparent;
   box-shadow: none;
   transform: none;
 }
-.status-select__item .status-select__pill {
+.dropdown__menu .status-select__item .status-select__pill {
   transition:
     filter 0.15s ease,
     transform 0.15s ease;
 }
-.status-select__item:hover .status-select__pill,
-.status-select__item[data-hovered='true'] .status-select__pill {
+.dropdown__menu .status-select__item:hover .status-select__pill,
+.dropdown__menu .status-select__item[data-hovered='true'] .status-select__pill {
   filter: brightness(1.08);
 }
-.status-select__item:active .status-select__pill,
-.status-select__item[data-pressed='true'] .status-select__pill {
+.dropdown__menu .status-select__item:active .status-select__pill,
+.dropdown__menu .status-select__item[data-pressed='true'] .status-select__pill {
   transform: scale(0.98);
 }
 
@@ -348,7 +361,7 @@
   .dropdown__popover.status-select__popover[data-exiting='true'] {
     animation: none;
   }
-  .status-select__item .status-select__pill {
+  .dropdown__menu .status-select__item .status-select__pill {
     transition: none;
   }
 }
