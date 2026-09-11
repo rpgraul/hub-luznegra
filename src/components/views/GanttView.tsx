@@ -671,7 +671,7 @@ export default function GanttView({
           <div class="gantt-popup" style="font-family:inherit;min-width:220px;line-height:1.4;">
             <div style="font-weight:700;font-size:12px;margin-bottom:4px;color:var(--g-text-dark);">${task.title}</div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
-              <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background-color:${statusColor}20;color:var(--status-ink);border:1px solid ${statusColor}40;">${statusLabel}</span>
+              <span style="display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background-color:${statusColor}20;color:${statusColor};border:1px solid ${statusColor}40;">${statusLabel}</span>
               <span style="font-size:10px;color:var(--g-text-muted);">• Prioridade: ${priorityLabel}</span>
             </div>
             <div style="font-size:11px;color:var(--g-text-dark);margin-bottom:3px;">${dateRange}</div>

@@ -134,12 +134,6 @@
   }
 }
 
-/* Ajuste fino do padding horizontal do utilitário px-2 (pills mais compactas).
- * Regra sem camada: prevalece sobre o utilitário gerado pelo Tailwind. */
-.px-2 {
-  padding-inline: calc(var(--spacing) * 1.8);
-}
-
 /* React Big Calendar custom styling */
 .rbc-calendar {
   font-family: inherit;
