@@ -36,15 +36,15 @@ export default function StatusSelect({
 
   const sizeClass =
     size === 'md'
-      ? 'w-full rounded-lg px-3 py-2'
-      : 'rounded-full px-2 py-0.5'
+      ? 'w-full rounded-lg px-3 py-2 text-xs'
+      : 'max-w-full rounded-full px-2 py-0.5 text-[11px]'
 
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as TaskStatus)}
       aria-label={ariaLabel}
-      className={`cursor-pointer border text-xs font-semibold shadow-2xs transition focus:outline-none dark:brightness-125 ${sizeClass} ${className}`}
+      className={`cursor-pointer border font-semibold shadow-2xs transition focus:outline-none dark:brightness-125 ${sizeClass} ${className}`}
       style={style}
     >
       {TASK_STATUSES.map((s) => (

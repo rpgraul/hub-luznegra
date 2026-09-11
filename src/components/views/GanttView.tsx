@@ -136,8 +136,12 @@ function GanttCategoryCell({
           setDraft('')
           setEditing(true)
         }}
-        title="2 cliques para adicionar categoria (ex: ig, rpg)"
-        className="flex min-h-[20px] cursor-pointer flex-wrap items-center gap-1"
+        title={
+          categories.length === 0
+            ? '2 cliques para adicionar categoria (ex: ig, rpg)'
+            : `${categories.join(', ')} (2 cliques para adicionar)`
+        }
+        className="flex max-w-full min-h-[20px] cursor-pointer flex-nowrap items-center gap-1 overflow-hidden"
       >
         {categories.length === 0 ? (
           <span className="text-[10px] italic text-muted-foreground/40">—</span>
@@ -147,7 +151,7 @@ function GanttCategoryCell({
             return (
               <span
                 key={cat}
-                className="rounded border px-1 text-[8px] font-semibold leading-tight"
+                className="shrink-0 rounded border px-1 text-[8px] font-semibold leading-tight"
                 style={{
                   color: colors.fg,
                   backgroundColor: colors.bg,
@@ -1098,7 +1102,7 @@ export default function GanttView({
                     <th className="w-8 px-1 text-center font-bold text-slate-800 dark:text-slate-100"><i className="fa-solid fa-check text-[11px]" title="Concluir" /></th>
                     <th className="px-2 text-left font-bold text-slate-800 dark:text-slate-100">Tarefa & Tags</th>
                     <th className="w-16 px-1.5 text-center font-bold text-slate-800 dark:text-slate-100">Resp.</th>
-                    <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Status</th>
+                    <th className="w-32 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Status</th>
                     <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Categoria</th>
                     <th className="w-28 px-1.5 text-left font-bold text-slate-800 dark:text-slate-100">Início</th>
                     <th className="w-28 px-1.5 pr-2 text-left font-bold text-slate-800 dark:text-slate-100">Fim</th>
@@ -1238,7 +1242,7 @@ export default function GanttView({
                           </td>
 
                           {/* Status */}
-                          <td className="px-1.5">
+                          <td className="w-32 px-1.5">
                             <StatusSelect
                               value={task.status}
                               onChange={(s) => handleStatusChange(task, s)}
@@ -1248,7 +1252,7 @@ export default function GanttView({
                           </td>
 
                           {/* Categories */}
-                          <td className="px-1.5" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-1.5 overflow-hidden" onClick={(e) => e.stopPropagation()}>
                             <GanttCategoryCell
                               task={task}
                               onSave={(categories) => handleCategoriesChange(task, categories)}
