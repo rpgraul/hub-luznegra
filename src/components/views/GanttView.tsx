@@ -1205,7 +1205,14 @@ export default function GanttView({
                                     className="flex items-center justify-center shrink-0 size-4 rounded text-primary/70 hover:bg-primary/10 hover:text-primary transition">
                                     <i className={`fa-solid ${isExpanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-[9px]`} />
                                   </button>
-                                ) : null}
+                                ) : (
+                                  <button type="button" onClick={(e) => { e.stopPropagation(); openSubtaskModal(task) }}
+                                    title="Adicionar subtarefa"
+                                    aria-label={`Adicionar subtarefa em ${task.title}`}
+                                    className="flex items-center justify-center shrink-0 size-4 rounded border border-dashed border-muted-foreground/30 text-muted-foreground/50 opacity-0 transition group-hover:opacity-100 hover:border-primary/50 hover:text-primary focus-visible:opacity-100">
+                                    <i className="fa-solid fa-plus text-[9px]" />
+                                  </button>
+                                )}
                                 <span className={`truncate ${isSubtask ? 'font-normal text-xs text-foreground/90' : 'font-semibold text-xs text-foreground'} ${isDone ? 'line-through text-muted-foreground' : isOverdue ? 'text-rose-600 font-semibold' : ''}`}>
                                   {task.title}
                                 </span>
