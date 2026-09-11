@@ -49,6 +49,24 @@ export function statusBorder(status: TaskStatus): string {
   return `${STATUS_COLORS[status]}66`
 }
 
+/**
+ * Cor de texto sobre o fundo sólido do status (sem borda).
+ * Compara o contraste WCAG de branco vs. cinza bem escuro sobre a cor
+ * do status e retorna o vencedor — sempre o melhor contraste.
+ */
+export function statusInkOn(status: TaskStatus): '#FFFFFF' | '#222222' {
+  const hex = STATUS_COLORS[status].replace('#', '')
+  const channel = (i: number): number => {
+    const v = parseInt(hex.slice(i, i + 2), 16) / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  const lum = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4)
+  const lumDark = 0.0159 // #222222
+  const contrastWhite = 1.05 / (lum + 0.05)
+  const contrastDark = (lum + 0.05) / (lumDark + 0.05)
+  return contrastWhite >= contrastDark ? '#FFFFFF' : '#222222'
+}
+
 export function statusLabel(status: TaskStatus): string {
   return STATUS_LABELS[status]
 }
