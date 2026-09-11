@@ -207,6 +207,36 @@ export function useTasks(showAll: boolean) {
     },
   })
 
+  const reorderMany = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await Promise.all(
+        orderedIds.map((id, index) => updateTask(id, { order_index: index })),
+      )
+    },
+    onMutate: async (orderedIds: string[]) => {
+      await queryClient.cancelQueries({ queryKey: KEY })
+      const previous = queryClient.getQueryData<Task[]>(KEY)
+      const now = new Date().toISOString()
+      const indexById = new Map(orderedIds.map((id, index) => [id, index]))
+      setTasks((tasks) =>
+        tasks.map((task) =>
+          indexById.has(task.id)
+            ? { ...task, order_index: indexById.get(task.id)!, updated_at: now }
+            : task,
+        ),
+      )
+      return { previous }
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(KEY, context.previous)
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: KEY })
+    },
+  })
+
   return {
     tasks: query.data ?? [],
     isLoading: query.isLoading,
@@ -216,6 +246,7 @@ export function useTasks(showAll: boolean) {
     deleteTask: remove.mutateAsync,
     moveTaskStatus: move.mutateAsync,
     reorderTask: reorder.mutateAsync,
+    reorderMany: reorderMany.mutateAsync,
     getTask: (id: string) => (query.data ?? []).find((task) => task.id === id),
     childrenOf: (id: string) =>
       (query.data ?? []).filter((task) => task.parent_id === id),

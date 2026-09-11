@@ -271,6 +271,7 @@ export default function TaskWorkspace({
             moveTaskStatus={tasksApi.moveTaskStatus}
             createTask={tasksApi.createTask}
             deleteTask={tasksApi.deleteTask}
+            reorderMany={tasksApi.reorderMany}
             currentUserId={user!.id}
           />
         )
@@ -285,6 +286,7 @@ export default function TaskWorkspace({
             onOpenNewTask={() => openNewTask()}
             moveTaskStatus={tasksApi.moveTaskStatus}
             reorderTask={tasksApi.reorderTask}
+            reorderMany={tasksApi.reorderMany}
             createTask={tasksApi.createTask}
             memberOf={memberOf}
           />

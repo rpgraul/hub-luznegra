@@ -29,6 +29,7 @@ interface GanttViewProps {
   moveTaskStatus?: (args: { id: string; status: TaskStatus }) => Promise<unknown>
   createTask?: (input: NewTaskInput) => Promise<Task>
   deleteTask?: (id: string) => Promise<unknown>
+  reorderMany?: (orderedIds: string[]) => Promise<unknown>
   currentUserId?: string
 }
 
@@ -203,6 +204,7 @@ export default function GanttView({
   moveTaskStatus,
   createTask,
   deleteTask,
+  reorderMany,
   currentUserId,
 }: GanttViewProps) {
   const [zoomIndex, setZoomIndex] = useState(2)
@@ -239,7 +241,7 @@ export default function GanttView({
     return tasks.filter((t) => (t.categories ?? []).some((cat) => selected.has(cat)))
   }, [tasks, categoryFilter])
 
-  // Build rows — respects expandedIds
+  // Build rows — respects expandedIds, sorted by order_index per level
   const rows = useMemo<GanttRow[]>(() => {
     const byParent = new Map<string | null, Task[]>()
     const allIds = new Set(filteredTasks.map((t) => t.id))
@@ -249,6 +251,13 @@ export default function GanttView({
       const list = byParent.get(pId) || []
       list.push(t)
       byParent.set(pId, list)
+    }
+    for (const list of byParent.values()) {
+      list.sort(
+        (a, b) =>
+          a.order_index - b.order_index ||
+          (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
+      )
     }
 
     const result: GanttRow[] = []
@@ -825,18 +834,70 @@ export default function GanttView({
       .catch(() => toast.danger('Não foi possível salvar as categorias.'))
   }
 
-  function persistOrder(ordered: Task[]) {
-    const updates = ordered
-      .map((task, index) => ({ task, index }))
-      .filter(({ task, index }) => task.order_index !== index)
-    if (updates.length === 0) return
-    void Promise.all(
-      updates.map(({ task, index }) =>
-        updateTask({ id: task.id, patch: { order_index: index } }),
-      ),
-    )
+  // Índice do Draggable = posição em taskRows (linhas "add-subtask" são <tr>
+  // simples e não participam do DnD).
+  const taskIndexById = useMemo(
+    () => new Map(taskRows.map(({ task }, index) => [task.id, index])),
+    [taskRows],
+  )
+
+  function persistGlobalOrder(orderedIds: string[]) {
+    const currentById = new Map(tasks.map((t) => [t.id, t.order_index]))
+    const changed = orderedIds.some((id, index) => currentById.get(id) !== index)
+    if (!changed) return
+    const persist = reorderMany
+      ? reorderMany(orderedIds)
+      : Promise.all(
+          orderedIds.map((id, index) =>
+            updateTask({ id, patch: { order_index: index } }),
+          ),
+        )
+    void persist
       .then(() => toast.success('Ordem atualizada!'))
       .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
+  }
+
+  // Reconstrói a ordem global (0..N-1 sobre as tarefas visíveis) preservando
+  // o agrupamento pai→filhos: a ordem relativa dentro de cada grupo é mantida
+  // e só o grupo movido muda.
+  function buildGlobalIds(
+    topOrder: Task[],
+    siblingOverride?: { parentId: string; siblings: Task[] },
+  ): string[] {
+    const byParent = new Map<string | null, Task[]>()
+    for (const t of filteredTasks) {
+      const key = t.parent_id ?? null
+      const list = byParent.get(key) || []
+      list.push(t)
+      byParent.set(key, list)
+    }
+    for (const list of byParent.values()) {
+      list.sort(
+        (a, b) =>
+          a.order_index - b.order_index ||
+          (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
+      )
+    }
+    if (siblingOverride) {
+      byParent.set(siblingOverride.parentId, siblingOverride.siblings)
+    }
+    const ids: string[] = []
+    function walk(parentId: string | null) {
+      const children =
+        parentId === null
+          ? [...topOrder]
+          : (byParent.get(parentId) || []).filter((t) => t.id !== parentId)
+      for (const child of children) {
+        ids.push(child.id)
+        walk(child.id)
+      }
+    }
+    walk(null)
+    // Inclui por segurança tarefas órfãs que não entraram no walk
+    for (const t of filteredTasks) {
+      if (!ids.includes(t.id)) ids.push(t.id)
+    }
+    return ids
   }
 
   function isDescendantOf(task: Task, ancestorId: string, byId: Map<string, Task>): boolean {
@@ -853,63 +914,68 @@ export default function GanttView({
     if (!destination) return
     if (source.index === destination.index) return
 
-    const draggedRow = rows[source.index]
-    if (!draggedRow || draggedRow.kind !== 'task') return
+    const draggedRow = taskRows[source.index]
+    if (!draggedRow || draggedRow.task.id !== draggableId) return
     const dragged = draggedRow.task
-    if (dragged.id !== draggableId) return
 
-    // Rendered rows sem a linha arrastada (destination.index refere-se a essa lista)
-    const reduced = rows.filter((_, i) => i !== source.index)
     const byId = new Map(filteredTasks.map((t) => [t.id, t]))
 
     if (draggedRow.depth === 0) {
-      // Tarefa de topo: move livremente; conta topos antes do slot de destino
-      const topLevel = rows
-        .filter((r): r is TaskRow => r.kind === 'task' && r.depth === 0)
+      // Tarefa de topo: move entre os topos; filhos acompanham o pai no rebuild global
+      const topLevel = taskRows
+        .filter((r) => r.depth === 0)
         .map((r) => r.task)
         .filter((t) => t.id !== dragged.id)
+      // Conta quantos topos existem antes do slot de destino na lista sem o arrastado
+      const reducedTaskRows = taskRows.filter((r) => r.task.id !== dragged.id)
       let destPos = 0
-      for (let i = 0; i < destination.index && i < reduced.length; i++) {
-        const r = reduced[i]
-        if (r.kind === 'task' && r.depth === 0) destPos++
+      for (let i = 0; i < destination.index && i < reducedTaskRows.length; i++) {
+        if (reducedTaskRows[i].depth === 0) destPos++
       }
+      // Destino após o fim: anexa
+      destPos = Math.min(destPos, topLevel.length)
       topLevel.splice(destPos, 0, dragged)
-      persistOrder(topLevel)
+      persistGlobalOrder(buildGlobalIds(topLevel))
       return
     }
 
-    // Subtarefa: só pode reordenar dentro do bloco do pai
+    // Subtarefa: só pode reordenar dentro do bloco do pai (em taskRows, sem placeholders)
     const parentId = dragged.parent_id
     if (!parentId) return
-    const parentIdx = reduced.findIndex(
-      (r) => r.kind === 'task' && r.task.id === parentId,
-    )
-    if (parentIdx === -1) return
-    let blockEnd = parentIdx
-    for (let i = parentIdx + 1; i < reduced.length; i++) {
-      const r = reduced[i]
-      const inside =
-        (r.kind === 'task' && isDescendantOf(r.task, parentId, byId)) ||
-        (r.kind === 'add-subtask' &&
-          isDescendantOf({ parent_id: r.parentId } as Task, parentId, byId))
-      if (!inside) break
+    const reducedTaskRows = taskRows.filter((r) => r.task.id !== dragged.id)
+    const parentPos = reducedTaskRows.findIndex((r) => r.task.id === parentId)
+    if (parentPos === -1) return
+    let blockEnd = parentPos
+    for (let i = parentPos + 1; i < reducedTaskRows.length; i++) {
+      if (!isDescendantOf(reducedTaskRows[i].task, parentId, byId)) break
       blockEnd = i
     }
-    if (destination.index < parentIdx || destination.index > blockEnd + 1) {
+    // destination.index é na lista original (com o arrastado); converte para a reduzida
+    const destInReduced =
+      destination.index > source.index ? destination.index - 1 : destination.index
+    if (destInReduced < parentPos || destInReduced > blockEnd) {
       toast.danger('Subtarefas só podem ser reordenadas dentro da tarefa pai.')
       return
     }
-    const siblings = rows
-      .filter((r): r is TaskRow => r.kind === 'task' && r.task.parent_id === parentId)
+    const siblings = taskRows
+      .filter((r) => r.task.parent_id === parentId)
       .map((r) => r.task)
       .filter((t) => t.id !== dragged.id)
     let destPos = 0
-    for (let i = 0; i < destination.index && i < reduced.length; i++) {
-      const r = reduced[i]
-      if (r.kind === 'task' && r.task.parent_id === parentId) destPos++
+    for (let i = 0; i <= destInReduced && i < reducedTaskRows.length; i++) {
+      if (reducedTaskRows[i].task.parent_id === parentId) destPos++
     }
+    // Ajusta: se o slot está logo após o último sibling, destPos já conta certo;
+    // garante limite
+    destPos = Math.min(destPos, siblings.length)
+    // Se o destino aponta para dentro do bloco mas antes de siblings (ex: no pai),
+    // conta siblings anteriores — o loop acima já faz isso; se destPos ficou 0 e o
+    // slot é após algum sibling, o loop corrige.
     siblings.splice(destPos, 0, dragged)
-    persistOrder(siblings)
+    const topOrder = taskRows
+      .filter((r) => r.depth === 0)
+      .map((r) => r.task)
+    persistGlobalOrder(buildGlobalIds(topOrder, { parentId, siblings }))
   }
 
   function handleStatusChange(task: Task, nextStatus: TaskStatus) {    if (task.status === nextStatus) return
@@ -1000,13 +1066,11 @@ export default function GanttView({
                   {rows.length === 0 ? (
                     <tr><td colSpan={8} className="p-4 text-center text-muted-foreground">{categoryFilter.length > 0 ? 'Nenhuma tarefa com essa categoria.' : 'Nenhuma tarefa encontrada.'}</td></tr>
                   ) : (
-                    rows.map((row, rowIndex) => {
-                      // ---- Add-subtask row (abre o modal de subtarefa) ----
+                    rows.map((row) => {
+                      // ---- Add-subtask row (abre o modal de subtarefa; fora do DnD) ----
                       if (row.kind === 'add-subtask') {
                         return (
-                          <Draggable key={`add-${row.parentId}`} draggableId={`add-${row.parentId}`} index={rowIndex} isDragDisabled>
-                            {(dragProvided) => (
-                          <tr ref={dragProvided.innerRef} {...dragProvided.draggableProps} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
+                          <tr key={`add-${row.parentId}`} style={{ height: ROW_HEIGHT }} className="border-b border-border/30 cursor-pointer hover:bg-primary/5 group/addrow"
                             onClick={() => {
                               const parentTask = tasks.find((t) => t.id === row.parentId)
                               if (parentTask) openSubtaskModal(parentTask)
@@ -1022,8 +1086,6 @@ export default function GanttView({
                               </div>
                             </td>
                           </tr>
-                            )}
-                          </Draggable>
                         )
                       }
 
@@ -1037,7 +1099,7 @@ export default function GanttView({
                       const rowBg = task.project_id ? `${projectColor}14` : undefined
 
                       return (
-                        <Draggable key={task.id} draggableId={task.id} index={rowIndex}>
+                        <Draggable key={task.id} draggableId={task.id} index={taskIndexById.get(task.id) ?? 0}>
                           {(dragProvided, snapshot) => (
                         <tr ref={dragProvided.innerRef} {...dragProvided.draggableProps} onDoubleClick={() => onOpenTask(task)} onContextMenu={(e) => handleContextMenu(e, task)}
                           className={`group cursor-default border-b border-border/50 transition hover:brightness-95 dark:hover:brightness-110 ${isDone ? 'opacity-70' : ''} ${snapshot.isDragging ? 'bg-primary/10 shadow-lg' : ''}`}

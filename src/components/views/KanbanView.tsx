@@ -26,6 +26,7 @@ interface KanbanViewProps {
     status?: TaskStatus
     orderIndex?: number
   }) => Promise<unknown>
+  reorderMany?: (orderedIds: string[]) => Promise<unknown>
   createTask: (input: NewTaskInput) => Promise<Task>
   memberOf?: (id: string | null) => ProjectMember | null
 }
@@ -37,6 +38,7 @@ export default function KanbanView({
   onOpenNewTask,
   moveTaskStatus,
   reorderTask,
+  reorderMany,
   createTask,
   memberOf,
 }: KanbanViewProps) {
@@ -84,14 +86,41 @@ export default function KanbanView({
     }
   }
 
-  function persistColumnOrder(ordered: Task[]) {
-    ordered.forEach((task, index) => {
-      if (task.order_index !== index) {
-        void reorderTask({ id: task.id, orderIndex: index }).catch(() =>
-          toast.danger('Erro ao salvar a nova ordem.'),
+  function columnSorted(status: TaskStatus, source: Task[]): Task[] {
+    return source
+      .filter((task) => task.status === status)
+      .sort((a, b) => a.order_index - b.order_index)
+  }
+
+  // Persiste a ordem global (0..N-1 sobre os cards exibidos) preservando a
+  // ordem relativa dentro de cada coluna. Evita colisão de order_index entre
+  // colunas que fazia o card "voltar" após o refetch.
+  function persistGlobalOrder(columns: Map<TaskStatus, Task[]>) {
+    const orderedIds: string[] = []
+    for (const status of TASK_STATUSES) {
+      for (const task of columns.get(status) ?? []) orderedIds.push(task.id)
+    }
+    if (orderedIds.length === 0) return
+    const persist = reorderMany
+      ? reorderMany(orderedIds)
+      : Promise.all(
+          orderedIds.map((id, index) =>
+            reorderTask({ id, orderIndex: index }),
+          ),
         )
-      }
-    })
+    void (persist as Promise<unknown>).catch(() =>
+      toast.danger('Erro ao salvar a nova ordem.'),
+    )
+  }
+
+  function persistColumnOrder(ordered: Task[]) {
+    if (ordered.length === 0) return
+    const status = ordered[0].status
+    const columns = new Map<TaskStatus, Task[]>()
+    for (const s of TASK_STATUSES) {
+      columns.set(s, s === status ? ordered : columnSorted(s, displayTasks))
+    }
+    persistGlobalOrder(columns)
   }
 
   function onDragEnd(result: DropResult) {
@@ -121,7 +150,19 @@ export default function KanbanView({
           const moved = taskById.get(draggableId)
           if (!moved) return
           destTasks.splice(destination.index, 0, { ...moved, status: toStatus })
-          persistColumnOrder(destTasks)
+          const columns = new Map<TaskStatus, Task[]>()
+          for (const s of TASK_STATUSES) {
+            if (s === toStatus) columns.set(s, destTasks)
+            else if (s === fromStatus)
+              columns.set(
+                s,
+                displayTasks
+                  .filter((task) => task.status === s && task.id !== draggableId)
+                  .sort((a, b) => a.order_index - b.order_index),
+              )
+            else columns.set(s, columnSorted(s, displayTasks))
+          }
+          persistGlobalOrder(columns)
         })
       }
     } catch (error) {
