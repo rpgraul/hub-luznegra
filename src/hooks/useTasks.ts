@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/hooks/useAuth'
@@ -38,7 +38,20 @@ export function useTasks(showAll: boolean) {
   })
 
   // Realtime: escuta a tabela inteira (a RLS entrega o que o usuário pode ver).
+  // - Debounce: N writes seguidos (ex: reorder) geram 1 refetch, nunca N.
+  // - Supressão de eco: enquanto um reorderMany local está em voo, os eventos
+  //   do próprio usuário são ignorados — o cache otimista é a verdade e nenhum
+  //   refetch parcial pisca na tela. O onSettled faz o invalidate final.
+  const suppressRealtimeUntil = useRef(0)
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
+    function scheduleInvalidate() {
+      if (Date.now() < suppressRealtimeUntil.current) return
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      debounceTimer.current = setTimeout(() => {
+        void queryClient.invalidateQueries({ queryKey: KEY })
+      }, 600)
+    }
     const channelId = `tasks-${Math.random().toString(36).slice(2, 9)}`
     const channel = supabase
       .channel(channelId)
@@ -50,12 +63,13 @@ export function useTasks(showAll: boolean) {
           table: 'tasks',
         },
         () => {
-          void queryClient.invalidateQueries({ queryKey: KEY })
+          scheduleInvalidate()
         },
       )
       .subscribe()
 
     return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
       void supabase.removeChannel(channel)
     }
   }, [KEY, queryClient])
@@ -215,6 +229,8 @@ export function useTasks(showAll: boolean) {
     },
     onMutate: async (orderedIds: string[]) => {
       await queryClient.cancelQueries({ queryKey: KEY })
+      // Cala o eco do Realtime durante o voo + margem (cobre o debounce).
+      suppressRealtimeUntil.current = Date.now() + 2500
       const previous = queryClient.getQueryData<Task[]>(KEY)
       const now = new Date().toISOString()
       const indexById = new Map(orderedIds.map((id, index) => [id, index]))

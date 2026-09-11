@@ -213,6 +213,10 @@ export default function GanttView({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+  // Ordem local aplicada no instante do drop: a tabela reflete o arrasto
+  // imediatamente, sem esperar o cache/servidor (evita o snap-back do DnD).
+  // Limpa no settled/erro da mutação.
+  const [pendingOrder, setPendingOrder] = useState<string[] | null>(null)
 
   const { memberOf } = useProjectMembers(null)
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
@@ -241,7 +245,9 @@ export default function GanttView({
     return tasks.filter((t) => (t.categories ?? []).some((cat) => selected.has(cat)))
   }, [tasks, categoryFilter])
 
-  // Build rows — respects expandedIds, sorted by order_index per level
+  // Build rows — respects expandedIds, sorted by order_index per level.
+  // Enquanto há um arrasto pendente, a posição no pendingOrder prevalece
+  // sobre order_index (cobre refetches parciais no meio do voo).
   const rows = useMemo<GanttRow[]>(() => {
     const byParent = new Map<string | null, Task[]>()
     const allIds = new Set(filteredTasks.map((t) => t.id))
@@ -252,12 +258,20 @@ export default function GanttView({
       list.push(t)
       byParent.set(pId, list)
     }
-    for (const list of byParent.values()) {
-      list.sort(
-        (a, b) =>
-          a.order_index - b.order_index ||
-          (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
+    const rank = pendingOrder ? new Map(pendingOrder.map((id, i) => [id, i])) : null
+    const compare = (a: Task, b: Task): number => {
+      if (rank) {
+        const ra = rank.get(a.id)
+        const rb = rank.get(b.id)
+        if (ra !== undefined && rb !== undefined && ra !== rb) return ra - rb
+      }
+      return (
+        a.order_index - b.order_index ||
+        (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0)
       )
+    }
+    for (const list of byParent.values()) {
+      list.sort(compare)
     }
 
     const result: GanttRow[] = []
@@ -282,7 +296,7 @@ export default function GanttView({
 
     traverse(null, 0)
     return result
-  }, [filteredTasks, expandedIds])
+  }, [filteredTasks, expandedIds, pendingOrder])
 
   const taskRows = useMemo(() => rows.filter((r): r is TaskRow => r.kind === 'task'), [rows])
 
@@ -545,12 +559,46 @@ export default function GanttView({
     }
   }
 
-  // Initialize and update Gantt
+  // Refs vivas para os closures do Frappe (popup/dblclick): a instância do
+  // timeline é criada uma vez por zoom e atualizada via refresh, então os
+  // closures precisam enxergar os dados mais recentes sem recriar o SVG.
+  const tasksByIdRef = useRef(new Map<string, Task>())
+  const undatedByIdRef = useRef(new Map<string, boolean>())
+  const todayRef = useRef(today)
+  const onOpenTaskRef = useRef(onOpenTask)
+  const ganttTasksRef = useRef(ganttTasks)
+  tasksByIdRef.current = new Map(taskRows.map(({ task }) => [task.id, task]))
+  undatedByIdRef.current = new Map(taskRows.map(({ task, undated }) => [task.id, undated]))
+  todayRef.current = today
+  onOpenTaskRef.current = onOpenTask
+  ganttTasksRef.current = ganttTasks
+
+  // Atualiza só as barras quando os dados mudam (reorder, status, datas).
+  // Não destrói o SVG nem mexe no scroll — por isso não há flick no timeline.
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    if (ganttTasks.length === 0) {
+      wrapper.innerHTML = ''
+      ganttInstanceRef.current = null
+      lastZoomRef.current = null
+      return
+    }
+    if (isInteractingRef.current) return
+    const instance = ganttInstanceRef.current
+    if (!instance) return
+    if (lastZoomRef.current !== currentZoom.name) return
+    try {
+      instance.refresh(ganttTasks)
+    } catch { /* a recriação do efeito de init cobre a falha */ }
+  }, [ganttTasks, currentZoom.name])
+
+  // Initialize Gantt — recria apenas ao trocar de zoom ou mostrar/ocultar tabela
   useEffect(() => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
 
-    if (ganttTasks.length === 0) {
+    if (ganttTasksRef.current.length === 0) {
       wrapper.innerHTML = ''
       ganttInstanceRef.current = null
       lastZoomRef.current = null
@@ -559,22 +607,10 @@ export default function GanttView({
 
     if (isInteractingRef.current) return
 
-    const tasksById = new Map(taskRows.map(({ task }) => [task.id, task]))
-    const undatedById = new Map(taskRows.map(({ task, undated }) => [task.id, undated]))
-
-    const isZoomChange = lastZoomRef.current !== currentZoom.name
-
-    if (ganttInstanceRef.current && !isZoomChange) {
-      try {
-        ganttInstanceRef.current.refresh(ganttTasks)
-        return
-      } catch { /* fallback */ }
-    }
-
     lastZoomRef.current = currentZoom.name
     wrapper.innerHTML = ''
 
-    const gantt = new Gantt(wrapper, ganttTasks, {
+    const gantt = new Gantt(wrapper, ganttTasksRef.current, {
       view_mode: currentZoom.view_mode,
       column_width: currentZoom.column_width,
       snap_at: '1d',
@@ -588,32 +624,33 @@ export default function GanttView({
       readonly_progress: true,
       popup_on: 'hover',
       popup: (gTask) => {
-        const task = tasksById.get(String(gTask.id))
+        const task = tasksByIdRef.current.get(String(gTask.id))
         if (!task) return ''
-        const undated = undatedById.get(String(gTask.id))
+        const undated = undatedByIdRef.current.get(String(gTask.id))
+        const todayValue = todayRef.current
         const statusLabel = STATUS_LABELS[task.status] || task.status
         const priorityLabel = PRIORITY_LABELS[task.priority] || task.priority
         const statusColor = STATUS_COLORS[task.status] || '#64748b'
 
         const dateRange = undated
           ? '<span style="color:#eab308;font-weight:600;">Sem prazos definidos (arraste para definir)</span>'
-          : `<span>${formatDate(task.start_date ?? today)} → ${formatDate(task.due_date ?? task.start_date ?? today)}</span>`
+          : `<span>${formatDate(task.start_date ?? todayValue)} → ${formatDate(task.due_date ?? task.start_date ?? todayValue)}</span>`
 
         let durationHtml = ''
         if (task.start_date && task.due_date) {
           const totalDays = Math.max(1, diffDaysLocal(task.start_date, task.due_date) + 1)
           if (task.status === 'done') {
             durationHtml = `<div style="margin-top:3px;font-size:11px;color:#10b981;font-weight:600;"><i class="fa-solid fa-check"></i> Tarefa Concluída (${totalDays} dias)</div>`
-          } else if (today > task.due_date) {
-            const overdueDays = diffDaysLocal(task.due_date, today)
+          } else if (todayValue > task.due_date) {
+            const overdueDays = diffDaysLocal(task.due_date, todayValue)
             durationHtml = `<div style="margin-top:3px;font-size:11px;color:#f43f5e;font-weight:600;"><i class="fa-solid fa-triangle-exclamation"></i> Atrasada há ${overdueDays} dia(s) (Total: ${totalDays} dias)</div>`
-          } else if (today >= task.start_date) {
-            const elapsed = diffDaysLocal(task.start_date, today) + 1
+          } else if (todayValue >= task.start_date) {
+            const elapsed = diffDaysLocal(task.start_date, todayValue) + 1
             const pct = Math.min(100, Math.max(0, Math.round((elapsed / totalDays) * 100)))
             const remaining = totalDays - elapsed
             durationHtml = `<div style="margin-top:3px;font-size:11px;color:var(--g-text-dark);">Tempo decorrido: <strong>${pct}%</strong> (Dia ${elapsed} de ${totalDays}) • Faltam ${remaining} dia(s)</div>`
           } else {
-            const daysUntilStart = diffDaysLocal(today, task.start_date)
+            const daysUntilStart = diffDaysLocal(todayValue, task.start_date)
             durationHtml = `<div style="margin-top:3px;font-size:11px;color:var(--g-text-muted);">Inicia em ${daysUntilStart} dia(s) • Duração: ${totalDays} dias</div>`
           }
         }
@@ -663,8 +700,8 @@ export default function GanttView({
       const bar = target?.closest?.('.bar-wrapper[data-id]')
       const id = bar?.getAttribute('data-id')
       if (!id) return
-      const task = tasksById.get(id)
-      if (task) onOpenTask(task)
+      const task = tasksByIdRef.current.get(id)
+      if (task) onOpenTaskRef.current(task)
     }
 
     const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
@@ -712,7 +749,7 @@ export default function GanttView({
       ganttInstanceRef.current = null
       lastZoomRef.current = null
     }
-  }, [ganttTasks, taskRows, currentZoom, onOpenTask, scrollToToday, today, showTable])
+  }, [currentZoom, scrollToToday, showTable])
 
   // Zoom & Pan
   useEffect(() => {
@@ -845,6 +882,9 @@ export default function GanttView({
     const currentById = new Map(tasks.map((t) => [t.id, t.order_index]))
     const changed = orderedIds.some((id, index) => currentById.get(id) !== index)
     if (!changed) return
+    // Reflete o drop na hora; o Realtime é suprimido durante o voo
+    // (useTasks) então nenhum refetch parcial desfaz a UI.
+    setPendingOrder(orderedIds)
     const persist = reorderMany
       ? reorderMany(orderedIds)
       : Promise.all(
@@ -852,9 +892,13 @@ export default function GanttView({
             updateTask({ id, patch: { order_index: index } }),
           ),
         )
+    // Arrastar é silencioso como no ClickUp/Trello: toast só em erro.
     void persist
-      .then(() => toast.success('Ordem atualizada!'))
-      .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
+      .then(() => setPendingOrder(null))
+      .catch(() => {
+        setPendingOrder(null)
+        toast.danger('Erro ao salvar a nova ordem.')
+      })
   }
 
   // Reconstrói a ordem global (0..N-1 sobre as tarefas visíveis) preservando
