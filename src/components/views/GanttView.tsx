@@ -577,40 +577,99 @@ export default function GanttView({
   onOpenTaskRef.current = onOpenTask
   ganttTasksRef.current = ganttTasks
 
-  // Atualiza só as barras quando os dados mudam (reorder, status, datas).
-  // Não destrói o SVG nem mexe no scroll — por isso não há flick no timeline.
+  // Sincronia vertical tabela <-> timeline (só refs, seguro em closures antigas).
+  function syncGanttToTable() {
+    if (isSyncingScroll.current) return
+    isSyncingScroll.current = true
+    const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
+    if (gContainer && tableRef.current) gContainer.scrollTop = tableRef.current.scrollTop
+    requestAnimationFrame(() => { isSyncingScroll.current = false })
+  }
+
+  function syncTableToGantt() {
+    if (isSyncingScroll.current) return
+    isSyncingScroll.current = true
+    const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
+    if (tableRef.current && gContainer) tableRef.current.scrollTop = gContainer.scrollTop
+    requestAnimationFrame(() => { isSyncingScroll.current = false })
+  }
+
+  function destroyGanttInstance() {
+    const instance = ganttInstanceRef.current
+    ganttInstanceRef.current = null
+    lastZoomRef.current = null
+    if (instance) {
+      try { instance.clear(); instance.unselect_all() } catch { /* ignore */ }
+    }
+  }
+
+  // Destroys the timeline on unmount.
+  useEffect(() => {
+    return () => {
+      destroyGanttInstance()
+    }
+  }, [])
+
+  // Interop de clique no elemento estável do wrapper (sobrevive a innerHTML).
   useEffect(() => {
     const wrapper = wrapperRef.current
     if (!wrapper) return
+
+    function handleTimelineMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      if (target?.closest('.bar-wrapper, .handle')) isInteractingRef.current = true
+    }
+
+    function handleDoubleClick(event: MouseEvent) {
+      const target = event.target as Element | null
+      const bar = target?.closest?.('.bar-wrapper[data-id]')
+      const id = bar?.getAttribute('data-id')
+      if (!id) return
+      const task = tasksByIdRef.current.get(id)
+      if (task) onOpenTaskRef.current(task)
+    }
+
+    wrapper.addEventListener('mousedown', handleTimelineMouseDown)
+    wrapper.addEventListener('dblclick', handleDoubleClick)
+    return () => {
+      wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
+      wrapper.removeEventListener('dblclick', handleDoubleClick)
+    }
+  }, [])
+
+  // Scroll da tabela -> timeline (elemento da tabela é estável).
+  useEffect(() => {
+    const tableEl = tableRef.current
+    if (!tableEl) return
+    tableEl.addEventListener('scroll', syncGanttToTable, { passive: true })
+    return () => {
+      tableEl.removeEventListener('scroll', syncGanttToTable)
+    }
+  }, [])
+
+  // Constrói o timeline na chegada dos dados / troca de zoom / tabela;
+  // atualiza só as barras (refresh) quando só os dados mudam — sem flick.
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+
     if (ganttTasks.length === 0) {
       wrapper.innerHTML = ''
-      ganttInstanceRef.current = null
-      lastZoomRef.current = null
-      return
-    }
-    if (isInteractingRef.current) return
-    const instance = ganttInstanceRef.current
-    if (!instance) return
-    if (lastZoomRef.current !== currentZoom.name) return
-    try {
-      instance.refresh(ganttTasks)
-    } catch { /* a recriação do efeito de init cobre a falha */ }
-  }, [ganttTasks, currentZoom.name])
-
-  // Initialize Gantt — recria apenas ao trocar de zoom ou mostrar/ocultar tabela
-  useEffect(() => {
-    const wrapper = wrapperRef.current
-    if (!wrapper) return
-
-    if (ganttTasksRef.current.length === 0) {
-      wrapper.innerHTML = ''
-      ganttInstanceRef.current = null
-      lastZoomRef.current = null
+      destroyGanttInstance()
       return
     }
 
     if (isInteractingRef.current) return
 
+    let refreshed = false
+    if (ganttInstanceRef.current && lastZoomRef.current === currentZoom.name) {
+      try {
+        ganttInstanceRef.current.refresh(ganttTasks)
+        refreshed = true
+      } catch { /* queda para reconstrução abaixo */ }
+    }
+    if (refreshed) return
+    destroyGanttInstance()
     lastZoomRef.current = currentZoom.name
     wrapper.innerHTML = ''
 
@@ -694,66 +753,25 @@ export default function GanttView({
 
     ganttInstanceRef.current = gantt
 
-    function handleTimelineMouseDown(e: MouseEvent) {
-      const target = e.target as HTMLElement | null
-      if (target?.closest('.bar-wrapper, .handle')) isInteractingRef.current = true
-    }
-
-    function handleDoubleClick(event: MouseEvent) {
-      const target = event.target as Element | null
-      const bar = target?.closest?.('.bar-wrapper[data-id]')
-      const id = bar?.getAttribute('data-id')
-      if (!id) return
-      const task = tasksByIdRef.current.get(id)
-      if (task) onOpenTaskRef.current(task)
-    }
-
     const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
     if (ganttContainer) {
       ganttContainer.style.height = ''
       ganttContainer.style.maxHeight = '100%'
     }
 
-    function onTableScroll() {
-      if (isSyncingScroll.current) return
-      isSyncingScroll.current = true
-      const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
-      if (gContainer && tableRef.current) gContainer.scrollTop = tableRef.current.scrollTop
-      requestAnimationFrame(() => { isSyncingScroll.current = false })
-    }
-
-    function onGanttScroll() {
-      if (isSyncingScroll.current) return
-      isSyncingScroll.current = true
-      const gContainer = wrapperRef.current?.querySelector('.gantt-container') as HTMLElement | null
-      if (tableRef.current && gContainer) tableRef.current.scrollTop = gContainer.scrollTop
-      requestAnimationFrame(() => { isSyncingScroll.current = false })
-    }
-
     const tableEl = tableRef.current
-    if (tableEl) tableEl.addEventListener('scroll', onTableScroll, { passive: true })
     if (ganttContainer) {
-      ganttContainer.addEventListener('scroll', onGanttScroll, { passive: true })
+      ganttContainer.addEventListener('scroll', syncTableToGantt, { passive: true })
       if (tableEl) ganttContainer.scrollTop = tableEl.scrollTop
     }
-
-    wrapper.addEventListener('mousedown', handleTimelineMouseDown)
-    wrapper.addEventListener('dblclick', handleDoubleClick)
 
     const timer = setTimeout(() => scrollToToday(false), 60)
 
     return () => {
       clearTimeout(timer)
-      if (tableEl) tableEl.removeEventListener('scroll', onTableScroll)
-      if (ganttContainer) ganttContainer.removeEventListener('scroll', onGanttScroll)
-      wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
-      wrapper.removeEventListener('dblclick', handleDoubleClick)
-      if (gantt) { gantt.clear(); gantt.unselect_all() }
-      wrapper.innerHTML = ''
-      ganttInstanceRef.current = null
-      lastZoomRef.current = null
+      if (ganttContainer) ganttContainer.removeEventListener('scroll', syncTableToGantt)
     }
-  }, [currentZoom, scrollToToday, showTable])
+  }, [ganttTasks, currentZoom, scrollToToday, showTable])
 
   // Zoom & Pan
   useEffect(() => {
