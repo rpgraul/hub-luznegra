@@ -30,7 +30,8 @@ export default function StatusSelect({
 }: StatusSelectProps) {
   const style: CSSProperties = {
     backgroundColor: statusSoftBg(value),
-    color: STATUS_COLORS[value],
+    // Texto sóbrio com bom contraste; a identidade da cor fica no fundo/borda.
+    color: 'var(--status-ink)',
     borderColor: statusBorder(value),
   }
 

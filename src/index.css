@@ -51,6 +51,7 @@
 
 :root {
   --radius: 0.625rem;
+  --status-ink: #222;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -87,6 +88,7 @@
 
 .dark {
   --background: oklch(0.145 0 0);
+  --status-ink: #e8e8e8;
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
   --card-foreground: oklch(0.985 0 0);
@@ -130,6 +132,12 @@
   html {
     @apply font-sans;
   }
+}
+
+/* Ajuste fino do padding horizontal do utilitário px-2 (pills mais compactas).
+ * Regra sem camada: prevalece sobre o utilitário gerado pelo Tailwind. */
+.px-2 {
+  padding-inline: calc(var(--spacing) * 1.8);
 }
 
 /* React Big Calendar custom styling */
