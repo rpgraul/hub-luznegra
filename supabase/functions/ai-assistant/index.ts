@@ -297,7 +297,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "task_title"?: string (título da tarefa para localização),
       "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
       "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
-      "priority"?: "urgent" | "high" | "normal" | "low",
+      "priority"?: "urgent" | "high" | "medium" | "low",
       "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD"
@@ -311,7 +311,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
           "task_title"?: string,
           "assigned_to"?: string,
           "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
-          "priority"?: "urgent" | "high" | "normal" | "low",
+          "priority"?: "urgent" | "high" | "medium" | "low",
           "categories"?: string[],
           "start_date"?: "YYYY-MM-DD",
           "due_date"?: "YYYY-MM-DD"
@@ -322,7 +322,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
     action: create_task, params: {
       "title": string,
       "assigned_to"?: string (username ou nome do membro),
-      "priority"?: "urgent" | "high" | "normal" | "low",
+      "priority"?: "urgent" | "high" | "medium" | "low",
       "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD",
@@ -688,6 +688,47 @@ FORMATO OBRIGATÓRIO (JSON puro):
       return null
     }
 
+    // Normaliza prioridade para os valores aceitos pelo CHECK do banco
+    // (low|medium|high|urgent). A IA costuma emitir "normal" — que o banco rejeita.
+    function normalizePriority(p: unknown): string {
+      const v = String(p ?? 'medium').trim().toLowerCase()
+      if (['urgent', 'urgente', 'urgencia', 'urgência', 'critical', 'crítica', 'critica'].includes(v)) return 'urgent'
+      if (['high', 'alta', 'alto', 'high priority', 'prioridade alta'].includes(v)) return 'high'
+      if (['low', 'baixa', 'baixo', 'minor', 'baixa prioridade'].includes(v)) return 'low'
+      return 'medium'
+    }
+
+    // Normaliza status para os valores aceitos pelo CHECK do banco.
+    // Retorna null quando irreconhecível (chamador decide o fallback).
+    function normalizeStatus(s: unknown): string | null {
+      const v = String(s ?? '').trim().toLowerCase()
+      const map: Record<string, string> = {
+        uncertain: 'uncertain',
+        incerto: 'uncertain',
+        backlog: 'backlog',
+        todo: 'todo',
+        'a fazer': 'todo',
+        afazer: 'todo',
+        pending: 'todo',
+        pendente: 'todo',
+        in_progress: 'in_progress',
+        'in progress': 'in_progress',
+        'em andamento': 'in_progress',
+        andamento: 'in_progress',
+        doing: 'in_progress',
+        review: 'review',
+        'revisão': 'review',
+        revisao: 'review',
+        done: 'done',
+        'concluído': 'done',
+        concluido: 'done',
+        concluded: 'done',
+        complete: 'done',
+        completed: 'done',
+      }
+      return map[v] ?? null
+    }
+
     function resolveMemberId(identifier: unknown): string | null {
       if (!identifier) return null
       if (typeof identifier !== 'string') return null
@@ -796,7 +837,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
               assigned_to: stAssigned,
               due_date: stDue || parent.due_date,
               start_date: stStart,
-              priority: parent.priority,
+              priority: normalizePriority(parent.priority),
               status: 'todo',
               order_index: idx + 1,
               created_by: userId,
@@ -860,8 +901,8 @@ FORMATO OBRIGATÓRIO (JSON puro):
               .insert({
                 title: String(item.title),
                 project_id: (item.project_id as string) || projectIdToUse,
-                priority: (item.priority as string) || (params.priority as string) || 'medium',
-                status: (item.status as string) || 'todo',
+                priority: normalizePriority(item.priority ?? params.priority),
+                status: normalizeStatus(item.status) ?? 'todo',
                 assigned_to: assignedUser,
                 due_date: dueDate,
                 start_date: startDate,
@@ -978,19 +1019,26 @@ FORMATO OBRIGATÓRIO (JSON puro):
           }
         }
       } else if (type === 'bulk_status_update' && params.target_status) {
+        const normTarget = normalizeStatus(params.target_status)
+        if (!normTarget) {
+          return json({
+            reply: `Status "${params.target_status}" inválido. Use: backlog, todo, in_progress, review ou done.`,
+            action: { type: 'none' },
+          })
+        }
         const projectIdToUse = (params.project_id as string) || context.projectId
         if (projectIdToUse) {
           let query = admin
             .from('tasks')
-            .update({ status: params.target_status as string })
+            .update({ status: normTarget })
             .eq('project_id', projectIdToUse)
 
           if (params.from_priority) {
-            query = query.eq('priority', params.from_priority as string)
+            query = query.eq('priority', normalizePriority(params.from_priority))
           }
 
           const { data: updated } = await query.select('id')
-          if ((params.target_status as string) === 'done') {
+          if (normTarget === 'done') {
             await clearDueRemindersFor(
               ((updated ?? []) as Array<{ id: string }>).map((t) => t.id),
             )
@@ -1134,8 +1182,9 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
         if (taskId) {
           const patch: Record<string, unknown> = {}
-          if (params.status) patch.status = params.status
-          if (params.priority) patch.priority = params.priority
+          const normStatus = normalizeStatus(params.status)
+          if (normStatus) patch.status = normStatus
+          if (params.priority !== undefined) patch.priority = normalizePriority(params.priority)
           if (params.title) patch.title = params.title
 
           const assignedParam =
@@ -1209,8 +1258,9 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
           if (taskId) {
             const patch: Record<string, unknown> = {}
-            if (item.status) patch.status = item.status
-            if (item.priority) patch.priority = item.priority
+            const normItemStatus = normalizeStatus(item.status)
+            if (normItemStatus) patch.status = normItemStatus
+            if (item.priority !== undefined) patch.priority = normalizePriority(item.priority)
             if (item.title) patch.title = item.title
 
             const assignedParam =
@@ -1245,7 +1295,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
             const wanted = (params.tasks as Array<Record<string, unknown>>).find(
               (it) => it.task_id === t.id || it.id === t.id,
             )
-            return (wanted?.status as string) === 'done' || t.status === 'done'
+            return normalizeStatus(wanted?.status) === 'done' || t.status === 'done'
           })
           .map((t) => t.id)
         await clearDueRemindersFor(doneIds)
