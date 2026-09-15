@@ -1,0 +1,2651 @@
+This file is a merged representation of a subset of the codebase, containing specifically included files and files not matching ignore patterns, combined into a single document by Repomix.
+The content has been processed where comments have been removed, empty lines have been removed, content has been compressed (code blocks are separated by ⋮---- delimiter).
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: src/**/*.{ts,tsx}, supabase/functions/**/*.{ts,json}, AGENTS.md, prd.md, tasks.md, vite.config.ts
+- Files matching these patterns are excluded: **/node_modules/**, **/dist/**, **/build/**, **/public/**, **/assets/**, **/*.css, **/*.csv, **/*.woff*, **/*.png, **/*.jpg, **/*.svg, **/*lock*.json, package-lock.json, supabase/migrations/**, supabase/snippets/**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Code comments have been removed from supported file types
+- Empty lines have been removed from all files
+- Content has been compressed - code blocks are separated by ⋮---- delimiter
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+src/
+  components/
+    admin/
+      CreateUserModal.tsx
+      EditUserModal.tsx
+      UserManagement.tsx
+      UserManagementDrawer.tsx
+    ai/
+      AIAssistantFloatingButton.tsx
+      AIAssistantModal.tsx
+    auth/
+      LoginPage.tsx
+      ProtectedRoute.tsx
+      ResetPasswordPage.tsx
+    documents/
+      DocumentDetailDrawer.tsx
+      DocumentsView.tsx
+      DocumentUploadModal.tsx
+    layout/
+      DashboardLayout.tsx
+      Sidebar.tsx
+      TopBar.tsx
+    links/
+      LinkModal.tsx
+      LinksView.tsx
+    notifications/
+      NotificationBell.tsx
+    profile/
+      AvatarDropdown.tsx
+      FeriasAlert.tsx
+      ProfileDrawer.tsx
+      ProfileModal.tsx
+    projects/
+      ArchivedProjectsModal.tsx
+      ProjectModal.tsx
+    tasks/
+      CategoryFilter.tsx
+      LexicalEditor.tsx
+      NewTaskModal.tsx
+      StatusSelect.tsx
+      SubtaskModal.tsx
+      TaskCard.tsx
+      TaskDrawer.tsx
+      TaskWorkspace.tsx
+    ui/
+      DateInput.tsx
+    views/
+      CalendarView.tsx
+      GanttView.tsx
+      KanbanView.tsx
+      ListView.tsx
+  contexts/
+    AuthContext.tsx
+  hooks/
+    useAuth.ts
+    useDocuments.ts
+    useLinks.ts
+    usePreferences.ts
+    useProjectMembers.ts
+    useTaskComments.ts
+    useTasks.ts
+  lib/
+    api/
+      ai.ts
+      comments.ts
+      documents.ts
+      links.ts
+      members.ts
+      notifications.ts
+      preferences.ts
+      projects.ts
+      tasks.ts
+    extractors/
+      index.ts
+    layout.ts
+    queryClient.ts
+    supabaseAdmin.ts
+    supabaseClient.ts
+    utils.ts
+    withDragAndDrop.ts
+  routes/
+    DashboardPage.tsx
+    index.tsx
+    TaskPage.tsx
+  types/
+    database.ts
+  utils/
+    categories.ts
+    colors.ts
+    format.ts
+    status.ts
+  App.tsx
+  main.tsx
+supabase/
+  functions/
+    _shared/
+      cors.ts
+    admin-users/
+      index.ts
+    ai-assistant/
+      index.ts
+    notify-due-tasks/
+      index.ts
+    project-members/
+      index.ts
+    r2-storage/
+      index.ts
+    send-email/
+      index.ts
+    deno.json
+    tsconfig.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/components/auth/ProtectedRoute.tsx">
+import { Navigate, Outlet } from 'react-router'
+import { useAuth } from '@/hooks/useAuth'
+function LoadingScreen()
+export default function ProtectedRoute()
+</file>
+
+<file path="src/contexts/AuthContext.tsx">
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
+import type { Session } from '@supabase/supabase-js'
+import { supabase, clearPersistedSession } from '@/lib/supabaseClient'
+import type { Profile } from '@/types/database'
+export interface SignInResult {
+  error: string | null
+}
+export interface AuthContextValue {
+  user: Profile | null
+  isAuthenticated: boolean
+  loading: boolean
+  signIn: (identifier: string, password: string, remember?: boolean) => Promise<SignInResult>
+  signOut: () => Promise<void>
+  refreshProfile: () => Promise<void>
+}
+⋮----
+export function AuthProvider(
+</file>
+
+<file path="src/hooks/useAuth.ts">
+import { useContext } from 'react'
+import { AuthContext, type AuthContextValue } from '@/contexts/AuthContext'
+export function useAuth(): AuthContextValue
+</file>
+
+<file path="src/hooks/useProjectMembers.ts">
+import { useQuery } from '@tanstack/react-query'
+import { listProjectMembers, type ProjectMember } from '@/lib/api/members'
+export function useProjectMembers(projectId: string | null)
+</file>
+
+<file path="src/hooks/useTaskComments.ts">
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  createTaskComment,
+  deleteTaskComment,
+  fetchTaskComments,
+} from '@/lib/api/comments'
+export function useTaskComments(taskId: string | null)
+</file>
+
+<file path="src/lib/api/ai.ts">
+import { supabase } from '@/lib/supabaseClient'
+export interface AIMessage {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  action?: {
+    type: string
+    params?: Record<string, unknown>
+  }
+  actionResult?: Record<string, unknown> | null
+  timestamp?: string
+}
+export interface SendAIMessageParams {
+  message: string
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>
+  projectId?: string | null
+  activeTaskId?: string | null
+}
+export interface AIResponse {
+  reply: string
+  action?: {
+    type: string
+    params?: Record<string, unknown>
+  }
+  actionResult?: Record<string, unknown> | null
+}
+export async function sendAIMessage(
+  params: SendAIMessageParams,
+): Promise<AIResponse>
+</file>
+
+<file path="src/lib/api/comments.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { TaskComment } from '@/types/database'
+export async function fetchTaskComments(taskId: string): Promise<TaskComment[]>
+export async function createTaskComment(
+  taskId: string,
+  authorId: string,
+  content: string,
+): Promise<void>
+export async function deleteTaskComment(id: string): Promise<void>
+</file>
+
+<file path="src/lib/layout.ts">
+import type { DefaultView } from '@/types/database'
+export type ViewLayout = 'row' | 'column'
+export interface LayoutState {
+  views: DefaultView[]
+  layout: ViewLayout
+  ratios: number[]
+}
+export interface SavedPreset {
+  id: string
+  name: string
+  scheme: LayoutState
+}
+⋮----
+export function equalRatios(count: number): number[]
+export function normalizeLayout(state: LayoutState): LayoutState
+export function loadLayout(): LayoutState
+export function saveLayout(state: LayoutState): void
+export function loadPresets(): SavedPreset[]
+export function savePresets(presets: SavedPreset[]): void
+⋮----
+export function singleViewInLayout(
+  state: LayoutState,
+  view: DefaultView,
+): LayoutState
+export function addViewToLayout(
+  state: LayoutState,
+  view: DefaultView,
+): LayoutState
+export function removeViewFromLayout(
+  state: LayoutState,
+  view: DefaultView,
+): LayoutState
+export function shiftRatio(
+  state: LayoutState,
+  index: number,
+  deltaPct: number,
+): LayoutState
+export function equalizeRatios(state: LayoutState): LayoutState
+</file>
+
+<file path="src/lib/queryClient.ts">
+import { QueryClient } from '@tanstack/react-query'
+</file>
+
+<file path="src/lib/supabaseAdmin.ts">
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
+</file>
+
+<file path="src/lib/utils.ts">
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+export function cn(...inputs: ClassValue[])
+</file>
+
+<file path="src/lib/withDragAndDrop.ts">
+import dndImport from 'react-big-calendar/lib/addons/dragAndDrop'
+type DndModule = typeof dndImport
+function unwrapDnd(): DndModule
+</file>
+
+<file path="src/routes/DashboardPage.tsx">
+import DashboardLayout from '@/components/layout/DashboardLayout'
+export default function DashboardPage()
+</file>
+
+<file path="src/routes/TaskPage.tsx">
+import { useParams } from 'react-router'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+export default function TaskPage()
+</file>
+
+<file path="src/utils/format.ts">
+export function formatDateRange(
+  start: string | null,
+  end: string | null,
+): string
+export function formatDate(iso: string): string
+export function formatDateTime(iso: string): string
+export function todayIso(): string
+export function isInFerias(profile: {
+  ferias_inicio: string | null
+  ferias_fim: string | null
+} | null | undefined): boolean
+</file>
+
+<file path="src/App.tsx">
+import { BrowserRouter } from 'react-router'
+import AppRoutes from '@/routes'
+import { ToastProvider } from '@heroui/react'
+function App()
+</file>
+
+<file path="src/main.tsx">
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
+import App from './App.tsx'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { queryClient } from '@/lib/queryClient'
+</file>
+
+<file path="supabase/functions/_shared/cors.ts">
+export function json(body: unknown, status = 200): Response
+export function handleOptions(req: Request): Response | null
+</file>
+
+<file path="supabase/functions/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "lib": ["ESNext", "DOM"],
+    "types": ["@types/deno"],
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["./**/*.ts"]
+}
+</file>
+
+<file path="vite.config.ts">
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import path from 'node:path'
+</file>
+
+<file path="src/components/admin/CreateUserModal.tsx">
+import { useState, type FormEvent } from 'react'
+import { toast } from '@heroui/react'
+import { createUser } from '@/lib/supabaseClient'
+import { userColor } from '@/utils/colors'
+⋮----
+interface CreateUserModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: () => void
+}
+⋮----
+function reset()
+function validate(): string | null
+async function handleSubmit(e: FormEvent)
+⋮----
+{/* Username */}
+⋮----
+onChange=
+</file>
+
+<file path="src/components/admin/EditUserModal.tsx">
+import { useEffect, useState, type FormEvent } from 'react'
+import { toast } from '@heroui/react'
+import { updateUser, type AdminUser, type UserRoleName } from '@/lib/supabaseClient'
+import { userColor } from '@/utils/colors'
+⋮----
+interface EditUserModalProps {
+  user: AdminUser
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUpdated: () => void
+}
+⋮----
+async function handleSubmit(e: FormEvent)
+⋮----
+onChange=
+</file>
+
+<file path="src/components/ai/AIAssistantFloatingButton.tsx">
+interface AIAssistantFloatingButtonProps {
+  onClick: () => void
+  isOpen: boolean
+}
+export default function AIAssistantFloatingButton({
+  onClick,
+  isOpen,
+}: AIAssistantFloatingButtonProps)
+</file>
+
+<file path="src/components/auth/ResetPasswordPage.tsx">
+import { useState, useEffect, type FormEvent } from 'react'
+import { useNavigate, Link } from 'react-router'
+import { toast } from '@heroui/react'
+import { supabase } from '@/lib/supabaseClient'
+⋮----
+// Escuta mudança de auth caso o hash (#access_token=...) seja processado
+⋮----
+async function handleSubmit(e: FormEvent)
+</file>
+
+<file path="src/components/profile/FeriasAlert.tsx">
+import { Button, Modal } from '@heroui/react'
+import type { FeriasTask } from '@/lib/supabaseClient'
+import { formatDateRange } from '@/utils/format'
+interface FeriasAlertProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  inicio: string
+  fim: string
+  tasks: FeriasTask[]
+}
+export default function FeriasAlert({
+  open,
+  onOpenChange,
+  inicio,
+  fim,
+  tasks,
+}: FeriasAlertProps)
+</file>
+
+<file path="src/components/projects/ArchivedProjectsModal.tsx">
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast, Button } from '@heroui/react'
+import { listArchivedProjects, unarchiveProject } from '@/lib/api/projects'
+import type { Project } from '@/types/database'
+interface ArchivedProjectsModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onRestored?: (project: Project) => void
+}
+⋮----
+async function handleUnarchive(p: Project)
+</file>
+
+<file path="src/components/projects/ProjectModal.tsx">
+import { useEffect, useState, type FormEvent } from 'react'
+import { Check } from 'lucide-react'
+import { toast, Button } from '@heroui/react'
+import { createProject, updateProject, archiveProject } from '@/lib/api/projects'
+import type { Project } from '@/types/database'
+⋮----
+interface ProjectModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  project?: Project | null
+  onSaved: (project: Project) => void
+  onDeleted?: (projectId: string) => void
+}
+⋮----
+async function handleSubmit(e: FormEvent)
+async function handleArchive()
+⋮----
+{/* Header */}
+⋮----
+onChange=
+</file>
+
+<file path="src/components/tasks/CategoryFilter.tsx">
+import { categoryColors } from '@/utils/categories'
+interface CategoryFilterProps {
+  available: string[]
+  selected: string[]
+  onChange: (next: string[]) => void
+}
+⋮----
+function toggle(cat: string)
+</file>
+
+<file path="src/components/tasks/StatusSelect.tsx">
+import type { CSSProperties } from 'react'
+import {
+  STATUS_COLORS,
+  STATUS_LABELS,
+  TASK_STATUSES,
+  statusBorder,
+  statusSoftBg,
+} from '@/utils/status'
+import type { TaskStatus } from '@/types/database'
+interface StatusSelectProps {
+  value: TaskStatus
+  onChange: (status: TaskStatus) => void
+  ariaLabel?: string
+  size?: 'sm' | 'md'
+  className?: string
+}
+</file>
+
+<file path="src/hooks/usePreferences.ts">
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  getPreferences,
+  updatePreferences,
+  type PreferencesPatch,
+} from '@/lib/api/preferences'
+⋮----
+export function usePreferences()
+</file>
+
+<file path="src/lib/api/members.ts">
+import { supabase } from '@/lib/supabaseClient'
+export interface ProjectMember {
+  id: string
+  username: string
+  full_name: string | null
+  avatar_url?: string | null
+}
+export async function listProjectMembers(
+  projectId: string | null,
+): Promise<ProjectMember[]>
+</file>
+
+<file path="src/lib/api/preferences.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { DefaultView } from '@/types/database'
+export interface UserPreferences {
+  user_id: string
+  default_view: DefaultView
+  active_project_id: string | null
+  show_all_tasks: boolean
+  hide_done_tasks?: boolean
+  updated_at: string
+}
+⋮----
+export async function getPreferences(userId: string): Promise<UserPreferences>
+⋮----
+// ignore
+⋮----
+export type PreferencesPatch = Partial<
+  Pick<UserPreferences, 'default_view' | 'active_project_id' | 'show_all_tasks' | 'hide_done_tasks'>
+>
+export async function updatePreferences(
+  userId: string,
+  patch: PreferencesPatch,
+): Promise<void>
+</file>
+
+<file path="src/lib/extractors/index.ts">
+import mammoth from 'mammoth'
+⋮----
+export interface ExtractionResult {
+  text: string
+  charCount: number
+  truncated: boolean
+  fileType: string
+}
+⋮----
+export async function extractTextFromFile(file: File): Promise<ExtractionResult>
+async function extractFromPdf(file: File): Promise<string>
+⋮----
+// Se já passou do tamanho limite, interrompe
+⋮----
+async function extractFromDocx(file: File): Promise<string>
+/**
+ * Extrai texto e dados tabulares de planilha Excel XLSX/XLS usando SheetJS
+ */
+async function extractFromExcel(file: File): Promise<string>
+export function getFileIconClass(fileType: string): string
+export function formatFileSize(bytes: number): string
+</file>
+
+<file path="src/utils/categories.ts">
+export function hashString(input: string): number
+export function categoryColors(category: string):
+export function parseCategoriesText(text: string): string[]
+</file>
+
+<file path="src/utils/colors.ts">
+export function hashString(input: string): number
+⋮----
+export function userHue(userId: string): number
+export function userColor(userId: string): string
+export function userColorWithAlpha(userId: string, alpha: number): string
+export function userRowColor(userId: string): string
+</file>
+
+<file path="supabase/functions/r2-storage/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from 'npm:@aws-sdk/client-s3'
+import { json, handleOptions } from '../_shared/cors.ts'
+⋮----
+interface UploadPayload {
+  action: 'upload' | 'delete'
+  fileName?: string
+  fileType?: string
+  fileBase64?: string
+  fileKey?: string
+}
+</file>
+
+<file path="supabase/functions/send-email/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { json, handleOptions } from '../_shared/cors.ts'
+</file>
+
+<file path="supabase/functions/deno.json">
+{
+  "imports": {
+    "@supabase/supabase-js": "jsr:@supabase/supabase-js@2"
+  }
+}
+</file>
+
+<file path="src/components/admin/UserManagementDrawer.tsx">
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+import { userColor } from '@/utils/colors'
+import {
+  deactivateUser,
+  listUsers,
+  reactivateUser,
+  sendPasswordResetEmail,
+  generateRecoveryLink,
+  sendCustomEmail,
+  type AdminUser,
+} from '@/lib/supabaseClient'
+import CreateUserModal from '@/components/admin/CreateUserModal'
+import EditUserModal from '@/components/admin/EditUserModal'
+interface UserManagementDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+⋮----
+function refresh()
+async function handleDeactivate(u: AdminUser)
+async function handleSendResetPassword(u: AdminUser)
+async function handleReactivate(u: AdminUser)
+⋮----
+onOpenChange=
+</file>
+
+<file path="src/components/auth/LoginPage.tsx">
+import { useState, type FormEvent } from 'react'
+import { Navigate, useNavigate } from 'react-router'
+import { Button, TextField, Label, Input, Checkbox } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+export default function LoginPage()
+⋮----
+async function handleSubmit(e: FormEvent)
+</file>
+
+<file path="src/components/documents/DocumentsView.tsx">
+import { useState, useMemo } from 'react'
+import { toast } from '@heroui/react'
+import { useDocuments } from '@/hooks/useDocuments'
+import type { HubDocument } from '@/types/database'
+import { formatFileSize, getFileIconClass } from '@/lib/extractors'
+import DocumentUploadModal from './DocumentUploadModal'
+import DocumentDetailDrawer from './DocumentDetailDrawer'
+interface DocumentsViewProps {
+}
+type FileTypeFilter = 'all' | 'pdf' | 'docx' | 'xlsx' | 'csv' | 'txt' | 'other'
+export default function DocumentsView(
+⋮----
+async function handleCopyShortcut(doc: HubDocument)
+async function handleDelete(doc: HubDocument)
+function handleOpenDetails(doc: HubDocument)
+⋮----
+onChange=
+⋮----
+{/* Filtros rápidos de extensão */}
+⋮----
+onUpload=
+</file>
+
+<file path="src/components/documents/DocumentUploadModal.tsx">
+import { useState, useRef } from 'react'
+import {
+  extractTextFromFile,
+  formatFileSize,
+  getFileIconClass,
+  type ExtractionResult,
+} from '@/lib/extractors'
+interface DocumentUploadModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUpload: (data: {
+    file: File
+    title: string
+    tags: string[]
+  }) => Promise<void>
+}
+⋮----
+function resetState()
+⋮----
+async function handleFileSelected(file: File)
+function handleAddTag()
+function handleRemoveTag(tagToRemove: string)
+function handleKeyDownTag(e: React.KeyboardEvent)
+async function handleSubmit(e: React.FormEvent)
+⋮----
+onOpenChange(false)
+resetState()
+⋮----
+e.preventDefault()
+setIsDragging(true)
+⋮----
+setIsDragging(false)
+⋮----
+if (file) handleFileSelected(file)
+⋮----
+onClick=
+⋮----
+<i className=
+⋮----
+
+⋮----
+onChange=
+</file>
+
+<file path="src/components/links/LinkModal.tsx">
+import { useState, useEffect } from 'react'
+import type { HubLink } from '@/types/database'
+interface LinkModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  linkToEdit?: HubLink | null
+  onSave: (data: {
+    id?: string
+    title: string
+    url: string
+    description?: string | null
+    tags?: string[]
+  }) => Promise<void>
+}
+⋮----
+function handleAddTag()
+function handleRemoveTag(tagToRemove: string)
+function handleKeyDownTag(e: React.KeyboardEvent)
+async function handleSubmit(e: React.FormEvent)
+⋮----
+onChange=
+</file>
+
+<file path="src/components/links/LinksView.tsx">
+import { useState, useMemo } from 'react'
+import { toast } from '@heroui/react'
+import { useLinks } from '@/hooks/useLinks'
+import type { HubLink } from '@/types/database'
+import LinkModal from './LinkModal'
+export default function LinksView()
+⋮----
+// Coleta todas as tags únicas presentes nos links
+⋮----
+// Filtra links por busca de texto e tag selecionada
+⋮----
+function getDomainFromUrl(url: string)
+function getLinkIcon(url: string)
+async function handleCopyUrl(url: string)
+async function handleCopyShortcut(link: HubLink)
+async function handleDelete(id: string)
+⋮----
+onChange=
+⋮----
+{/* Tags Pills */}
+⋮----
+setEditingLink(link)
+setModalOpen(true)
+⋮----
+onSave=
+</file>
+
+<file path="src/components/tasks/LexicalEditor.tsx">
+import type { SerializedEditorState } from 'lexical'
+import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical'
+import { LexicalComposer } from '@lexical/react/LexicalComposer'
+import { ContentEditable } from '@lexical/react/LexicalContentEditable'
+import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
+import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
+import { ListPlugin } from '@lexical/react/LexicalListPlugin'
+import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
+import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
+import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
+import { $createLinkNode, LinkNode } from '@lexical/link'
+import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
+import { HeadingNode, QuoteNode } from '@lexical/rich-text'
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+⋮----
+interface LexicalEditorProps {
+  initialValue: SerializedEditorState | null
+  onChange: (json: SerializedEditorState) => void
+  placeholder?: string
+}
+function Toolbar()
+⋮----
+function insertLink()
+⋮----
+<button type="button" title="Negrito (Ctrl+B)" className=
+⋮----
+<button type="button" title="Itálico (Ctrl+I)" className=
+⋮----
+<button type="button" title="Sublinhado (Ctrl+U)" className=
+⋮----
+<button type="button" title="Lista com marcadores" className=
+⋮----
+<button type="button" title="Lista numerada" className=
+</file>
+
+<file path="src/components/views/KanbanView.tsx">
+import { useState } from 'react'
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from '@hello-pangea/dnd'
+import { toast, Button } from '@heroui/react'
+import TaskCard from '@/components/tasks/TaskCard'
+import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
+import { TASK_STATUSES } from '@/hooks/useTasks'
+import type { ProjectMember } from '@/lib/api/members'
+import type { NewTaskInput } from '@/lib/api/tasks'
+import type { Project, Task, TaskStatus } from '@/types/database'
+interface KanbanViewProps {
+  tasks: Task[]
+  projectId: string | null
+  projects: Project[]
+  currentUserId: string
+  onOpenTask: (task: Task) => void
+  onOpenNewTask: () => void
+  moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+  reorderTask: (args: {
+    id: string
+    status?: TaskStatus
+    orderIndex?: number
+  }) => Promise<unknown>
+  createTask: (input: NewTaskInput) => Promise<Task>
+  memberOf?: (id: string | null) => ProjectMember | null
+}
+⋮----
+function handleToggleDone(task: Task)
+function handleToggleSubtask(subtask: Task, done: boolean)
+async function handleCreateSubtask(parentId: string, title: string)
+function persistColumnOrder(ordered: Task[])
+function onDragEnd(result: DropResult)
+</file>
+
+<file path="src/hooks/useDocuments.ts">
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  listDocuments,
+  uploadDocument,
+  updateDocument,
+  deleteDocument,
+  type UploadDocumentInput,
+  type UpdateDocumentInput,
+} from '@/lib/api/documents'
+import type { HubDocument } from '@/types/database'
+import { toast } from '@heroui/react'
+export function useDocuments()
+</file>
+
+<file path="src/hooks/useLinks.ts">
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  listLinks,
+  createLink,
+  updateLink,
+  deleteLink,
+  type CreateLinkInput,
+  type UpdateLinkInput,
+} from '@/lib/api/links'
+import type { HubLink } from '@/types/database'
+import { toast } from '@heroui/react'
+export function useLinks()
+</file>
+
+<file path="src/hooks/useTasks.ts">
+import { useEffect, useMemo } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabaseClient'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  createTask,
+  deleteTask,
+  fetchTasks,
+  moveTaskStatus,
+  updateTask,
+  type NewTaskInput,
+  type TaskPatch,
+} from '@/lib/api/tasks'
+import type { Task, TaskStatus } from '@/types/database'
+⋮----
+function tasksKey(showAll: boolean): (string | boolean)[]
+export function useTasks(showAll: boolean)
+⋮----
+function setTasks(updater: (tasks: Task[]) => Task[])
+</file>
+
+<file path="src/lib/api/documents.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { HubDocument } from '@/types/database'
+import { extractTextFromFile } from '@/lib/extractors'
+export interface UploadDocumentInput {
+  file: File
+  title?: string
+  tags?: string[]
+  task_id?: string | null
+}
+export interface UpdateDocumentInput {
+  id: string
+  title?: string
+  tags?: string[]
+  task_id?: string | null
+}
+export async function listDocuments(): Promise<HubDocument[]>
+function fileToBase64(file: File): Promise<string>
+export async function uploadDocument(input: UploadDocumentInput): Promise<HubDocument>
+⋮----
+// 4. Tenta invocar a Edge Function r2-storage
+⋮----
+export async function updateDocument(input: UpdateDocumentInput): Promise<HubDocument>
+export async function deleteDocument(doc: HubDocument): Promise<void>
+</file>
+
+<file path="src/lib/api/links.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { HubLink } from '@/types/database'
+export interface CreateLinkInput {
+  title: string
+  url: string
+  description?: string | null
+  tags?: string[]
+  task_id?: string | null
+}
+export interface UpdateLinkInput {
+  id: string
+  title?: string
+  url?: string
+  description?: string | null
+  tags?: string[]
+  task_id?: string | null
+}
+export async function listLinks(): Promise<HubLink[]>
+export async function createLink(input: CreateLinkInput): Promise<HubLink>
+export async function updateLink(input: UpdateLinkInput): Promise<HubLink>
+export async function deleteLink(id: string): Promise<void>
+</file>
+
+<file path="src/lib/api/notifications.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { Notification } from '@/types/database'
+⋮----
+export async function getNotifications(): Promise<Notification[]>
+export async function getUnreadCount(): Promise<number>
+export async function markNotificationRead(id: string): Promise<void>
+export async function markAllNotificationsRead(): Promise<void>
+export async function deleteNotification(id: string): Promise<void>
+export async function deleteAllNotifications(): Promise<void>
+</file>
+
+<file path="src/routes/index.tsx">
+import { Navigate, Route, Routes } from 'react-router'
+import LoginPage from '@/components/auth/LoginPage'
+import ResetPasswordPage from '@/components/auth/ResetPasswordPage'
+import ProtectedRoute from '@/components/auth/ProtectedRoute'
+import UserManagement from '@/components/admin/UserManagement'
+import DashboardPage from '@/routes/DashboardPage'
+import TaskPage from '@/routes/TaskPage'
+</file>
+
+<file path="supabase/functions/notify-due-tasks/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { json, handleOptions } from '../_shared/cors.ts'
+⋮----
+function dateInDays(days: number): string
+function escapeHtml(text: string): string
+function reminderEmail(
+  title: string,
+  projectName: string | null,
+  taskId: string,
+):
+async function sendViaResend(
+  to: string,
+  subject: string,
+  html: string,
+): Promise<void>
+async function jobDue(): Promise<
+async function jobQueue(): Promise<
+</file>
+
+<file path="src/components/admin/UserManagement.tsx">
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+import { userColor } from '@/utils/colors'
+import DashboardLayout from '@/components/layout/DashboardLayout'
+import {
+  deactivateUser,
+  listUsers,
+  reactivateUser,
+  sendPasswordResetEmail,
+  generateRecoveryLink,
+  sendCustomEmail,
+  type AdminUser,
+} from '@/lib/supabaseClient'
+import CreateUserModal from '@/components/admin/CreateUserModal'
+import EditUserModal from '@/components/admin/EditUserModal'
+⋮----
+function refresh()
+async function handleDeactivate(u: AdminUser)
+async function handleSendResetPassword(u: AdminUser)
+async function handleReactivate(u: AdminUser)
+⋮----
+onOpenChange=
+</file>
+
+<file path="src/components/layout/TopBar.tsx">
+import { useEffect, useRef, useState } from 'react'
+import type { DefaultView, Project } from '@/types/database'
+import {
+  Button,
+  Modal,
+  TextField,
+  Label,
+  Input,
+  Dropdown,
+} from '@heroui/react'
+import NotificationBell from '@/components/notifications/NotificationBell'
+import AvatarDropdown from '@/components/profile/AvatarDropdown'
+import {
+  BUILTIN_PRESETS,
+  type LayoutState,
+  type SavedPreset,
+} from '@/lib/layout'
+⋮----
+interface TopBarProps {
+  projects: Project[]
+  activeProjectId: string | null
+  layout: LayoutState
+  onViewClick: (view: DefaultView) => void
+  onViewHold: (view: DefaultView) => void
+  presets: SavedPreset[]
+  onApplyPreset: (scheme: LayoutState) => void
+  onSavePreset: (name: string) => void
+  onDeletePreset: (id: string) => void
+  onOpenNewTask?: () => void
+  hideDoneTasks?: boolean
+  onHideDoneChange?: (hide: boolean) => void
+}
+⋮----
+function pressStart(view: DefaultView)
+function pressEnd()
+function press(view: DefaultView)
+function handleSavePreset()
+⋮----
+{/* Left: Breadcrumbs / Active Space */}
+⋮----
+onTouchStart=
+</file>
+
+<file path="src/components/profile/AvatarDropdown.tsx">
+import { Avatar, Badge, Dropdown } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+import { userColor } from '@/utils/colors'
+import { isInFerias } from '@/utils/format'
+⋮----
+function openProfile()
+⋮----
+window.dispatchEvent(new CustomEvent('hub:open-users-drawer'))
+</file>
+
+<file path="src/components/profile/ProfileDrawer.tsx">
+import { useEffect, useState, type FormEvent } from 'react'
+import { toast, Label, Input } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
+import { useAuth } from '@/hooks/useAuth'
+import { userColor } from '@/utils/colors'
+import {
+  changePassword,
+  checkTasksInPeriod,
+  updateFerias,
+  updateProfile,
+  uploadAvatar,
+  type FeriasTask,
+} from '@/lib/supabaseClient'
+import FeriasAlert from '@/components/profile/FeriasAlert'
+interface ProfileDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+⋮----
+function handleFileChange(e: React.ChangeEvent<HTMLInputElement>)
+function validate(): string | null
+async function handleSubmit(e: FormEvent)
+</file>
+
+<file path="src/components/profile/ProfileModal.tsx">
+import { useEffect, useState, type FormEvent } from 'react'
+import { toast, Button, Modal, TextField, Label, Input } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+import { userColor } from '@/utils/colors'
+import {
+  changePassword,
+  checkTasksInPeriod,
+  updateFerias,
+  updateProfile,
+  uploadAvatar,
+  type FeriasTask,
+} from '@/lib/supabaseClient'
+import FeriasAlert from '@/components/profile/FeriasAlert'
+import DateInput from '@/components/ui/DateInput'
+interface ProfileModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}
+⋮----
+function handleFileChange(e: React.ChangeEvent<HTMLInputElement>)
+function validate(): string | null
+async function handleSubmit(e: FormEvent)
+</file>
+
+<file path="src/lib/api/projects.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type { Project } from '@/types/database'
+export async function listProjects(): Promise<Project[]>
+export interface NewProjectInput {
+  name: string
+  description?: string | null
+  color?: string
+}
+export interface UpdateProjectInput {
+  id: string
+  name?: string
+  description?: string | null
+  color?: string
+}
+export async function createProject(input: NewProjectInput): Promise<Project>
+export async function updateProject(input: UpdateProjectInput): Promise<Project>
+export async function archiveProject(id: string): Promise<void>
+export async function listArchivedProjects(): Promise<Project[]>
+export async function unarchiveProject(id: string): Promise<void>
+</file>
+
+<file path="supabase/functions/admin-users/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { json, handleOptions } from '../_shared/cors.ts'
+⋮----
+interface AdminUserPayload {
+  action: 'list' | 'create' | 'update' | 'deactivate' | 'reactivate' | 'generate_recovery_link'
+  email?: string
+  password?: string
+  username?: string
+  full_name?: string
+  role?: 'admin' | 'member'
+  user_id?: string
+  redirect_to?: string
+}
+⋮----
+async function isAdmin(authHeader: string | null): Promise<boolean>
+function isDuplicateUsername(error: unknown): boolean
+</file>
+
+<file path="supabase/functions/project-members/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { json, handleOptions } from '../_shared/cors.ts'
+</file>
+
+<file path="src/components/documents/DocumentDetailDrawer.tsx">
+import { useState, useEffect } from 'react'
+import { toast } from '@heroui/react'
+import type { HubDocument } from '@/types/database'
+import { formatFileSize, getFileIconClass } from '@/lib/extractors'
+interface DocumentDetailDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  document: HubDocument | null
+  onDelete?: (doc: HubDocument) => void
+}
+type ViewMode = 'split' | 'original' | 'text'
+⋮----
+function handleKeyDown(e: KeyboardEvent)
+⋮----
+async function handleCopyUrl()
+async function handleCopyShortcut()
+async function handleCopyText()
+function renderHighlightedText(text: string)
+⋮----
+onChange=
+</file>
+
+<file path="src/components/notifications/NotificationBell.tsx">
+import { useEffect, useState, useTransition } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Popover, toast } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabaseClient'
+import {
+  getNotifications,
+  getUnreadCount,
+  markAllNotificationsRead,
+  markNotificationRead,
+  deleteNotification,
+  deleteAllNotifications,
+} from '@/lib/api/notifications'
+import type { Notification, NotificationType } from '@/types/database'
+import { formatDateTime } from '@/utils/format'
+⋮----
+function taskIdFromNotification(n: Notification): string | null
+// Reproduz um bip sonoro suave de notificação usando Web Audio API
+function playNotificationSound()
+interface NotificationBellProps {
+  tone?: 'light' | 'dark'
+}
+⋮----
+function refetchAll()
+async function handleOpen(notification: Notification)
+async function handleMarkAll()
+async function handleDelete(e: React.MouseEvent, id: string)
+async function handleClearAll()
+⋮----
+{/* Abas: Todas / Não Lidas */}
+</file>
+
+<file path="src/components/tasks/SubtaskModal.tsx">
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Button, Modal } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
+import LexicalEditor from '@/components/tasks/LexicalEditor'
+import StatusSelect from '@/components/tasks/StatusSelect'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
+import {
+  PRIORITY_LABELS,
+  TASK_PRIORITIES,
+} from '@/utils/status'
+import type { SerializedEditorState } from 'lexical'
+import type {
+  Json,
+  Project,
+  Task,
+  TaskPriority,
+  TaskStatus,
+} from '@/types/database'
+import type { NewTaskInput } from '@/lib/api/tasks'
+interface SubtaskModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  parent: Task | null
+  projects: Project[]
+  currentUserId: string
+  createTask: (input: NewTaskInput) => Promise<Task>
+  onCreated?: () => void
+}
+⋮----
+function parentAssignees(parent: Task): string[]
+export default function SubtaskModal({
+  open,
+  onOpenChange,
+  parent,
+  projects,
+  currentUserId,
+  createTask,
+  onCreated,
+}: SubtaskModalProps)
+⋮----
+function toggleAssignee(userId: string)
+async function handleSubmit(e: FormEvent)
+⋮----
+{/* Título */}
+⋮----
+{/* Status / Prioridade */}
+⋮----
+{/* Responsáveis */}
+⋮----
+<option key=
+⋮----
+{/* Datas & horas */}
+⋮----
+onChange=
+</file>
+
+<file path="src/components/tasks/TaskCard.tsx">
+import { useState } from 'react'
+import { PRIORITY_ICONS } from '@/utils/status'
+import { categoryColors } from '@/utils/categories'
+import { formatDateRange, todayIso } from '@/utils/format'
+import { userColor, userRowColor } from '@/utils/colors'
+import type { ProjectMember } from '@/lib/api/members'
+import type { Task } from '@/types/database'
+interface TaskCardProps {
+  task: Task
+  subtasks?: Task[]
+  onOpen: (task: Task) => void
+  onToggleSubtask?: (subtask: Task, done: boolean) => void
+  onToggleDone?: (task: Task) => void
+  onCreateSubtask?: (parentId: string, title: string) => void
+  compact?: boolean
+  project?: { name: string; color: string } | null
+  parentTaskTitle?: string | null
+  memberOf?: (id: string | null) => ProjectMember | null
+}
+export default function TaskCard({
+  task,
+  subtasks = [],
+  onOpen,
+  onToggleSubtask,
+  onToggleDone,
+  onCreateSubtask,
+  compact = false,
+  project = null,
+  parentTaskTitle = null,
+  memberOf,
+}: TaskCardProps)
+⋮----
+function handleCreateSubtaskSubmit(e: React.KeyboardEvent<HTMLInputElement>)
+⋮----
+{/* Parent Task Badge (if this card is a subtask in standalone view) */}
+⋮----
+{/* Title, Quick Check & Edit Button */}
+⋮----
+e.stopPropagation()
+onToggleDone(task)
+⋮----
+setSubtasksExpanded(!subtasksExpanded)
+⋮----
+onClick=
+</file>
+
+<file path="src/lib/supabaseClient.ts">
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
+⋮----
+export function clearPersistedSession(): void
+export type UserRoleName = 'admin' | 'member'
+export interface AdminUser {
+  id: string
+  email: string
+  username: string
+  full_name: string | null
+  avatar_url?: string | null
+  role: UserRoleName
+  created_at: string
+  last_sign_in_at: string | null
+  banned_until: string | null
+}
+export interface CreateUserInput {
+  email: string
+  password: string
+  username: string
+  full_name?: string
+}
+export interface UpdateUserInput {
+  user_id: string
+  email?: string
+  password?: string
+  username?: string
+  full_name?: string
+  role?: UserRoleName
+}
+interface AdminFunctionResponse<T> {
+  data?: T
+  error?: string
+}
+async function invokeAdmin<T>(
+  body: Record<string, unknown>,
+): Promise<AdminFunctionResponse<T>>
+export async function createUser(input: CreateUserInput): Promise<
+export async function listUsers(): Promise<AdminUser[]>
+export async function updateUser(input: UpdateUserInput): Promise<
+export async function deactivateUser(userId: string): Promise<
+export async function reactivateUser(userId: string): Promise<
+export async function sendPasswordResetEmail(email: string): Promise<
+export async function generateRecoveryLink(email: string): Promise<
+export async function sendCustomEmail(input: {
+  to: string
+  subject: string
+  html: string
+}): Promise<
+export interface FeriasTask {
+  id: string
+  title: string
+  start_date: string | null
+  due_date: string | null
+}
+export async function updateProfile(input: {
+  full_name?: string | null
+  avatar_url?: string | null
+}): Promise<
+⋮----
+export async function uploadAvatar(file: File): Promise<
+export async function changePassword(
+  newPassword: string,
+): Promise<
+export async function updateFerias(
+  inicio: string,
+  fim: string,
+): Promise<
+export async function checkTasksInPeriod(
+  inicio: string,
+  fim: string,
+): Promise<
+</file>
+
+<file path="src/utils/status.ts">
+import type { TaskPriority, TaskStatus } from '@/types/database'
+⋮----
+export function statusColor(status: TaskStatus): string
+export function statusSoftBg(status: TaskStatus): string
+export function statusBorder(status: TaskStatus): string
+export function statusLabel(status: TaskStatus): string
+</file>
+
+<file path="src/components/ui/DateInput.tsx">
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { createPortal } from 'react-dom'
+interface DateInputProps {
+  value: string
+  onChange: (iso: string) => void
+  min?: string
+  className?: string
+  wrapperClassName?: string
+  ariaLabel?: string
+  title?: string
+  placeholder?: string
+  disabled?: boolean
+  inputRef?: React.Ref<HTMLInputElement>
+  onBlur?: () => void
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void
+  onFocus?: () => void
+}
+function pad(n: number): string
+export function formatIsoToBr(iso: string): string
+/**
+ * Interpreta texto digitado como data brasileira.
+ * Aceita 8 dígitos (ddmmaaaa) ou 6 dígitos (ddmmaa → 20aa).
+ * Retorna ISO `yyyy-mm-dd` ou `null` se inválido.
+ */
+export function parseBrDate(text: string): string | null
+⋮----
+function isoFromParts(y: number, m: number, d: number): string
+⋮----
+function handlePointerDown(e: MouseEvent)
+⋮----
+function emit(iso: string)
+function openCalendar()
+function pickDate(iso: string)
+function handleChange(e: React.ChangeEvent<HTMLInputElement>)
+function handleBlur()
+⋮----
+// Texto inválido: reverte para o valor atual e sinaliza
+⋮----
+function handleKeyDown(e: KeyboardEvent<HTMLInputElement>)
+function handleFocus()
+function setRefs(el: HTMLInputElement | null)
+⋮----
+function renderCalendar()
+⋮----
+function shiftMonth(delta: number)
+⋮----
+onMouseDown={(e) => e.preventDefault()}
+onClick=
+</file>
+
+<file path="src/lib/api/tasks.ts">
+import { supabase } from '@/lib/supabaseClient'
+import type {
+  Json,
+  Task,
+  TaskPriority,
+  TaskStatus,
+} from '@/types/database'
+export interface NewTaskInput {
+  title: string
+  project_id: string
+  parent_id?: string | null
+  assigned_to?: string | null
+  assignees?: string[] | null
+  status?: TaskStatus
+  priority?: TaskPriority
+  start_date?: string | null
+  due_date?: string | null
+  estimated_hours?: number | null
+  description?: Json | null
+  tags?: string[] | null
+  categories?: string[] | null
+  order_index?: number
+}
+export type TaskPatch = Partial<
+  Omit<Task, 'id' | 'created_at' | 'updated_at'>
+>
+export async function fetchTasks(
+  showAll: boolean,
+  userId: string,
+): Promise<Task[]>
+export async function createTask(input: NewTaskInput): Promise<Task>
+export async function updateTask(id: string, patch: TaskPatch): Promise<Task>
+export async function deleteTask(id: string): Promise<void>
+export async function moveTaskStatus(
+  id: string,
+  status: TaskStatus,
+): Promise<void>
+</file>
+
+<file path="src/types/database.ts">
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+export type TaskStatus = 'uncertain' | 'backlog' | 'todo' | 'in_progress' | 'review' | 'done'
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type UserRole = 'admin' | 'member'
+export type NotificationType = 'task_assigned' | 'due_date_reminder' | 'mention'
+export type DefaultView = 'gantt' | 'kanban' | 'lista' | 'calendario'
+export type Profile = {
+  id: string
+  username: string
+  full_name: string | null
+  avatar_url: string | null
+  role: UserRole
+  ferias_inicio: string | null
+  ferias_fim: string | null
+  created_at: string
+}
+export type UserPreferences = {
+  user_id: string
+  default_view: DefaultView
+  active_project_id: string | null
+  show_all_tasks: boolean
+  hide_done_tasks?: boolean
+  updated_at: string
+}
+export type Project = {
+  id: string
+  name: string
+  description: string | null
+  color: string
+  owner_id: string | null
+  archived: boolean
+  created_at: string
+}
+export type Task = {
+  id: string
+  title: string
+  description: Json | null
+  project_id: string | null
+  parent_id: string | null
+  status: TaskStatus
+  priority: TaskPriority
+  start_date: string | null
+  due_date: string | null
+  estimated_hours: number | null
+  actual_hours: number | null
+  order_index: number
+  assigned_to: string | null
+  assignees?: string[] | null
+  created_by: string | null
+  tags?: string[] | null
+  categories?: string[] | null
+  created_at: string
+  updated_at: string
+}
+export type TaskComment = {
+  id: string
+  task_id: string
+  author_id: string
+  content: string
+  created_at: string
+}
+export type Notification = {
+  id: string
+  user_id: string
+  type: NotificationType
+  content: string
+  link: string | null
+  read: boolean
+  created_at: string
+  task_id: string | null
+}
+export type HubLink = {
+  id: string
+  title: string
+  url: string
+  description: string | null
+  tags: string[]
+  task_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export type HubDocument = {
+  id: string
+  title: string
+  file_name: string
+  file_type: string
+  file_size: number
+  file_key: string
+  file_url: string
+  extracted_text: string | null
+  tags: string[]
+  task_id: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+export interface Database {
+  public: {
+    Tables: {
+      profiles: {
+        Row: Profile
+        Insert: {
+          id: string
+          username: string
+          full_name?: string | null
+          avatar_url?: string | null
+          role?: UserRole
+          ferias_inicio?: string | null
+          ferias_fim?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          username?: string
+          full_name?: string | null
+          avatar_url?: string | null
+          role?: UserRole
+          ferias_inicio?: string | null
+          ferias_fim?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_preferences: {
+        Row: UserPreferences
+        Insert: {
+          user_id: string
+          default_view?: DefaultView
+          active_project_id?: string | null
+          show_all_tasks?: boolean
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          default_view?: DefaultView
+          active_project_id?: string | null
+          show_all_tasks?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      projects: {
+        Row: Project
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          color?: string
+          owner_id?: string | null
+          archived?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          color?: string
+          owner_id?: string | null
+          archived?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: Task
+        Insert: {
+          id?: string
+          title: string
+          description?: Json | null
+          project_id?: string | null
+          parent_id?: string | null
+          status?: TaskStatus
+          priority?: TaskPriority
+          start_date?: string | null
+          due_date?: string | null
+          estimated_hours?: number | null
+          actual_hours?: number | null
+          order_index?: number
+          assigned_to?: string | null
+          assignees?: string[] | null
+          created_by?: string | null
+          tags?: string[] | null
+          categories?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          description?: Json | null
+          project_id?: string | null
+          parent_id?: string | null
+          status?: TaskStatus
+          priority?: TaskPriority
+          start_date?: string | null
+          due_date?: string | null
+          estimated_hours?: number | null
+          actual_hours?: number | null
+          order_index?: number
+          assigned_to?: string | null
+          assignees?: string[] | null
+          created_by?: string | null
+          tags?: string[] | null
+          categories?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      task_comments: {
+        Row: TaskComment
+        Insert: {
+          id?: string
+          task_id: string
+          author_id: string
+          content: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          task_id?: string
+          author_id?: string
+          content?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: Notification
+        Insert: {
+          id?: string
+          user_id: string
+          type: NotificationType
+          content: string
+          link?: string | null
+          read?: boolean
+          created_at?: string
+          task_id?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: NotificationType
+          content?: string
+          link?: string | null
+          read?: boolean
+          created_at?: string
+          task_id?: string | null
+        }
+        Relationships: []
+      }
+      hub_links: {
+        Row: HubLink
+        Insert: {
+          id?: string
+          title: string
+          url: string
+          description?: string | null
+          tags?: string[]
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          url?: string
+          description?: string | null
+          tags?: string[]
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      hub_documents: {
+        Row: HubDocument
+        Insert: {
+          id?: string
+          title: string
+          file_name: string
+          file_type: string
+          file_size?: number
+          file_key: string
+          file_url: string
+          extracted_text?: string | null
+          tags?: string[]
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          file_name?: string
+          file_type?: string
+          file_size?: number
+          file_key?: string
+          file_url?: string
+          extracted_text?: string | null
+          tags?: string[]
+          task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: Record<string, never>
+    Functions: {
+      resolve_login_email: {
+        Args: { p_username: string };
+        Returns: string;
+      };
+      is_project_participant: {
+        Args: { p_project_id: string };
+        Returns: boolean;
+      };
+    }
+    Enums: Record<string, never>
+  }
+}
+</file>
+
+<file path="src/components/tasks/TaskDrawer.tsx">
+import { useEffect, useRef, useState } from 'react'
+import {
+  toast,
+  Button,
+  Label,
+  Checkbox,
+  Separator,
+  Select,
+  ListBox,
+} from '@heroui/react'
+import LexicalEditor from '@/components/tasks/LexicalEditor'
+import StatusSelect from '@/components/tasks/StatusSelect'
+import DateInput from '@/components/ui/DateInput'
+import { useTaskComments } from '@/hooks/useTaskComments'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
+import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
+import { formatDateTime, todayIso } from '@/utils/format'
+import {
+  PRIORITY_LABELS,
+  TASK_PRIORITIES,
+} from '@/utils/status'
+import type { SerializedEditorState } from 'lexical'
+import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
+interface TaskDrawerProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  task: Task | null
+  projectId: string | null
+  projects: Project[]
+  creator: {
+    currentUserId: string
+    createTask: (input: {
+      title: string
+      project_id: string
+      parent_id?: string | null
+      assigned_to?: string | null
+      assignees?: string[] | null
+      status?: TaskStatus
+      start_date?: string | null
+      due_date?: string | null
+      description?: Json | null
+      tags?: string[] | null
+      categories?: string[] | null
+    }) => Promise<Task>
+    updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
+    deleteTask: (id: string) => Promise<unknown>
+    moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+    childrenOf: (id: string) => Task[]
+    refreshTasks?: () => void
+  }
+}
+⋮----
+function extractDescriptionText(description: unknown): string
+⋮----
+function traverse(node: unknown)
+⋮----
+function buildSimpleLexicalJson(text: string): Json
+⋮----
+// New subtask inputs
+⋮----
+function commitTaskPatch(patch: Partial<Task>)
+function handleTitleChange(value: string)
+function handleDescriptionChange(json: SerializedEditorState)
+function handleManualSave()
+function handleStartDate(value: string)
+function handleDueDate(value: string)
+function handleToggleAssignee(userId: string)
+function handleAddTag()
+function handleRemoveTag(tagToRemove: string)
+function handleAddCategory()
+function handleRemoveCategory(catToRemove: string)
+async function handleCreate()
+async function handleCreateSubtask()
+function handleUpdateSubtask(subtaskId: string, patch: Partial<Task>)
+function handleToggleSubtask(subtaskId: string, isDone: boolean)
+function handleDeleteSubtask(subtaskId: string)
+async function handleAddComment()
+async function handleDelete()
+⋮----
+{/* Backdrop */}
+⋮----
+{/* Slide-over Drawer strictly on the RIGHT side */}
+⋮----
+{/* Drawer Header */}
+⋮----
+onChange=
+⋮----
+disabled=
+⋮----
+{/* Enhanced Subtasks Section: Checkbox, Title, Description & Due Date */}
+⋮----
+{/* Add New Subtask Form */}
+⋮----
+isDisabled=
+⋮----
+{/* Comments Section */}
+</file>
+
+<file path="src/components/views/CalendarView.tsx">
+import { useState, useMemo } from 'react'
+import { Calendar, momentLocalizer, type View, type EventProps } from 'react-big-calendar'
+import type { withDragAndDropProps } from 'react-big-calendar/lib/addons/dragAndDrop'
+import { withDragAndDrop } from '@/lib/withDragAndDrop'
+⋮----
+import moment from 'moment/min/moment-with-locales'
+import { toast, Button } from '@heroui/react'
+import { userColor } from '@/utils/colors'
+import { formatDate, todayIso } from '@/utils/format'
+import type { Project, Task } from '@/types/database'
+import type { ProjectMember } from '@/lib/api/members'
+⋮----
+interface CalendarEvent {
+  id: string
+  title: string
+  start: Date
+  end: Date
+  allDay: boolean
+  isSpan: boolean
+  isOverdue: boolean
+  task: Task
+}
+interface CalendarViewProps {
+  tasks: Task[]
+  projects?: Project[]
+  memberOf?: (id: string | null) => ProjectMember | null
+  onOpenTask: (task: Task) => void
+  onSelectSlot: (start: Date) => void
+  updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
+}
+⋮----
+function addDays(date: Date, days: number): Date
+function toDate(iso: string | null): Date | null
+⋮----
+const handleEventDrop: withDragAndDropProps<CalendarEvent>['onEventDrop'] = ({
+    event,
+    start,
+    end,
+}) =>
+const handleEventResize: withDragAndDropProps<CalendarEvent>['onEventResize'] = ({
+    event,
+    start,
+    end,
+}) =>
+function CustomEventComponent(
+⋮----
+e.stopPropagation()
+onSelectSlot(date)
+⋮----
+{/* Right Side: Mode Switcher & Month Quick Jump */}
+⋮----
+{/* Mode Switcher */}
+</file>
+
+<file path="src/components/tasks/TaskWorkspace.tsx">
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from '@heroui/react'
+import TaskDrawer from '@/components/tasks/TaskDrawer'
+import NewTaskModal, {
+  type NewTaskInput,
+} from '@/components/tasks/NewTaskModal'
+import KanbanView from '@/components/views/KanbanView'
+import ListView from '@/components/views/ListView'
+import GanttView from '@/components/views/GanttView'
+import CalendarView from '@/components/views/CalendarView'
+import { useAuth } from '@/hooks/useAuth'
+import { usePreferences } from '@/hooks/usePreferences'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { useTasks } from '@/hooks/useTasks'
+import {
+  equalizeRatios,
+  shiftRatio,
+  type LayoutState,
+  type ViewLayout,
+} from '@/lib/layout'
+import type {
+  DefaultView,
+  Json,
+  Project,
+  Task,
+} from '@/types/database'
+interface TaskWorkspaceProps {
+  initialTaskId?: string
+  projects: Project[]
+  showAllTasks: boolean
+  hideDoneTasks?: boolean
+  layout: LayoutState
+  onLayoutChange: (layout: LayoutState) => void
+}
+function ResizeHandle({
+  orientation,
+  containerRef,
+  onShift,
+  onReset,
+}: {
+  orientation: ViewLayout
+  containerRef: RefObject<HTMLDivElement | null>
+  onShift: (deltaPct: number) => void
+  onReset: () => void
+})
+⋮----
+function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>)
+function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>)
+function handlePointerUp()
+⋮----
+async function handleCustomOpenTask(e: Event)
+⋮----
+function openTask(task: Task)
+function openNewTask(start?: Date)
+function closeDrawer(open: boolean)
+function refreshTasks()
+async function handleCreateNewTask(input: NewTaskInput)
+function renderView(v: DefaultView)
+⋮----
+onOpenNewTask=
+⋮----
+onReset=
+</file>
+
+<file path="src/components/views/ListView.tsx">
+import { useMemo, useState, useRef, useEffect } from 'react'
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DraggableProvided,
+  type DropResult,
+} from '@hello-pangea/dnd'
+import { toast, Button } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
+import CategoryFilter from '@/components/tasks/CategoryFilter'
+import StatusSelect from '@/components/tasks/StatusSelect'
+import { userColor } from '@/utils/colors'
+import { categoryColors } from '@/utils/categories'
+import { formatDate, todayIso } from '@/utils/format'
+import {
+  STATUS_LABELS,
+  TASK_PRIORITIES,
+} from '@/utils/status'
+import type { ProjectMember } from '@/lib/api/members'
+import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
+interface ListViewProps {
+  tasks: Task[]
+  projects: Project[]
+  grouped: boolean
+  onOpenTask: (task: Task) => void
+  memberOf: (id: string | null) => ProjectMember | null
+  moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+  updateTask?: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
+  deleteTask: (id: string) => Promise<unknown>
+}
+type SortField = 'manual' | 'status' | 'due_date' | 'priority' | 'title'
+type SortDirection = 'asc' | 'desc'
+type EditableField = 'title' | 'description' | 'due_date' | 'priority' | 'categories'
+⋮----
+function extractDescriptionText(description: unknown): string
+⋮----
+function traverse(node: unknown)
+⋮----
+function buildSimpleLexicalJson(text: string): Json
+⋮----
+function droppableIdForSection(projectId: string | null): string
+⋮----
+onChange=
+⋮----
+onDoubleClick=
+⋮----
+{/* Subtasks Count */}
+⋮----
+{/* Table Top Counter Bar */}
+⋮----
+{/* Crystal-Clear, High-Contrast Table Header */}
+⋮----
+function toggleCollapseProject(projectId: string)
+function handleSortBy(field: SortField)
+function handleCommitField(taskId: string, field: EditableField, value: string | string[])
+⋮----
+function appendChildren(parentId: string, depth: number)
+⋮----
+function handleToggleDone(task: Task)
+function handleChangeStatus(task: Task, nextStatus: TaskStatus)
+function countSubtasks(task: Task)
+function rowsForDroppable(droppableId: string): Array<
+function handleDragEnd(result: DropResult)
+</file>
+
+<file path="src/components/ai/AIAssistantModal.tsx">
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Button, toast } from '@heroui/react'
+import { sendAIMessage, type AIMessage } from '@/lib/api/ai'
+import { supabase } from '@/lib/supabaseClient'
+import type { HubDocument } from '@/types/database'
+import DocumentDetailDrawer from '@/components/documents/DocumentDetailDrawer'
+interface AIAssistantModalProps {
+  open: boolean
+  onClose: () => void
+  projectId: string | null
+  projectName?: string
+}
+⋮----
+function MarkdownMessage({
+  content,
+  onOpenDoc,
+}: {
+  content?: string | null
+  onOpenDoc?: (docId: string) => void
+})
+⋮----
+// Bullet list item
+⋮----
+// Numbered list item
+⋮----
+// Suporte a: Links [texto](url_ou_doc:id), Negrito **texto**, Itálico *texto*, Código `texto` e Tags #doc:...
+⋮----
+// Markdown Link: [Label](url)
+⋮----
+// Link para abrir documento no modal (ex: doc:UUID ou doc:slug)
+⋮----
+// Link Web Externo/Interno
+⋮----
+// Atalho #doc:slug
+⋮----
+// Negrito
+⋮----
+// Itálico
+⋮----
+// Código Inline
+⋮----
+// ignore
+⋮----
+async function handleSend(textToSend?: string)
+function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>)
+function handleClear()
+async function handleOpenDoc(docIdentifier: string)
+⋮----
+e.preventDefault()
+void handleSend()
+</file>
+
+<file path="src/components/layout/DashboardLayout.tsx">
+import { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { usePreferences } from '@/hooks/usePreferences'
+import { useTasks } from '@/hooks/useTasks'
+import { listProjects } from '@/lib/api/projects'
+import {
+  addViewToLayout,
+  loadLayout,
+  loadPresets,
+  removeViewFromLayout,
+  saveLayout,
+  savePresets,
+  singleViewInLayout,
+  type LayoutState,
+  type SavedPreset,
+} from '@/lib/layout'
+import type { DefaultView, Project } from '@/types/database'
+import TopBar from '@/components/layout/TopBar'
+import Sidebar from '@/components/layout/Sidebar'
+import TaskWorkspace from '@/components/tasks/TaskWorkspace'
+import LinksView from '@/components/links/LinksView'
+import DocumentsView from '@/components/documents/DocumentsView'
+import ProjectModal from '@/components/projects/ProjectModal'
+import AIAssistantModal from '@/components/ai/AIAssistantModal'
+import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
+import UserManagementDrawer from '@/components/admin/UserManagementDrawer'
+import ProfileDrawer from '@/components/profile/ProfileDrawer'
+import ArchivedProjectsModal from '@/components/projects/ArchivedProjectsModal'
+import { toast } from '@heroui/react'
+import type { Json } from '@/types/database'
+interface DashboardLayoutProps {
+  children?: ReactNode
+  initialTaskId?: string
+  defaultTab?: 'tasks' | 'links' | 'documents'
+}
+⋮----
+function handleSelectTab(tab: 'tasks' | 'links' | 'documents')
+⋮----
+function handleOpenUsers()
+function handleOpenProfile()
+⋮----
+function handleProjectChange(projectId: string | null)
+function handleProjectSaved(project: Project)
+function handleProjectDeleted(projectId: string)
+function handleViewClick(view: DefaultView)
+function handleViewHold(view: DefaultView)
+function handleApplyPreset(scheme: LayoutState)
+function handleSavePreset(name: string)
+function handleDeletePreset(id: string)
+async function handleCreateNewTask(input: NewTaskInput)
+⋮----
+setProjectModalOpen(open)
+⋮----
+setProject(p.id)
+</file>
+
+<file path="src/components/layout/Sidebar.tsx">
+import { useState } from 'react'
+import { useNavigate } from 'react-router'
+import { Button } from '@heroui/react'
+import type { Project, Task } from '@/types/database'
+import { useAuth } from '@/hooks/useAuth'
+interface SidebarProps {
+  projects: Project[]
+  activeProjectId: string | null
+  onProjectChange: (projectId: string | null) => void
+  onCreateProject: () => void
+  onEditProject?: (project: Project) => void
+  onOpenArchivedProjects?: () => void
+  showAllTasks: boolean
+  onShowAllChange: (show: boolean) => void
+  hideDoneTasks?: boolean
+  onHideDoneChange?: (hide: boolean) => void
+  tasks?: Task[]
+  onOpenAi?: () => void
+  activeTab?: 'tasks' | 'links' | 'documents'
+  onSelectTab?: (tab: 'tasks' | 'links' | 'documents') => void
+}
+export default function Sidebar({
+  projects,
+  activeProjectId,
+  onProjectChange,
+  onCreateProject,
+  onEditProject,
+  onOpenArchivedProjects,
+  showAllTasks,
+  onShowAllChange,
+  hideDoneTasks = false,
+  onHideDoneChange,
+  tasks = [],
+  onOpenAi,
+  activeTab = 'tasks',
+  onSelectTab,
+}: SidebarProps)
+⋮----
+// Calculate task counts per project
+⋮----
+onPress=
+⋮----
+onClick=
+⋮----
+onChange=
+⋮----
+e.stopPropagation()
+onEditProject(project)
+</file>
+
+<file path="src/components/tasks/NewTaskModal.tsx">
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Button, Modal } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
+import LexicalEditor from '@/components/tasks/LexicalEditor'
+import StatusSelect from '@/components/tasks/StatusSelect'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
+import { CATEGORY_SUGGESTIONS, categoryColors } from '@/utils/categories'
+import {
+  PRIORITY_LABELS,
+  TASK_PRIORITIES,
+} from '@/utils/status'
+import type { SerializedEditorState } from 'lexical'
+import type {
+  Project,
+  TaskPriority,
+  TaskStatus,
+} from '@/types/database'
+export interface NewSubtaskInput {
+  title: string
+  due_date: string | null
+}
+export interface NewTaskInput {
+  title: string
+  project_id: string
+  status: TaskStatus
+  priority: TaskPriority
+  assigned_to: string | null
+  assignees: string[]
+  start_date: string | null
+  due_date: string | null
+  estimated_hours: number | null
+  description: SerializedEditorState | null
+  categories: string[]
+  subtasks: NewSubtaskInput[]
+}
+interface NewTaskModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  projects: Project[]
+  initialProjectId: string | null
+  initialStartDate?: string | null
+  currentUserId: string
+  onCreate: (input: NewTaskInput) => Promise<void>
+}
+⋮----
+export default function NewTaskModal({
+  open,
+  onOpenChange,
+  projects,
+  initialProjectId,
+  initialStartDate,
+  currentUserId,
+  onCreate,
+}: NewTaskModalProps)
+⋮----
+function addCategory()
+function toggleAssignee(userId: string)
+function addSubtask()
+async function handleSubmit(e: FormEvent)
+⋮----
+{/* Header */}
+⋮----
+{/* ── Título ── */}
+⋮----
+{/* ── Seção: Projeto / Status / Prioridade / Responsável ── */}
+⋮----
+{/* Projeto */}
+⋮----
+{/* Color swatch preview */}
+⋮----
+{/* Status */}
+⋮----
+{/* Prioridade */}
+⋮----
+{/* Responsáveis */}
+⋮----
+disabled=
+⋮----
+{/* Categorias */}
+⋮----
+onChange=
+⋮----
+setSubtasks((prev)
+</file>
+
+<file path="supabase/functions/ai-assistant/index.ts">
+import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { json, handleOptions } from '../_shared/cors.ts'
+interface Message {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+interface RequestPayload {
+  message: string
+  history?: Message[]
+  context?: {
+    projectId?: string | null
+    activeTaskId?: string | null
+  }
+}
+interface AIAction {
+  type:
+    | 'create_task'
+    | 'create_tasks'
+    | 'duplicate_task'
+    | 'break_down_subtasks'
+    | 'list_overdue'
+    | 'bulk_status_update'
+    | 'create_project'
+    | 'update_task'
+    | 'update_tasks'
+    | 'delete_task'
+    | 'create_user'
+    | 'send_email'
+    | 'send_notification'
+    | 'draft_email'
+    | 'create_link'
+    | 'none'
+  params?: Record<string, unknown>
+}
+interface AIResponseStructure {
+  reply: string
+  action?: AIAction
+}
+⋮----
+function formatDateTimePtBr(isoStr: string | null | undefined): string
+function formatPtBrDate(dateStr: string | null | undefined): string
+⋮----
+// Inclui até 8.000 caracteres do texto extraído para garantir que contratos, planilhas e relatórios estejam completos
+⋮----
+function tryParseJson(str: string): Record<string, unknown> | null
+⋮----
+// Tenta reparar JSON truncado fechando colchetes e chaves
+⋮----
+// continua
+⋮----
+// Se mesmo assim não parsear, extrai texto se houver
+⋮----
+// 4. Executa a ação no banco de dados se aplicável
+⋮----
+function normalizeDate(d: unknown): string | null
+function resolveMemberId(identifier: unknown): string | null
+⋮----
+// 1. Direct UUID match
+⋮----
+// 2. Exact username match
+⋮----
+// 3. Exact full_name match
+⋮----
+// 4. Word in full name (e.g. "diego" in "Diego Santos")
+⋮----
+// 5. Partial full_name contains
+⋮----
+// 6. Partial username contains
+⋮----
+// 7. Email match
+⋮----
+// Encontra tarefa pai
+⋮----
+// 1. Busca por título na lista de tarefas carregadas em memória
+⋮----
+// 2. Busca no banco de dados se não achou em memória
+⋮----
+// Descobre o e-mail do destinatário
+⋮----
+// Busca dados completos da tarefa caso taskId esteja presente
+⋮----
+// Converte datas no formato ISO dentro do texto do e-mail para DD/MM/YYYY
+</file>
+
+<file path="src/components/views/GanttView.tsx">
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Gantt from 'frappe-gantt'
+import {
+  DragDropContext,
+  Draggable,
+  Droppable,
+  type DropResult,
+} from '@hello-pangea/dnd'
+⋮----
+import { toast, Button } from '@heroui/react'
+import DateInput from '@/components/ui/DateInput'
+import SubtaskModal from '@/components/tasks/SubtaskModal'
+import StatusSelect from '@/components/tasks/StatusSelect'
+import CategoryFilter from '@/components/tasks/CategoryFilter'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
+import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
+import { categoryColors, parseCategoriesText } from '@/utils/categories'
+import { todayIso, formatDate } from '@/utils/format'
+import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
+import type { NewTaskInput } from '@/lib/api/tasks'
+interface GanttViewProps {
+  tasks: Task[]
+  projects?: Project[]
+  activeProjectId?: string | null
+  onOpenTask: (task: Task) => void
+  updateTask: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
+  moveTaskStatus?: (args: { id: string; status: TaskStatus }) => Promise<unknown>
+  createTask?: (input: NewTaskInput) => Promise<Task>
+  deleteTask?: (id: string) => Promise<unknown>
+  currentUserId?: string
+}
+⋮----
+interface ZoomConfig {
+  name: string
+  label: string
+  shortLabel: string
+  view_mode: Gantt.viewMode
+  column_width: number
+  snap_at: string
+}
+⋮----
+function formatLocalDate(d: Date): string
+function parseLocalDate(isoStr: string): Date
+function addDaysLocal(isoStr: string, days: number): string
+function diffDaysLocal(startIso: string, endIso: string): number
+interface TaskRow {
+  kind: 'task'
+  task: Task
+  undated: boolean
+  depth: number
+  hasChildren: boolean
+  isSubtask: boolean
+  childCount: number
+}
+interface AddSubtaskRow {
+  kind: 'add-subtask'
+  parentId: string
+  depth: number
+}
+type GanttRow = TaskRow | AddSubtaskRow
+⋮----
+function commit()
+⋮----
+// Mantém as existentes + adiciona as digitadas (remoção pelo Drawer/Lista)
+⋮----
+e.stopPropagation()
+⋮----
+// eslint-disable-next-line jsx-a11y/no-autofocus
+⋮----
+onChange=
+⋮----
+function traverse(pId: string | null, depth: number)
+⋮----
+function handleOutsideClick(e: MouseEvent)
+function handleEsc(e: KeyboardEvent)
+⋮----
+function handleWindowMouseUp()
+⋮----
+function openSubtaskModal(parent: Task)
+function handleContextMenu(e: React.MouseEvent, task: Task)
+async function handleDuplicate(task: Task)
+async function handleDelete(task: Task)
+⋮----
+} catch { /* fallback */ }
+⋮----
+function handleTimelineMouseDown(e: MouseEvent)
+function handleDoubleClick(event: MouseEvent)
+⋮----
+function onTableScroll()
+function onGanttScroll()
+⋮----
+// Zoom & Pan
+⋮----
+function handleWheel(e: WheelEvent)
+function handleMouseDown(e: MouseEvent)
+function handleMouseMove(e: MouseEvent)
+function handleMouseUp(e: MouseEvent)
+function handleAuxClick(e: MouseEvent)
+⋮----
+function handleDateChange(task: Task, field: 'start_date' | 'due_date', value: string)
+function handleCategoriesChange(task: Task, categories: string[])
+function persistOrder(ordered: Task[])
+function isDescendantOf(task: Task, ancestorId: string, byId: Map<string, Task>): boolean
+function handleDragEnd(result: DropResult)
+function handleStatusChange(task: Task, nextStatus: TaskStatus) {    if (task.status === nextStatus) return
+if (moveTaskStatus)
+⋮----
+{/* Main Content */}
+⋮----
+// ---- Add-subtask row (abre o modal de subtarefa) ----
+⋮----
+const parentTask = tasks.find((t)
+if (parentTask) openSubtaskModal(parentTask)
+⋮----
+<tr ref=
+⋮----
+<div onDoubleClick=
+⋮----
+<button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted" onClick=
+⋮----
+onClick=
+</file>
+
+</files>

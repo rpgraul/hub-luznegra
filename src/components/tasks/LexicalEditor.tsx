@@ -19,6 +19,12 @@ interface LexicalEditorProps {
   initialValue: SerializedEditorState | null
   onChange: (json: SerializedEditorState) => void
   placeholder?: string
+  /**
+   * Namespace único por instância. Obrigatório quando há mais de um editor
+   * montado ao mesmo tempo (ex: drawer da tarefa + modal de subtarefa),
+   * senão os editores compartilham estado e o conteúdo se perde.
+   */
+  namespace?: string
 }
 
 function Toolbar() {
@@ -67,11 +73,12 @@ export default function LexicalEditor({
   initialValue,
   onChange,
   placeholder = 'Escreva a descrição...',
+  namespace = 'hub-task-description',
 }: LexicalEditorProps) {
   return (
     <LexicalComposer
       initialConfig={{
-        namespace: 'hub-task-description',
+        namespace,
         nodes: EDITOR_NODES,
         theme: {
           paragraph: 'mb-1',

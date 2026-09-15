@@ -11,6 +11,7 @@ import {
   TASK_PRIORITIES,
 } from '@/utils/status'
 import type { SerializedEditorState } from 'lexical'
+import { normalizeLexicalForSave } from '@/utils/lexical'
 import type {
   Project,
   TaskPriority,
@@ -157,7 +158,7 @@ export default function NewTaskModal({
         start_date: startDate || null,
         due_date: dueDate || null,
         estimated_hours,
-        description,
+        description: normalizeLexicalForSave(description) as unknown as SerializedEditorState | null,
         categories,
         subtasks,
       })
@@ -468,6 +469,8 @@ export default function NewTaskModal({
                 </label>
                 <div className="rounded-xl border border-border bg-background overflow-hidden">
                   <LexicalEditor
+                    key={open ? 'new-task-open' : 'new-task-closed'}
+                    namespace="hub-new-task-description"
                     initialValue={null}
                     onChange={setDescription}
                     placeholder="Descreva a tarefa, contexto, links úteis…"

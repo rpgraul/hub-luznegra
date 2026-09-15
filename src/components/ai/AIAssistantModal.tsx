@@ -169,6 +169,42 @@ function formatInlineMarkdown(text?: string | null, onOpenDoc?: (docId: string) 
   })
 }
 
+function createdTaskIds(result: AIMessage['actionResult']): Array<{ id: string; title?: string }> {
+  if (!result || typeof result !== 'object') return []
+  const out: Array<{ id: string; title?: string }> = []
+  const push = (t: unknown) => {
+    if (t && typeof t === 'object' && typeof (t as { id?: unknown }).id === 'string') {
+      out.push({
+        id: (t as { id: string }).id,
+        title: typeof (t as { title?: unknown }).title === 'string'
+          ? (t as { title: string }).title
+          : undefined,
+      })
+    }
+  }
+  const r = result as Record<string, unknown>
+  if (Array.isArray(r.tasks)) r.tasks.forEach(push)
+  if (r.task) push(r.task)
+  if (r.duplicatedTask) push(r.duplicatedTask)
+  if (typeof r.parentTaskId === 'string') push({ id: r.parentTaskId })
+  return out
+}
+
+function actionSucceeded(response: { action?: { type: string }; actionResult?: Record<string, unknown> | null }): boolean {
+  if (!response?.action || response.action.type === 'none') return false
+  const r = response.actionResult as Record<string, unknown> | null | undefined
+  if (!r || typeof r !== 'object') return true
+  if (r.success === false) return false
+  // Sucesso parcial (truncado ou com falhas) também merece aviso, não festa.
+  if (r.truncated === true) return false
+  if (typeof r.subtasksFailed === 'number' && r.subtasksFailed > 0) return false
+  if (Array.isArray(r.errors) && r.errors.length > 0) return false
+  for (const k of ['count', 'updatedCount', 'subtasksCreated']) {
+    if (typeof r[k] === 'number') return (r[k] as number) > 0
+  }
+  return true
+}
+
 const CHAT_STORAGE_KEY = 'hub_ai_chat_messages_v1'
 
 const WELCOME_MSG: AIMessage = {
@@ -276,12 +312,16 @@ export default function AIAssistantModal({
 
       setMessages((prev) => [...prev, assistantMsg])
 
-      // Invalida dados se alguma mutação ocorreu
+      // Invalida dados se alguma mutação ocorreu — mas só comemora sucesso real.
       if (response?.action && response.action.type !== 'none') {
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
         void queryClient.invalidateQueries({ queryKey: ['notifications'] })
-        toast.success('Ação executada com sucesso pelo Lorde Camarão!')
+        if (actionSucceeded(response)) {
+          toast.success('Ação executada com sucesso pelo Lorde Camarão!')
+        } else {
+          toast.warning('A IA não conseguiu concluir a ação — veja os detalhes no chat.')
+        }
       }
     } catch (error) {
       toast.danger(
@@ -299,6 +339,16 @@ export default function AIAssistantModal({
     } finally {
       setLoading(false)
     }
+  }
+
+  function handleOpenTask(taskId: string) {
+    onClose()
+    // Dá tempo do modal fechar antes de abrir o drawer da tarefa
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent('hub:open-task-drawer', { detail: { taskId } }),
+      )
+    }, 150)
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -410,6 +460,20 @@ export default function AIAssistantModal({
                         <i className="fa-solid fa-circle-check text-xs" />
                         <span>Ação realizada: {msg.action.type}</span>
                       </div>
+                      {createdTaskIds(msg.actionResult).slice(0, 5).map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => handleOpenTask(t.id)}
+                          title={t.title || 'Abrir tarefa'}
+                          className="mt-1.5 flex w-full items-center gap-1.5 rounded-md border border-emerald-500/30 bg-background/60 px-2 py-1 text-left text-[11px] font-semibold text-foreground transition hover:border-emerald-500/60 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-emerald-500" />
+                          <span className="flex-1 truncate">
+                            Ver: {t.title || 'tarefa criada'}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>

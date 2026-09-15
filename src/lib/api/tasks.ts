@@ -120,6 +120,24 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 /**
+ * Remove lembretes de vencimento pendentes de tarefas concluídas.
+ * Best-effort: nunca quebra a mudança de status.
+ */
+async function clearDueReminders(taskIds: string[]): Promise<void> {
+  if (taskIds.length === 0) return
+  try {
+    await supabase
+      .from('notifications')
+      .delete()
+      .in('task_id', taskIds)
+      .eq('type', 'due_date_reminder')
+      .eq('read', false)
+  } catch {
+    // ignora — RLS pode não permitir; o sino continua funcional
+  }
+}
+
+/**
  * Move entre colunas. Leva as subtarefas junto quando a tarefa vai
  * para `done` (regra do PRD §6).
  */
@@ -195,5 +213,31 @@ export async function moveTaskStatus(
         .update({ status: 'in_progress' })
         .eq('id', currentTask.parent_id)
     }
+  }
+
+  if (status === 'done') {
+    // Tarefa concluída: limpa lembretes de vencimento pendentes dela
+    // (e das subtarefas/pai concluídos junto) para não notificar depois.
+    const doneIds = [id]
+    try {
+      const { data: kids } = await supabase
+        .from('tasks')
+        .select('id, status')
+        .eq('parent_id', id)
+      for (const k of kids ?? []) {
+        if (k.status === 'done') doneIds.push(k.id)
+      }
+      if (currentTask?.parent_id) {
+        const { data: p } = await supabase
+          .from('tasks')
+          .select('id, status')
+          .eq('id', currentTask.parent_id)
+          .maybeSingle()
+        if (p?.status === 'done') doneIds.push(p.id)
+      }
+    } catch {
+      // ignora
+    }
+    await clearDueReminders(doneIds)
   }
 }

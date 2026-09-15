@@ -211,25 +211,37 @@ Deno.serve(async (req) => {
 
     const lastUserMsg = (message || '').toLowerCase()
 
-    const docsSnippet = (hubDocs ?? [])
-      .map((d) => {
-        if (!d.extracted_text) {
-          return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url}, Conteúdo: "s/texto extraído")`
+    const docsSnippet = (() => {
+      // Orçamento total de contexto dos documentos: evita estourar a janela
+      // do modelo (que truncaria o JSON de saída) quando há muitos docs.
+      const TOTAL_BUDGET = 60000
+      let used = 0
+      const parts: string[] = []
+      for (const d of hubDocs ?? []) {
+        if (used >= TOTAL_BUDGET) {
+          parts.push(`...[+${(hubDocs ?? []).length - parts.length} documento(s) omitido(s) por limite de contexto]`)
+          break
         }
-        // Inclui até 8.000 caracteres do texto extraído para garantir que contratos, planilhas e relatórios estejam completos
+        if (!d.extracted_text) {
+          parts.push(`- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url}, Conteúdo: "s/texto extraído")`)
+          continue
+        }
+        // Inclui o texto extraído com limite por documento
         const isMatched = lastUserMsg && (
           d.title.toLowerCase().includes(lastUserMsg) ||
           d.file_name.toLowerCase().includes(lastUserMsg) ||
           lastUserMsg.split(/\s+/).some((w) => w.length > 3 && d.title.toLowerCase().includes(w))
         )
-        const limit = isMatched ? 15000 : 8000
+        const limit = Math.min(isMatched ? 8000 : 4000, TOTAL_BUDGET - used)
         const textContent = d.extracted_text.length > limit
           ? d.extracted_text.slice(0, limit) + '\n...[texto continuado/truncado]'
           : d.extracted_text
+        used += textContent.length
 
-        return `- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url})\n  Conteúdo Integral Extraído:\n  """\n${textContent}\n  """`
-      })
-      .join('\n\n')
+        parts.push(`- [${d.id}] "${d.title}" (${d.file_name}, tipo: ${d.file_type}, Tags: [${(d.tags || []).join(', ')}], Link: ${d.file_url})\n  Conteúdo Integral Extraído:\n  """\n${textContent}\n  """`)
+      }
+      return parts.join('\n\n')
+    })()
 
     const now = new Date()
     const nowPtBr = now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'full', timeStyle: 'medium' })
@@ -316,6 +328,11 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "start_date"?: "YYYY-MM-DD",
       "subtasks"?: string[]
     }
+    LIMITE: no máximo 20 subtarefas por resposta. Se o usuário pedir mais,
+    crie a tarefa com as 20 primeiras e avise no "reply" que o restante
+    ficou pendente, pedindo confirmação para continuar. Nunca invente
+    subtarefas além do pedido e nunca retorne JSON incompleto: se não
+    couber, corte a lista de subtarefas (não o fechamento do JSON).
   - CONSULTA A DOCUMENTOS E CONTRATOS:
     Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
     OBRIGATÓRIO: Sempre que responder sobre um documento ou contrato, inclua no final da resposta o botão/link interativo no formato exato: [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO) para que o usuário possa clicar e conferir o arquivo no modal com 1 clique.
@@ -381,6 +398,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
         { role: 'user', content: message },
       ]
 
+      const maxTokens = parseInt(Deno.env.get('DEEPSEEK_MAX_TOKENS') || '8000', 10) || 8000
       const aiResponse = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -392,7 +410,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           messages: apiMessages,
           response_format: { type: 'json_object' },
           temperature: 0.1,
-          max_tokens: 2048,
+          max_tokens: maxTokens,
         }),
       })
 
@@ -431,7 +449,50 @@ FORMATO OBRIGATÓRIO (JSON puro):
         try {
           return JSON.parse(str)
         } catch {
-          // Tenta reparar JSON truncado fechando colchetes e chaves
+          // Resposta pode vir truncada (limite de tokens). Extrai o maior
+          // objeto JSON válido com balanceamento de chaves (respeitando
+          // strings e escapes) em vez de remendos ingênuos de sufixo.
+          const candidates: Record<string, unknown>[] = []
+          let i = str.indexOf('{')
+          while (i >= 0 && i < str.length) {
+            let depth = 0
+            let inStr = false
+            let esc = false
+            for (let j = i; j < str.length; j++) {
+              const ch = str[j]
+              if (inStr) {
+                if (esc) esc = false
+                else if (ch === '\\') esc = true
+                else if (ch === '"') inStr = false
+              } else {
+                if (ch === '"') inStr = true
+                else if (ch === '{') depth++
+                else if (ch === '}') {
+                  depth--
+                  if (depth === 0) {
+                    try {
+                      const obj = JSON.parse(str.slice(i, j + 1))
+                      if (obj && typeof obj === 'object') {
+                        candidates.push(obj as Record<string, unknown>)
+                      }
+                    } catch {
+                      // continua procurando
+                    }
+                    break
+                  }
+                }
+              }
+            }
+            i = str.indexOf('{', i + 1)
+          }
+          // Prefere o candidato que tem "reply" ou "action"
+          candidates.sort((a, b) => {
+            const score = (o: Record<string, unknown>) =>
+              (typeof o.reply === 'string' ? 2 : 0) + (o.action ? 1 : 0)
+            return score(b) - score(a)
+          })
+          if (candidates.length > 0) return candidates[0]
+          // Último recurso: remendos de sufixo para JSON cortado no fim
           const attempts = [
             str + ']}',
             str + '"}]}}',
@@ -449,6 +510,29 @@ FORMATO OBRIGATÓRIO (JSON puro):
           return null
         }
       }
+
+      // Indica se o conteúdo bruto parece ter sido cortado no meio
+      // (resposta atingiu o limite de tokens de saída).
+      function looksTruncated(str: string): boolean {
+        const t = str.trim()
+        if (!t) return false
+        let depth = 0
+        let inStr = false
+        let esc = false
+        for (const ch of t) {
+          if (inStr) {
+            if (esc) esc = false
+            else if (ch === '\\') esc = true
+            else if (ch === '"') inStr = false
+          } else {
+            if (ch === '"') inStr = true
+            else if (ch === '{' || ch === '[') depth++
+            else if (ch === '}' || ch === ']') depth--
+          }
+        }
+        return depth > 0 || inStr
+      }
+      const truncatedOutput = looksTruncated(cleanContent)
 
       const parsedObj = tryParseJson(cleanContent)
       if (parsedObj) {
@@ -670,19 +754,100 @@ FORMATO OBRIGATÓRIO (JSON puro):
       return null
     }
 
+    // Remove lembretes de vencimento pendentes de tarefas concluídas.
+    async function clearDueRemindersFor(taskIds: string[]): Promise<void> {
+      const ids = [...new Set(taskIds.filter(Boolean))]
+      if (ids.length === 0) return
+      try {
+        await admin
+          .from('notifications')
+          .delete()
+          .in('task_id', ids)
+          .eq('type', 'due_date_reminder')
+          .eq('read', false)
+      } catch {
+        // best-effort
+      }
+    }
+
     if (aiParsed.action && aiParsed.action.type !== 'none') {
       const { type, params = {} } = aiParsed.action
 
+      // Insere subtarefas em lotes para não estourar limites de payload,
+      // retornando quantas foram criadas e quais falharam.
+      async function insertSubtasks(
+        parent: { id: string; project_id: string; assigned_to: string | null; due_date: string | null; priority: string },
+        subtasks: Array<string | Record<string, unknown>>,
+      ): Promise<{ created: number; failed: number; errors: string[] }> {
+        const rows = subtasks
+          .map((st, idx) => {
+            const isObj = typeof st === 'object' && st !== null
+            const stTitle = isObj ? String((st as Record<string, unknown>).title || '').trim() : String(st).trim()
+            if (!stTitle) return null
+            const stDue = isObj ? normalizeDate((st as Record<string, unknown>).due_date) : null
+            const stStart = isObj ? normalizeDate((st as Record<string, unknown>).start_date) : null
+            const stAssigned = isObj
+              ? resolveMemberId((st as Record<string, unknown>).assigned_to) || parent.assigned_to
+              : parent.assigned_to
+            return {
+              title: stTitle,
+              project_id: parent.project_id,
+              parent_id: parent.id,
+              assigned_to: stAssigned,
+              due_date: stDue || parent.due_date,
+              start_date: stStart,
+              priority: parent.priority,
+              status: 'todo',
+              order_index: idx + 1,
+              created_by: userId,
+            }
+          })
+          .filter((r): r is NonNullable<typeof r> => r !== null)
+
+        let created = 0
+        const errors: string[] = []
+        const BATCH = 20
+        for (let i = 0; i < rows.length; i += BATCH) {
+          const chunk = rows.slice(i, i + BATCH)
+          const { data, error } = await admin.from('tasks').insert(chunk).select('id')
+          if (error) {
+            console.error('Subtask batch insert error:', error)
+            errors.push(error.message)
+          } else {
+            created += data?.length ?? 0
+          }
+        }
+        return { created, failed: rows.length - created, errors }
+      }
+
       if (type === 'create_task' || type === 'create_tasks') {
         const projectIdToUse = (params.project_id as string) || context.projectId || projects?.[0]?.id
-        if (projectIdToUse) {
+        if (!projectIdToUse) {
+          return json({
+            reply: 'Não encontrei nenhum projeto para criar a tarefa. Peça para criar um projeto primeiro.',
+            action: { type: 'none' },
+          })
+        }
+        {
           const taskList = Array.isArray(params.tasks)
             ? (params.tasks as Array<Record<string, unknown>>)
             : params.title
               ? [params]
               : []
 
+          if (taskList.length === 0 || taskList.every((t) => !t.title)) {
+            return json({
+              reply: truncatedOutput
+                ? 'A resposta da IA veio incompleta (limite de saída atingido) e não consegui identificar a tarefa. Tente de novo com um pedido menor — por exemplo, dividindo as subtarefas em partes.'
+                : 'Não consegui identificar o título da tarefa no seu pedido. Pode repetir com o título entre aspas?',
+              action: { type: 'none' },
+            })
+          }
+
           const createdTasks: unknown[] = []
+          let subtasksCreated = 0
+          let subtasksFailed = 0
+          const insertErrors: string[] = []
 
           for (const item of taskList) {
             if (!item.title) continue
@@ -715,35 +880,52 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
               const subtasks = (item.subtasks || (taskList.length === 1 ? params.subtasks : null)) as Array<string | Record<string, unknown>>
               if (Array.isArray(subtasks) && subtasks.length > 0) {
-                const subtaskInserts = subtasks.map((st, idx) => {
-                  const isObj = typeof st === 'object' && st !== null
-                  const stTitle = isObj ? String((st as Record<string, unknown>).title || '') : String(st)
-                  const stDue = isObj ? normalizeDate((st as Record<string, unknown>).due_date) : null
-                  const stStart = isObj ? normalizeDate((st as Record<string, unknown>).start_date) : null
-                  const stAssigned = isObj ? resolveMemberId((st as Record<string, unknown>).assigned_to) : created.assigned_to
-
-                  return {
-                    title: stTitle,
-                    project_id: created.project_id,
-                    parent_id: created.id,
-                    assigned_to: stAssigned,
-                    due_date: stDue || created.due_date,
-                    start_date: stStart,
-                    priority: created.priority,
-                    status: 'todo',
-                    order_index: idx + 1,
-                    created_by: userId,
-                  }
-                })
-
-                await admin.from('tasks').insert(subtaskInserts)
+                const res = await insertSubtasks(
+                  {
+                    id: (created as { id: string }).id,
+                    project_id: (created as { project_id: string }).project_id,
+                    assigned_to: (created as { assigned_to: string | null }).assigned_to,
+                    due_date: (created as { due_date: string | null }).due_date,
+                    priority: (created as { priority: string }).priority,
+                  },
+                  subtasks.slice(0, 60),
+                )
+                subtasksCreated += res.created
+                subtasksFailed += res.failed
+                insertErrors.push(...res.errors)
+                if (subtasks.length > 60) {
+                  insertErrors.push(`Limite de 60 subtarefas por pedido: ${subtasks.length - 60} ignorada(s). Peça para continuar.`)
+                }
               }
             } else if (createError) {
               console.error('Task insert error:', createError)
+              insertErrors.push(createError.message)
             }
           }
 
-          actionResult = { success: true, count: createdTasks.length, tasks: createdTasks }
+          if (createdTasks.length === 0) {
+            return json({
+              reply: `Não consegui criar a tarefa no banco de dados (${insertErrors[0] || 'erro desconhecido'}). Tente novamente.`,
+              action: { type: 'none' },
+            })
+          }
+
+          if (truncatedOutput || subtasksFailed > 0) {
+            const parts: string[] = []
+            if (subtasksFailed > 0) parts.push(`${subtasksFailed} subtarefa(s) não foram salvas`)
+            if (truncatedOutput) parts.push('a resposta da IA foi cortada pelo limite de saída e pode estar faltando item')
+            aiParsed.reply = `${aiParsed.reply || 'Tarefa criada.'} Atenção: ${parts.join('; ')}. Peça "continue criando as subtarefas restantes".`
+          }
+
+          actionResult = {
+            success: subtasksFailed === 0,
+            count: createdTasks.length,
+            tasks: createdTasks,
+            subtasksCreated,
+            subtasksFailed,
+            errors: insertErrors,
+            truncated: truncatedOutput,
+          }
         }
       } else if (type === 'break_down_subtasks' && params.parent_task_title && Array.isArray(params.subtasks)) {
         // Encontra tarefa pai
@@ -754,23 +936,46 @@ FORMATO OBRIGATÓRIO (JSON puro):
           .limit(1)
 
         const parent = parentTasks?.[0]
-        if (parent) {
-          const subtaskInserts = (params.subtasks as string[]).map((stTitle, idx) => ({
-            title: stTitle,
-            project_id: parent.project_id,
-            parent_id: parent.id,
-            assigned_to: parent.assigned_to,
-            status: 'todo',
-            order_index: idx + 1,
-            created_by: userId,
-          }))
-
-          const { data: createdSubtasks } = await admin
+        if (!parent) {
+          return json({
+            reply: `Não encontrei a tarefa "${params.parent_task_title}". Verifique o título e tente de novo.`,
+            action: { type: 'none' },
+          })
+        }
+        {
+          const { data: fullParent } = await admin
             .from('tasks')
-            .insert(subtaskInserts)
-            .select()
-
-          actionResult = { success: true, count: createdSubtasks?.length ?? 0 }
+            .select('id, project_id, assigned_to, due_date, priority')
+            .eq('id', parent.id)
+            .maybeSingle()
+          const res = await insertSubtasks(
+            {
+              id: parent.id,
+              project_id: (fullParent?.project_id as string) ?? parent.project_id,
+              assigned_to: (fullParent?.assigned_to as string | null) ?? parent.assigned_to,
+              due_date: (fullParent?.due_date as string | null) ?? null,
+              priority: (fullParent?.priority as string) ?? 'medium',
+            },
+            (params.subtasks as Array<string | Record<string, unknown>>).slice(0, 60),
+          )
+          if (res.created === 0) {
+            return json({
+              reply: `Não consegui criar as subtarefas (${res.errors[0] || 'nenhum título válido'}). Tente de novo.`,
+              action: { type: 'none' },
+            })
+          }
+          if (truncatedOutput || res.failed > 0) {
+            aiParsed.reply = `${aiParsed.reply || 'Subtarefas criadas.'} Atenção: ${res.failed > 0 ? `${res.failed} subtarefa(s) não foram salvas; ` : ''}${truncatedOutput ? 'a resposta da IA foi cortada pelo limite de saída e pode estar faltando item; ' : ''}peça para continuar.`
+          }
+          actionResult = {
+            success: res.failed === 0,
+            count: res.created,
+            parentTaskId: parent.id,
+            subtasksCreated: res.created,
+            subtasksFailed: res.failed,
+            errors: res.errors,
+            truncated: truncatedOutput,
+          }
         }
       } else if (type === 'bulk_status_update' && params.target_status) {
         const projectIdToUse = (params.project_id as string) || context.projectId
@@ -785,6 +990,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
           }
 
           const { data: updated } = await query.select('id')
+          if ((params.target_status as string) === 'done') {
+            await clearDueRemindersFor(
+              ((updated ?? []) as Array<{ id: string }>).map((t) => t.id),
+            )
+          }
           actionResult = { success: true, updatedCount: updated?.length ?? 0 }
         }
       } else if (type === 'create_project' && params.name) {
@@ -880,6 +1090,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
               .single()
 
             actionResult = { success: true, duplicatedTask: dupTask }
+          } else {
+            return json({
+              reply: `Não encontrei a tarefa "${sourceTitle}" para duplicar.`,
+              action: { type: 'none' },
+            })
           }
         }
       } else if (
@@ -951,10 +1166,17 @@ FORMATO OBRIGATÓRIO (JSON puro):
             console.error('Update task error:', updateErr)
             actionResult = { success: false, error: updateErr.message }
           } else {
+            if ((patch.status as string) === 'done') {
+              await clearDueRemindersFor([taskId])
+            }
             actionResult = { success: true, task: updated }
           }
         } else {
           actionResult = { success: false, error: `Tarefa "${searchTitle}" não encontrada.` }
+          return json({
+            reply: `Não encontrei a tarefa "${searchTitle || 'informada'}". Verifique o título e tente de novo.`,
+            action: { type: 'none' },
+          })
         }
       } else if (type === 'update_tasks' && Array.isArray(params.tasks)) {
         const updatedList: unknown[] = []
@@ -1018,6 +1240,21 @@ FORMATO OBRIGATÓRIO (JSON puro):
             if (updated) updatedList.push(updated)
           }
         }
+        const doneIds = (updatedList as Array<{ id: string; status?: string }>)
+          .filter((t) => {
+            const wanted = (params.tasks as Array<Record<string, unknown>>).find(
+              (it) => it.task_id === t.id || it.id === t.id,
+            )
+            return (wanted?.status as string) === 'done' || t.status === 'done'
+          })
+          .map((t) => t.id)
+        await clearDueRemindersFor(doneIds)
+        if (updatedList.length === 0) {
+          return json({
+            reply: 'Não encontrei as tarefas informadas para atualizar. Verifique os títulos e tente de novo.',
+            action: { type: 'none' },
+          })
+        }
         actionResult = { success: true, count: updatedList.length, tasks: updatedList }
       } else if (type === 'delete_task') {
         let taskId = params.task_id as string | undefined
@@ -1033,6 +1270,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
         if (taskId) {
           await admin.from('tasks').delete().eq('id', taskId)
           actionResult = { success: true, deletedTaskId: taskId }
+        } else {
+          return json({
+            reply: `Não encontrei a tarefa "${(params.task_title as string) || 'informada'}" para excluir.`,
+            action: { type: 'none' },
+          })
         }
       } else if (type === 'create_user' && params.email && params.username) {
         if (!isUserAdmin) {
@@ -1340,6 +1582,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
       }
     }
 
+    // Se a execução falhou, não deixa o texto otimista da IA passar como sucesso.
+    const execFailed =
+      actionResult !== null &&
+      typeof actionResult === 'object' &&
+      (actionResult as Record<string, unknown>).success === false
     const finalReply =
       aiParsed.reply ||
       (aiParsed.action?.type === 'send_email'
@@ -1363,8 +1610,10 @@ FORMATO OBRIGATÓRIO (JSON puro):
                         : 'Comando processado com sucesso.')
 
     return json({
-      reply: finalReply,
-      action: aiParsed.action,
+      reply: execFailed
+        ? `${finalReply} (A ação não foi concluída: ${(actionResult as Record<string, unknown>).error || 'verifique os parâmetros e tente de novo'}.)`
+        : finalReply,
+      action: execFailed ? { type: 'none' } : aiParsed.action,
       actionResult,
     })
   } catch (error) {

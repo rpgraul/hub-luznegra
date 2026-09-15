@@ -541,6 +541,7 @@ export default function TaskDrawer({
                 <div className="rounded-md border border-border bg-background p-1.5 shadow-2xs">
                   <LexicalEditor
                     key={currentTask.id}
+                    namespace="hub-drawer-description"
                     initialValue={descriptionDraft}
                     onChange={handleDescriptionChange}
                   />
@@ -851,6 +852,7 @@ export default function TaskDrawer({
                           />
                           <input
                             type="text"
+                            key={`${subtask.id}-title-${subtask.updated_at}`}
                             defaultValue={subtask.title}
                             onBlur={(e) => {
                               const val = e.target.value.trim()
@@ -894,6 +896,7 @@ export default function TaskDrawer({
                         <div className="flex flex-wrap items-center gap-2 pl-6">
                           <input
                             type="text"
+                            key={`${subtask.id}-desc-${subtask.updated_at}`}
                             defaultValue={subtaskDescText}
                             onBlur={(e) => {
                               const val = e.target.value.trim()

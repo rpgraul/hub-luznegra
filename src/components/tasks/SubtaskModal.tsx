@@ -5,6 +5,7 @@ import LexicalEditor from '@/components/tasks/LexicalEditor'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
+import { normalizeLexicalForSave } from '@/utils/lexical'
 import {
   PRIORITY_LABELS,
   TASK_PRIORITIES,
@@ -122,7 +123,7 @@ export default function SubtaskModal({
         start_date: startDate || null,
         due_date: dueDate || null,
         estimated_hours,
-        description: description as unknown as Json,
+        description: normalizeLexicalForSave(description) as unknown as Json,
       })
       onOpenChange(false)
       onCreated?.()
@@ -343,6 +344,8 @@ export default function SubtaskModal({
                 </label>
                 <div className="rounded-xl border border-border bg-background overflow-hidden">
                   <LexicalEditor
+                    key={`subtask-${parent?.id ?? 'none'}-${open ? 'open' : 'closed'}`}
+                    namespace="hub-subtask-description"
                     initialValue={null}
                     onChange={setDescription}
                     placeholder="Detalhes da subtarefa…"

@@ -81,16 +81,28 @@ async function jobDue(): Promise<{ reminders: number }> {
 
   const { data: tasks, error: tasksError } = await admin
     .from('tasks')
-    .select('id, title, project_id, assigned_to')
+    .select('id, title, project_id, assigned_to, assignees')
     .eq('due_date', tomorrow)
     .not('status', 'eq', 'done')
-    .not('assigned_to', 'is', null)
 
   if (tasksError) throw new Error(`consultando tarefas: ${tasksError.message}`)
   if (tasks.length === 0) return { reminders: 0 }
 
+  // Responsáveis: assigned_to + assignees[] (multi-responsáveis)
+  const recipientOf = new Map<string, string[]>()
+  for (const t of tasks) {
+    const users = new Set<string>()
+    if (t.assigned_to) users.add(t.assigned_to as string)
+    if (Array.isArray(t.assignees)) {
+      for (const u of t.assignees as string[]) if (u) users.add(u)
+    }
+    recipientOf.set(t.id as string, [...users])
+  }
+
   const taskIds = tasks.map((t) => t.id)
-  const assignees = [...new Set(tasks.map((t) => t.assigned_to))]
+  const assignees = [
+    ...new Set([...recipientOf.values()].flat()),
+  ]
 
   // Dedupe: já notificados deste vencimento
   const { data: existing } = await admin
@@ -138,40 +150,43 @@ async function jobDue(): Promise<{ reminders: number }> {
 
   let reminders = 0
   for (const task of tasks) {
-    const userId = task.assigned_to
-    if (onVacation.has(userId)) continue
-    if (reminded.has(`${task.id}|${userId}`)) continue
+    const recipients = (recipientOf.get(task.id as string) ?? []).filter(
+      (u) => !onVacation.has(u) && !reminded.has(`${task.id}|${u}`),
+    )
+    if (recipients.length === 0) continue
 
-    await admin.from('notifications').insert({
-      user_id: userId,
-      type: 'due_date_reminder',
-      content: `A tarefa "${task.title}" vence amanhã (${tomorrow}).`,
-      link: `/task/${task.id}`,
-      task_id: task.id,
-    })
-
-    const emailTo = emailByUser.get(userId)
-    if (emailTo) {
-      const { subject, html } = reminderEmail(
-        task.title,
-        task.project_id ? (projectName.get(task.project_id) ?? null) : null,
-        task.id,
-      )
-      await admin.from('email_queue').insert({
-        to_email: emailTo,
-        subject,
-        html,
+    for (const userId of recipients) {
+      await admin.from('notifications').insert({
+        user_id: userId,
+        type: 'due_date_reminder',
+        content: `A tarefa "${task.title}" vence amanhã (${tomorrow}).`,
+        link: `/task/${task.id}`,
         task_id: task.id,
       })
-    }
 
-    reminders++
+      const emailTo = emailByUser.get(userId)
+      if (emailTo) {
+        const { subject, html } = reminderEmail(
+          task.title,
+          task.project_id ? (projectName.get(task.project_id) ?? null) : null,
+          task.id,
+        )
+        await admin.from('email_queue').insert({
+          to_email: emailTo,
+          subject,
+          html,
+          task_id: task.id,
+        })
+      }
+
+      reminders++
+    }
   }
 
   return { reminders }
 }
 
-async function jobQueue(): Promise<{ sent: number; failed: number }> {
+async function jobQueue(): Promise<{ sent: number; failed: number; skipped: number }> {
   const { data: pending, error } = await admin
     .from('email_queue')
     .select('*')
@@ -183,8 +198,23 @@ async function jobQueue(): Promise<{ sent: number; failed: number }> {
 
   let sent = 0
   let failed = 0
+  let skipped = 0
 
   for (const item of pending ?? []) {
+    // A tarefa pode ter sido concluída depois que o lembrete entrou na
+    // fila — nesse caso cancela em vez de enviar.
+    if (item.task_id) {
+      const { data: linked } = await admin
+        .from('tasks')
+        .select('id, status, due_date')
+        .eq('id', item.task_id)
+        .maybeSingle()
+      if (!linked || linked.status === 'done') {
+        await admin.from('email_queue').delete().eq('id', item.id)
+        skipped++
+        continue
+      }
+    }
     try {
       await sendViaResend(item.to_email, item.subject, item.html)
       await admin.from('email_queue').update({ status: 'sent' }).eq('id', item.id)
@@ -203,7 +233,7 @@ async function jobQueue(): Promise<{ sent: number; failed: number }> {
     }
   }
 
-  return { sent, failed }
+  return { sent, failed, skipped }
 }
 
 Deno.serve(async (req) => {
