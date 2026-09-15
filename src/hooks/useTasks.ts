@@ -43,15 +43,33 @@ export function useTasks(showAll: boolean) {
   // - Supressão de eco: enquanto um reorderMany local está em voo, os eventos
   //   do próprio usuário são ignorados — o cache otimista é a verdade e nenhum
   //   refetch parcial pisca na tela. O onSettled faz o invalidate final.
+  // - Background: navegadores throttlam setTimeout em abas em background
+  //   (Chrome: até 1x/min após ~5 min). Se a aba não está visível, marcamos
+  //   o refetch como pendente e o listener de visibilitychange o executa no
+  //   instante em que o usuário volta para a aba.
   const suppressRealtimeUntil = useRef(0)
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingInvalidate = useRef(false)
   useEffect(() => {
+    function doInvalidate() {
+      void queryClient.invalidateQueries({ queryKey: KEY })
+    }
     function scheduleInvalidate() {
       if (Date.now() < suppressRealtimeUntil.current) return
+      if (document.visibilityState !== 'visible') {
+        pendingInvalidate.current = true
+        return
+      }
       if (debounceTimer.current) clearTimeout(debounceTimer.current)
-      debounceTimer.current = setTimeout(() => {
-        void queryClient.invalidateQueries({ queryKey: KEY })
-      }, 600)
+      debounceTimer.current = setTimeout(doInvalidate, 600)
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      if (!pendingInvalidate.current) return
+      if (Date.now() < suppressRealtimeUntil.current) return
+      pendingInvalidate.current = false
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      doInvalidate()
     }
     const channelId = `tasks-${Math.random().toString(36).slice(2, 9)}`
     const channel = supabase
@@ -69,8 +87,11 @@ export function useTasks(showAll: boolean) {
       )
       .subscribe()
 
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
     return () => {
       if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
       void supabase.removeChannel(channel)
     }
   }, [KEY, queryClient])
