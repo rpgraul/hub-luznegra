@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react'
+import { toast } from '@heroui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/hooks/useAuth'
@@ -114,18 +115,33 @@ export function useTasks(showAll: boolean) {
     },
   })
 
-  const remove = useMutation({
+    const remove = useMutation({
     mutationFn: deleteTask,
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: KEY })
       const previous = queryClient.getQueryData<Task[]>(KEY)
-      setTasks((tasks) => tasks.filter((task) => task.id !== id))
+      // Update otimista: remove a tarefa E suas subtarefas diretas do cache
+      setTasks((tasks) =>
+        tasks.filter((task) => task.id !== id && task.parent_id !== id),
+      )
       return { previous }
     },
     onError: (_error, _id, context) => {
       if (context?.previous) {
         queryClient.setQueryData(KEY, context.previous)
       }
+    },
+    onSuccess: (result) => {
+      // deleteTask retorna { error } em vez de lançar — então onError
+      // nunca dispara; o feedback de falha precisa vir aqui.
+      if (result.error) {
+        toast.danger(`Erro ao deletar tarefa: ${result.error}`)
+      }
+    },
+    onSettled: () => {
+      // Garante que o cache reflita o banco (subtarefas deletadas em
+      // cascata, mudanças de outros usuários, etc.)
+      void queryClient.invalidateQueries({ queryKey: KEY })
     },
   })
 
