@@ -382,6 +382,32 @@ FORMATO OBRIGATÓRIO (JSON puro):
       reply: 'Não foi possível interpretar o comando.',
       action: { type: 'none' },
     }
+    // Escopo da função: indica se a saída crua da IA veio cortada pelo
+    // limite de tokens (usado na etapa 4, fora do bloco da API).
+    let truncatedOutput = false
+
+    // Detecta conteúdo cortado no meio (chaves/colchetes desbalanceados ou
+    // string não terminada). Declarada no escopo da função para ser usada
+    // tanto no parse quanto na execução da ação.
+    function looksTruncated(str: string): boolean {
+      const t = (str || '').trim()
+      if (!t) return false
+      let depth = 0
+      let inStr = false
+      let esc = false
+      for (const ch of t) {
+        if (inStr) {
+          if (esc) esc = false
+          else if (ch === '\\') esc = true
+          else if (ch === '"') inStr = false
+        } else {
+          if (ch === '"') inStr = true
+          else if (ch === '{' || ch === '[') depth++
+          else if (ch === '}' || ch === ']') depth--
+        }
+      }
+      return depth > 0 || inStr
+    }
 
     if (deepseekApiKey) {
       const endpoint = Deno.env.get('DEEPSEEK_API_KEY')
@@ -511,28 +537,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
         }
       }
 
-      // Indica se o conteúdo bruto parece ter sido cortado no meio
-      // (resposta atingiu o limite de tokens de saída).
-      function looksTruncated(str: string): boolean {
-        const t = str.trim()
-        if (!t) return false
-        let depth = 0
-        let inStr = false
-        let esc = false
-        for (const ch of t) {
-          if (inStr) {
-            if (esc) esc = false
-            else if (ch === '\\') esc = true
-            else if (ch === '"') inStr = false
-          } else {
-            if (ch === '"') inStr = true
-            else if (ch === '{' || ch === '[') depth++
-            else if (ch === '}' || ch === ']') depth--
-          }
-        }
-        return depth > 0 || inStr
-      }
-      const truncatedOutput = looksTruncated(cleanContent)
+      truncatedOutput = looksTruncated(cleanContent)
 
       const parsedObj = tryParseJson(cleanContent)
       if (parsedObj) {
