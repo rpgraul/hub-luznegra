@@ -401,6 +401,11 @@ export default function AIAssistantModal({
       toast.danger(
         error instanceof Error ? error.message : 'Erro ao processar mensagem.',
       )
+      // A edge function pode ter executado a ação no banco e falhado só na
+      // resposta — invalida para refletir o estado real sem F5.
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      void queryClient.invalidateQueries({ queryKey: ['projects'] })
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] })
       setMessages((prev) => [
         ...prev,
         {
