@@ -190,22 +190,89 @@ function createdTaskIds(result: AIMessage['actionResult']): Array<{ id: string; 
   return out
 }
 
-function actionSucceeded(response: { action?: { type: string }; actionResult?: Record<string, unknown> | null }): boolean {
-  if (!response?.action || response.action.type === 'none') return false
+interface ActionAssessment {
+  ok: boolean
+  /** Motivo legível quando `ok === false`. */
+  reason?: string
+}
+
+function assessAction(response: { action?: { type: string }; actionResult?: Record<string, unknown> | null }): ActionAssessment {
+  if (!response?.action || response.action.type === 'none') return { ok: false }
   const r = response.actionResult as Record<string, unknown> | null | undefined
-  if (!r || typeof r !== 'object') return true
-  if (r.success === false) return false
-  // Sucesso parcial (truncado ou com falhas) também merece aviso, não festa.
-  if (r.truncated === true) return false
-  if (typeof r.subtasksFailed === 'number' && r.subtasksFailed > 0) return false
-  if (Array.isArray(r.errors) && r.errors.length > 0) return false
-  for (const k of ['count', 'updatedCount', 'subtasksCreated']) {
-    if (typeof r[k] === 'number') return (r[k] as number) > 0
+  if (!r || typeof r !== 'object') return { ok: true }
+  if (r.success === false) {
+    const err = typeof r.error === 'string' && r.error ? r.error : 'falha na execução'
+    return { ok: false, reason: err }
   }
-  return true
+  // Sucesso parcial (truncado ou com falhas) também merece aviso, não festa.
+  const failed = typeof r.subtasksFailed === 'number' ? r.subtasksFailed : 0
+  if (r.truncated === true) {
+    return {
+      ok: false,
+      reason: `resposta da IA cortada pelo limite de saída${failed > 0 ? ` (${failed} subtarefa(s) não salvas)` : ' (pode estar faltando item)'}`,
+    }
+  }
+  if (failed > 0) return { ok: false, reason: `${failed} subtarefa(s) não foram salvas` }
+  if (Array.isArray(r.errors) && r.errors.length > 0) {
+    const first = typeof r.errors[0] === 'string' ? r.errors[0] : 'erro ao salvar'
+    return { ok: false, reason: first.slice(0, 160) }
+  }
+  for (const k of ['count', 'updatedCount', 'subtasksCreated']) {
+    if (typeof r[k] === 'number') {
+      return (r[k] as number) > 0
+        ? { ok: true }
+        : { ok: false, reason: 'nada foi criado/atualizado no banco de dados' }
+    }
+  }
+  return { ok: true }
 }
 
 const CHAT_STORAGE_KEY = 'hub_ai_chat_messages_v1'
+
+function ActionBadge({
+  msg,
+  onOpenTask,
+}: {
+  msg: AIMessage
+  onOpenTask: (taskId: string) => void
+}) {
+  if (!msg.action || msg.action.type === 'none') return null
+  const assessment = assessAction({ action: msg.action, actionResult: msg.actionResult })
+  const failed = !assessment.ok
+  return (
+    <div
+      className={`mt-2.5 rounded-lg border p-2 text-[11px] ${
+        failed
+          ? 'border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+          : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+      }`}
+    >
+      <div className="flex items-center gap-1.5 font-medium">
+        <i className={`fa-solid text-xs ${failed ? 'fa-triangle-exclamation' : 'fa-circle-check'}`} />
+        <span>
+          {failed ? 'Ação parcial/falhou' : 'Ação realizada'}: {msg.action.type}
+        </span>
+      </div>
+      {failed && assessment.reason && (
+        <p className="mt-1 leading-snug opacity-90">{assessment.reason}</p>
+      )}
+      {createdTaskIds(msg.actionResult).slice(0, 5).map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onOpenTask(t.id)}
+          title={t.title || 'Abrir tarefa'}
+          className="mt-1.5 flex w-full items-center gap-1.5 rounded-md border border-current/20 bg-background/60 px-2 py-1 text-left text-[11px] font-semibold text-foreground transition hover:brightness-95 cursor-pointer"
+        >
+          <i className="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70" />
+          <span className="flex-1 truncate">
+            Ver: {t.title || 'tarefa criada'}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const WELCOME_MSG: AIMessage = {
   id: 'welcome',
@@ -317,10 +384,17 @@ export default function AIAssistantModal({
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
         void queryClient.invalidateQueries({ queryKey: ['notifications'] })
-        if (actionSucceeded(response)) {
+        const assessment = assessAction(response)
+        // Log estruturado para diagnosticar falsos positivos/negativos.
+        console.debug('[ai-assistant] action:', response.action.type, 'result:', response.actionResult)
+        if (assessment.ok) {
           toast.success('Ação executada com sucesso pelo Lorde Camarão!')
         } else {
-          toast.warning('A IA não conseguiu concluir a ação — veja os detalhes no chat.')
+          toast.warning(
+            assessment.reason
+              ? `A IA não concluiu tudo: ${assessment.reason}. Veja os detalhes no chat.`
+              : 'A IA não conseguiu concluir a ação — veja os detalhes no chat.',
+          )
         }
       }
     } catch (error) {
@@ -455,26 +529,7 @@ export default function AIAssistantModal({
 
                   {/* Action Result Badge */}
                   {msg.action && msg.action.type !== 'none' && (
-                    <div className="mt-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-[11px] text-emerald-600 dark:text-emerald-400">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <i className="fa-solid fa-circle-check text-xs" />
-                        <span>Ação realizada: {msg.action.type}</span>
-                      </div>
-                      {createdTaskIds(msg.actionResult).slice(0, 5).map((t) => (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => handleOpenTask(t.id)}
-                          title={t.title || 'Abrir tarefa'}
-                          className="mt-1.5 flex w-full items-center gap-1.5 rounded-md border border-emerald-500/30 bg-background/60 px-2 py-1 text-left text-[11px] font-semibold text-foreground transition hover:border-emerald-500/60 cursor-pointer"
-                        >
-                          <i className="fa-solid fa-arrow-up-right-from-square text-[10px] text-emerald-500" />
-                          <span className="flex-1 truncate">
-                            Ver: {t.title || 'tarefa criada'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <ActionBadge msg={msg} onOpenTask={handleOpenTask} />
                   )}
                 </div>
               </div>
