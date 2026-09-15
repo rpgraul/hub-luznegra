@@ -114,9 +114,33 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<Task> {
   return data
 }
 
-export async function deleteTask(id: string): Promise<void> {
-  const { error } = await supabase.from('tasks').delete().eq('id', id)
-  if (error) throw new Error(error.message)
+export async function deleteTask(
+  taskId: string
+): Promise<{ error: string | null }> {
+  // 1) Coleta todos os IDs descendentes (cobre subtarefas de subtarefas)
+  const idsToDelete: string[] = [taskId]
+  let frontier: string[] = [taskId]
+
+  while (frontier.length > 0) {
+    const { data, error: fetchError } = await supabase
+      .from('tasks')
+      .select('id')
+      .in('parent_id', frontier)
+      .returns<{ id: string }[]>()
+
+    if (fetchError) return { error: fetchError.message }
+
+    frontier = (data ?? []).map((row) => row.id)
+    idsToDelete.push(...frontier)
+  }
+
+  // 2) Deleta filhos + pai numa chamada só
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .in('id', idsToDelete)
+
+  return { error: error ? error.message : null }
 }
 
 /**
