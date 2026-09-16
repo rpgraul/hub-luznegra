@@ -1,4 +1,4 @@
-import type { SerializedEditorState } from 'lexical'
+import type { LexicalEditor as LexicalEditorType, SerializedEditorState } from 'lexical'
 import { $getSelection, $isRangeSelection, FORMAT_TEXT_COMMAND } from 'lexical'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
@@ -16,7 +16,7 @@ import { useEffect, useRef } from 'react'
 const EDITOR_NODES = [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode]
 
 interface LexicalEditorProps {
-  initialValue: SerializedEditorState | null
+  initialValue: SerializedEditorState | string | null
   onChange: (json: SerializedEditorState) => void
   placeholder?: string
   /**
@@ -99,12 +99,85 @@ function EmitChangePlugin({
   return null
 }
 
+/**
+ * Normaliza o valor inicial (objeto Lexical, string JSON ou texto puro
+ * legado) para `SerializedEditorState`. Retorna `null` quando vazio.
+ */
+function normalizeInitial(
+  value: SerializedEditorState | string | null,
+): SerializedEditorState | null {
+  if (!value) return null
+  if (typeof value === 'string') {
+    const t = value.trim()
+    if (!t) return null
+    try {
+      const parsed = JSON.parse(t) as unknown
+      if (parsed && typeof parsed === 'object' && 'root' in parsed) {
+        return parsed as SerializedEditorState
+      }
+    } catch {
+      // texto puro: converte abaixo
+    }
+    return {
+      root: {
+        type: 'root',
+        format: '',
+        indent: 0,
+        version: 1,
+        children: [
+          {
+            type: 'paragraph',
+            format: '',
+            indent: 0,
+            version: 1,
+            children: [
+              {
+                type: 'text',
+                text: t,
+                format: 0,
+                detail: 0,
+                mode: 'normal',
+                style: '',
+                version: 1,
+              },
+            ],
+            direction: 'ltr',
+          },
+        ],
+        direction: 'ltr',
+      },
+    } as unknown as SerializedEditorState
+  }
+  return Object.keys(value).length > 0 ? value : null
+}
+
 export default function LexicalEditor({
   initialValue,
   onChange,
   placeholder = 'Escreva a descrição...',
   namespace = 'hub-task-description',
 }: LexicalEditorProps) {
+  // Calculado uma única vez por mount: o LexicalComposer só consome
+  // `editorState` na construção do editor, e o pai remonta (via `key`) a cada
+  // troca de tarefa — então o valor do primeiro render precisa estar correto.
+  const initialRef = useRef<SerializedEditorState | null | undefined>(undefined)
+  if (initialRef.current === undefined) {
+    initialRef.current = normalizeInitial(initialValue)
+  }
+  const editorStateFn = initialRef.current
+    ? (editor: LexicalEditorType) => {
+        try {
+          editor.setEditorState(
+            editor.parseEditorState(
+              initialRef.current as SerializedEditorState,
+            ),
+          )
+        } catch {
+          // JSON inválido: começa vazio
+        }
+      }
+    : undefined
+
   return (
     <LexicalComposer
       initialConfig={{
@@ -115,16 +188,7 @@ export default function LexicalEditor({
           list: { ul: 'ml-5 list-disc', ol: 'ml-5 list-decimal', listitem: 'mb-0.5' },
           link: 'text-primary underline',
         },
-        editorState:
-          initialValue && Object.keys(initialValue).length > 0
-            ? (editor) => {
-                try {
-                  editor.setEditorState(editor.parseEditorState(initialValue))
-                } catch {
-                  // JSON inválido: começa vazio
-                }
-              }
-            : undefined,
+        editorState: editorStateFn,
         onError: (error) => console.error('Lexical error:', error),
       }}
     >

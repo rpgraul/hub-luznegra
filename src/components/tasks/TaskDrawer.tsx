@@ -63,6 +63,34 @@ const EMPTY_DESCRIPTION: SerializedEditorState = {
   },
 }
 
+/** Deep clone de JSON Lexical (evita compartilhar o template entre tarefas). */
+function cloneDesc(
+  src: SerializedEditorState | null | undefined,
+): SerializedEditorState {
+  try {
+    if (src && Object.keys(src).length > 0) {
+      return JSON.parse(JSON.stringify(src)) as SerializedEditorState
+    }
+  } catch {
+    // cai no template vazio abaixo
+  }
+  return JSON.parse(JSON.stringify(EMPTY_DESCRIPTION)) as SerializedEditorState
+}
+
+/** Descrição da tarefa pronta para draft/editor (sempre clone novo). */
+function taskDesc(task: Task | null): SerializedEditorState {
+  const raw = task?.description as unknown
+  // Legado/dado externo pode vir como string pura: converte para Lexical em
+  // vez de entregar ao editor (que falharia no parse e abriria vazio).
+  if (typeof raw === 'string') {
+    const t = raw.trim()
+    return t
+      ? (buildSimpleLexicalJson(t) as unknown as SerializedEditorState)
+      : cloneDesc(null)
+  }
+  return cloneDesc(raw as SerializedEditorState | null)
+}
+
 function extractDescriptionText(description: unknown): string {
   if (!description) return ''
   if (typeof description === 'string') return description
@@ -125,15 +153,21 @@ export default function TaskDrawer({
   projects,
   creator,
 }: TaskDrawerProps) {
-  const [currentTask, setCurrentTask] = useState<Task | null>(initialTask)
-  const [titleDraft, setTitleDraft] = useState('')
+  // ATENÇÃO: o LexicalComposer lê `initialValue` SOMENTE no mount. Como o
+  // drawer monta uma única vez por abertura e o `useEffect` de sincronia roda
+  // DEPOIS do primeiro render, inicializar estes estados com vazio fazia o
+  // editor nascer vazio mesmo com descrição salva — e o Salvamento seguinte
+  // sobrescrevia o conteúdo bom com vazio. Por isso os inicializadores lazy
+  // abaixo partem de `initialTask` (valor do primeiro mount).
+  const [currentTask, setCurrentTask] = useState<Task | null>(initialTask ?? null)
+  const [titleDraft, setTitleDraft] = useState(() => initialTask?.title ?? '')
   const [descriptionDraft, setDescriptionDraft] =
-    useState<SerializedEditorState>(EMPTY_DESCRIPTION)
+    useState<SerializedEditorState>(() => taskDesc(initialTask ?? null))
   // Valor inicial congelado no momento da abertura/troca de tarefa: é o que
   // alimenta o Lexical (que só lê `initialValue` no mount). Nunca passar o
   // draft vivo aqui, senão a troca pai <-> subtarefa monta o editor stale.
   const [editorInitial, setEditorInitial] =
-    useState<SerializedEditorState>(EMPTY_DESCRIPTION)
+    useState<SerializedEditorState>(() => taskDesc(initialTask ?? null))
   
   // New subtask inputs
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
@@ -156,10 +190,25 @@ export default function TaskDrawer({
   const titleTimer = useRef<number | undefined>(undefined)
   const descriptionTimer = useRef<number | undefined>(undefined)
   // Refs do autosave: evitam stale closure e permitem flush ao fechar/trocar.
-  const loadedTaskIdRef = useRef<string | null>(null)
+  // Inicializadas com a tarefa do primeiro mount pelo mesmo motivo do lazy
+  // init acima (efeito roda após o primeiro render).
+  const loadedTaskIdRef = useRef<string | null>(initialTask?.id ?? null)
   // Último conteúdo confirmado pelo banco, POR tarefa: um save da tarefa A
   // nunca pode clobberar o controle da tarefa B ao navegar pai <-> subtarefa.
-  const lastSavedDescByTask = useRef(new Map<string, string>())
+  const lastSavedDescByTask = useRef(
+    new Map<string, string>(
+      initialTask?.id
+        ? [
+            [
+              initialTask.id,
+              JSON.stringify(
+                (initialTask.description as unknown as SerializedEditorState | null) ?? null,
+              ),
+            ],
+          ]
+        : [],
+    ),
+  )
   const pendingDescRef = useRef<{
     taskId: string
     json: SerializedEditorState
@@ -199,11 +248,10 @@ export default function TaskDrawer({
     setCurrentTask(initialTask ?? null)
     if (!initialTask) {
       setTitleDraft('')
-      const empty = { ...EMPTY_DESCRIPTION }
+      const empty = cloneDesc(null)
       setDescriptionDraft(empty)
       descriptionDraftRef.current = empty
       setEditorInitial(empty)
-      lastSavedDescByTask.current.delete('__new__')
       setNewSubtaskTitle('')
       setNewSubtaskDesc('')
       setNewSubtaskDue('')
@@ -214,7 +262,7 @@ export default function TaskDrawer({
       return
     }
     setTitleDraft(initialTask.title)
-    const json = (initialTask.description as unknown as SerializedEditorState | null) ?? { ...EMPTY_DESCRIPTION }
+    const json = taskDesc(initialTask)
     setDescriptionDraft(json)
     descriptionDraftRef.current = json
     setEditorInitial(json)
@@ -357,7 +405,7 @@ export default function TaskDrawer({
     pendingTitleRef.current = null
     setCurrentTask(task)
     setTitleDraft(task.title)
-    const json = (task.description as unknown as SerializedEditorState | null) ?? { ...EMPTY_DESCRIPTION }
+    const json = taskDesc(task)
     setDescriptionDraft(json)
     descriptionDraftRef.current = json
     setEditorInitial(json)
