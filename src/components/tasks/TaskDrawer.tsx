@@ -146,6 +146,7 @@ export default function TaskDrawer({
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [manualSaving, setManualSaving] = useState(false)
   const isNew = !currentTask?.id
 
   const commentScrollRef = useRef<HTMLDivElement>(null)
@@ -156,7 +157,9 @@ export default function TaskDrawer({
   const descriptionTimer = useRef<number | undefined>(undefined)
   // Refs do autosave: evitam stale closure e permitem flush ao fechar/trocar.
   const loadedTaskIdRef = useRef<string | null>(null)
-  const lastSavedDescRef = useRef<string>('')
+  // Último conteúdo confirmado pelo banco, POR tarefa: um save da tarefa A
+  // nunca pode clobberar o controle da tarefa B ao navegar pai <-> subtarefa.
+  const lastSavedDescByTask = useRef(new Map<string, string>())
   const pendingDescRef = useRef<{
     taskId: string
     json: SerializedEditorState
@@ -165,6 +168,20 @@ export default function TaskDrawer({
   const pendingTitleRef = useRef<{ taskId: string; title: string } | null>(null)
   const currentTaskRef = useRef<Task | null>(null)
   currentTaskRef.current = currentTask
+  const descriptionDraftRef = useRef<SerializedEditorState>(descriptionDraft)
+  descriptionDraftRef.current = descriptionDraft
+  // Fila que serializa todos os writes de descrição/título do drawer: sem
+  // ela, dois autosaves sobrepostos (pausa-digita-pausa rápido) concorrem e o
+  // mais antigo pode vencer o mais novo no banco (last-write-wins invertido).
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve())
+  function chainSave<T>(fn: () => Promise<T>): Promise<T> {
+    const run = saveChainRef.current.then(fn, fn)
+    saveChainRef.current = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
 
   // Sincroniza drafts APENAS quando troca o id da tarefa aberta. O efeito
   // antigo observava o objeto `currentTask` inteiro, então cada save otimista
@@ -184,8 +201,9 @@ export default function TaskDrawer({
       setTitleDraft('')
       const empty = { ...EMPTY_DESCRIPTION }
       setDescriptionDraft(empty)
+      descriptionDraftRef.current = empty
       setEditorInitial(empty)
-      lastSavedDescRef.current = JSON.stringify(empty)
+      lastSavedDescByTask.current.delete('__new__')
       setNewSubtaskTitle('')
       setNewSubtaskDesc('')
       setNewSubtaskDue('')
@@ -198,8 +216,9 @@ export default function TaskDrawer({
     setTitleDraft(initialTask.title)
     const json = (initialTask.description as unknown as SerializedEditorState | null) ?? { ...EMPTY_DESCRIPTION }
     setDescriptionDraft(json)
+    descriptionDraftRef.current = json
     setEditorInitial(json)
-    lastSavedDescRef.current = JSON.stringify(json)
+    lastSavedDescByTask.current.set(initialTask.id, JSON.stringify(json))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialTask?.id])
 
@@ -217,35 +236,19 @@ export default function TaskDrawer({
     })
   }, [comments.comments.length])
 
+  // Flush mais recente sempre acessível ao cleanup de unmount (que tem [] deps).
+  const flushDescRef = useRef(() => Promise.resolve())
+  const flushTitleRef = useRef(() => Promise.resolve())
+
   useEffect(
     () => () => {
       // No unmount, despacha o pendente em vez de descartar: o update não
       // depende do componente montado.
-      const pendingDesc = pendingDescRef.current
-      const pendingTitle = pendingTitleRef.current
       window.clearTimeout(titleTimer.current)
       window.clearTimeout(descriptionTimer.current)
-      if (pendingDesc) {
-        void creator
-          .updateTask({
-            id: pendingDesc.taskId,
-            patch: {
-              description: pendingDesc.json as unknown as Task['description'],
-            },
-          })
-          .then(() => creator.refreshTasks?.())
-          .catch(() => {})
-      } else if (pendingTitle) {
-        void creator
-          .updateTask({
-            id: pendingTitle.taskId,
-            patch: { title: pendingTitle.title },
-          })
-          .then(() => creator.refreshTasks?.())
-          .catch(() => {})
-      }
+      void flushDescRef.current().catch(() => {})
+      void flushTitleRef.current().catch(() => {})
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -257,48 +260,57 @@ export default function TaskDrawer({
     if (!taskId || taskId === target?.id) {
       setCurrentTask((prev) => (prev ? { ...prev, ...patch } : null))
     }
-    void creator
-      .updateTask({ id, patch })
+    void chainSave(() => creator.updateTask({ id, patch }))
       .then(() => {
-        setSaving(false)
         if ('description' in patch) {
-          lastSavedDescRef.current = JSON.stringify(patch.description ?? null)
+          lastSavedDescByTask.current.set(id, JSON.stringify(patch.description ?? null))
           if (pendingDescRef.current?.taskId === id) pendingDescRef.current = null
         }
         creator.refreshTasks?.()
       })
       .catch((error) => {
-        setSaving(false)
         toast.danger(
           error instanceof Error
             ? `Não foi possível salvar: ${error.message}`
             : 'Não foi possível salvar as alterações.',
         )
       })
+      .finally(() => {
+        setSaving(false)
+      })
   }
 
   /** Despacha imediatamente a descrição pendente (flush do debounce). */
   function flushPendingDescription(): Promise<void> {
     const pending = pendingDescRef.current
-    if (!pending) return Promise.resolve()
+    if (!pending) return saveChainRef.current
     window.clearTimeout(descriptionTimer.current)
     pendingDescRef.current = null
-    lastSavedDescRef.current = pending.serialized
     setSaving(true)
-    return creator
-      .updateTask({
+    if (import.meta.env.DEV) {
+      console.log('[hub:desc] autosave', pending.taskId, `${pending.serialized.length} chars`)
+    }
+    return chainSave(() =>
+      creator.updateTask({
         id: pending.taskId,
         patch: {
           description: pending.json as unknown as Task['description'],
         },
-      })
+      }),
+    )
       .then(() => {
-        setSaving(false)
+        // Só marca como salvo se ainda for a tarefa relevante: evita que um
+        // save da tarefa A clobbere o controle da tarefa B após navegação.
+        lastSavedDescByTask.current.set(pending.taskId, pending.serialized)
         creator.refreshTasks?.()
+        if (import.meta.env.DEV) {
+          console.log('[hub:desc] autosave ok', pending.taskId)
+        }
       })
       .catch((error) => {
-        setSaving(false)
-        pendingDescRef.current = pending
+        // Falha: recoloca na fila (se nada mais novo entrou) para retry.
+        if (!pendingDescRef.current) pendingDescRef.current = pending
+        console.error('[hub:desc] autosave falhou', pending.taskId, error)
         toast.danger(
           error instanceof Error
             ? `Não foi possível salvar a descrição: ${error.message}`
@@ -306,20 +318,26 @@ export default function TaskDrawer({
         )
         throw error
       })
+      .finally(() => {
+        setSaving(false)
+      })
   }
+  flushDescRef.current = flushPendingDescription
 
   function flushPendingTitle(): Promise<void> {
     const pending = pendingTitleRef.current
-    if (!pending || !pending.title.trim()) return Promise.resolve()
+    if (!pending || !pending.title.trim()) return saveChainRef.current
     window.clearTimeout(titleTimer.current)
     pendingTitleRef.current = null
-    return creator
-      .updateTask({ id: pending.taskId, patch: { title: pending.title } })
+    return chainSave(() =>
+      creator.updateTask({ id: pending.taskId, patch: { title: pending.title } }),
+    )
       .then(() => {
         creator.refreshTasks?.()
       })
       .catch(() => {})
   }
+  flushTitleRef.current = flushPendingTitle
 
   function openTaskDetails(task: Task) {
     // Trocar de tarefa (pai <-> subtarefa) sem antes dar flush perdia a
@@ -327,10 +345,10 @@ export default function TaskDrawer({
     const pendingDesc = pendingDescRef.current
     const pendingTitle = pendingTitleRef.current
     if (pendingDesc && pendingDesc.taskId !== task.id) {
-      void flushPendingDescription()
+      void flushPendingDescription().catch(() => {})
     }
     if (pendingTitle && pendingTitle.taskId !== task.id) {
-      void flushPendingTitle()
+      void flushPendingTitle().catch(() => {})
     }
     loadedTaskIdRef.current = task.id
     window.clearTimeout(titleTimer.current)
@@ -341,8 +359,9 @@ export default function TaskDrawer({
     setTitleDraft(task.title)
     const json = (task.description as unknown as SerializedEditorState | null) ?? { ...EMPTY_DESCRIPTION }
     setDescriptionDraft(json)
+    descriptionDraftRef.current = json
     setEditorInitial(json)
-    lastSavedDescRef.current = JSON.stringify(json)
+    lastSavedDescByTask.current.set(task.id, JSON.stringify(json))
   }
 
   function handleTitleChange(value: string) {
@@ -361,12 +380,14 @@ export default function TaskDrawer({
 
   function handleDescriptionChange(json: SerializedEditorState) {
     setDescriptionDraft(json)
+    descriptionDraftRef.current = json
     const target = currentTaskRef.current
     if (!target) return
     const serialized = JSON.stringify(json)
-    if (serialized === lastSavedDescRef.current) {
+    const lastSaved = lastSavedDescByTask.current.get(target.id)
+    if (serialized === lastSaved) {
       if (pendingDescRef.current?.serialized === serialized) return
-      // Texto igual ao último salvo: cancela pendência redundante.
+      // Texto igual ao último CONFIRMADO pelo banco: cancela redundância.
       if (pendingDescRef.current?.taskId === target.id) {
         pendingDescRef.current = null
         window.clearTimeout(descriptionTimer.current)
@@ -376,45 +397,53 @@ export default function TaskDrawer({
     pendingDescRef.current = { taskId: target.id, json, serialized }
     window.clearTimeout(descriptionTimer.current)
     descriptionTimer.current = window.setTimeout(() => {
-      void flushPendingDescription()
+      void flushPendingDescription().catch(() => {})
     }, 800)
   }
 
   async function handleManualSave() {
     const target = currentTaskRef.current
-    if (!target) return
+    if (!target || manualSaving) return
     window.clearTimeout(titleTimer.current)
     window.clearTimeout(descriptionTimer.current)
-    pendingTitleRef.current = null
-    pendingDescRef.current = null
     const title = titleDraft.trim()
     if (!title) {
       toast.danger('Dê um título para a tarefa antes de salvar.')
       return
     }
+    setManualSaving(true)
     setSaving(true)
     try {
-      await creator.updateTask({
-        id: target.id,
-        patch: {
-          title,
-          description: descriptionDraft as unknown as Task['description'],
-        },
-      })
-      lastSavedDescRef.current = JSON.stringify(descriptionDraft)
+      // 1) Aguarda autosaves em voo: eles carregam snapshot mais antigo; o
+      // write abaixo (draft mais recente) precisa ser o ÚLTIMO a chegar.
+      await saveChainRef.current.catch(() => {})
+      pendingTitleRef.current = null
+      pendingDescRef.current = null
+      const description =
+        descriptionDraftRef.current as unknown as Task['description']
+      // 2) Write único com o draft mais recente (updateTask verifica o eco do
+      // banco e lança se a descrição não persistiu — nada de "salvo" falso).
+      const saved = (await chainSave(() =>
+        creator.updateTask({ id: target.id, patch: { title, description } }),
+      )) as unknown as Task | null
+      const confirmed =
+        (saved?.description as unknown as SerializedEditorState | null) ?? null
+      lastSavedDescByTask.current.set(target.id, JSON.stringify(confirmed ?? null))
       setCurrentTask((prev) =>
-        prev ? { ...prev, title, description: descriptionDraft as unknown as Task['description'] } : null,
+        prev ? { ...prev, title, description: description } : null,
       )
       creator.refreshTasks?.()
       toast.success('Todas as alterações foram salvas!')
       onOpenChange(false)
     } catch (error) {
+      console.error('[hub:desc] save manual falhou', target.id, error)
       toast.danger(
         error instanceof Error
           ? `Não foi possível salvar: ${error.message}`
           : 'Não foi possível salvar as alterações.',
       )
     } finally {
+      setManualSaving(false)
       setSaving(false)
     }
   }
@@ -1274,10 +1303,10 @@ export default function TaskDrawer({
                 size="sm"
                 className="rounded-md bg-[#7b68ee] text-xs font-semibold text-white hover:bg-[#6c5ce7]"
                 onPress={handleManualSave}
-                isDisabled={saving}
+                isDisabled={manualSaving || !titleDraft.trim()}
               >
                 <i className="fa-solid fa-floppy-disk mr-1" />
-                {saving ? 'Salvando...' : 'Salvar'}
+                {manualSaving ? 'Salvando...' : 'Salvar'}
               </Button>
             </div>
           </div>

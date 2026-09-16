@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { extractLexicalText } from '@/utils/lexical'
 import type {
   Json,
   Task,
@@ -80,10 +81,20 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
         .select('*')
         .single()
       if (retry.error) throw new Error(retry.error.message)
+      verifyDescriptionEcho(
+        { description: insertPayload.description ?? null },
+        retry.data as Task,
+        'new',
+      )
       return retry.data
     }
     throw new Error(error.message)
   }
+  verifyDescriptionEcho(
+    { description: insertPayload.description ?? null },
+    data as Task,
+    'new',
+  )
   return data
 }
 
@@ -107,11 +118,42 @@ export async function updateTask(id: string, patch: TaskPatch): Promise<Task> {
         .select('*')
         .single()
       if (retry.error) throw new Error(retry.error.message)
+      verifyDescriptionEcho(patch, retry.data as Task, id)
       return retry.data
     }
     throw new Error(error.message)
   }
+  verifyDescriptionEcho(patch, data as Task, id)
   return data
+}
+
+/**
+ * Garante que a descrição enviada foi realmente persistida: compara o texto
+ * extraído do eco retornado pelo banco com o texto enviado. Sem isso, uma
+ * divergência silenciosa (coluna ausente, trigger, payload descartado) faz o
+ * app dizer "salvo" enquanto a descrição some ao reabrir.
+ * Compara por TEXTO (não por JSON stringify) porque o jsonb reordena chaves.
+ */
+function verifyDescriptionEcho(
+  patch: TaskPatch,
+  saved: Task,
+  id: string,
+): void {
+  if (!('description' in patch)) return
+  const sentText = extractLexicalText(patch.description ?? null)
+  const echoText = extractLexicalText(saved?.description ?? null)
+  if (sentText !== echoText) {
+    console.error('[hub:desc] eco divergente', {
+      id,
+      sentChars: sentText.length,
+      echoChars: echoText.length,
+      sent: sentText.slice(0, 120),
+      echo: echoText.slice(0, 120),
+    })
+    throw new Error(
+      'O banco não persistiu a descrição (eco divergente). Tente de novo; se persistir, confira a conexão/RLS da tabela tasks.',
+    )
+  }
 }
 
 export async function deleteTask(
