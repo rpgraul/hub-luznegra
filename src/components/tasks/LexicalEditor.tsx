@@ -5,13 +5,13 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
 import { ListPlugin } from '@lexical/react/LexicalListPlugin'
-import { OnChangePlugin } from '@lexical/react/LexicalOnChangePlugin'
 import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { $createLinkNode, LinkNode } from '@lexical/link'
 import { INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, ListNode, ListItemNode } from '@lexical/list'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
+import { useEffect, useRef } from 'react'
 
 const EDITOR_NODES = [HeadingNode, QuoteNode, ListNode, ListItemNode, LinkNode]
 
@@ -69,6 +69,36 @@ function Toolbar() {
   )
 }
 
+/**
+ * Emite o estado serializado a cada mudança de conteúdo — INCLUSIVE a
+ * primeira digitação partindo do editor vazio.
+ *
+ * O `OnChangePlugin` oficial ignora a transição `empty -> texto`
+ * (`prevEditorState.isEmpty()`), o que fazia a descrição nunca chegar ao
+ * `onChange` quando a tarefa partia de `null`/vazio. Por isso usamos um
+ * listener próprio sem esse filtro.
+ */
+function EmitChangePlugin({
+  onChange,
+}: {
+  onChange: (json: SerializedEditorState) => void
+}) {
+  const [editor] = useLexicalComposerContext()
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
+
+  useEffect(() => {
+    return editor.registerUpdateListener(
+      ({ editorState, dirtyElements, dirtyLeaves }) => {
+        if (dirtyElements.size === 0 && dirtyLeaves.size === 0) return
+        onChangeRef.current(editorState.toJSON())
+      },
+    )
+  }, [editor])
+
+  return null
+}
+
 export default function LexicalEditor({
   initialValue,
   onChange,
@@ -113,7 +143,7 @@ export default function LexicalEditor({
       <HistoryPlugin />
       <ListPlugin />
       <LinkPlugin />
-      <OnChangePlugin onChange={(editorState) => onChange(editorState.toJSON())} />
+      <EmitChangePlugin onChange={onChange} />
     </LexicalComposer>
   )
 }
