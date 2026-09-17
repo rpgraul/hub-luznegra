@@ -72,8 +72,13 @@ export default function NewTaskModal({
   const [startDate, setStartDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [hours, setHours] = useState('')
-  const [description, setDescription] =
-    useState<SerializedEditorState | null>(null)
+  // Conteúdo vivo da descrição em ref (sem setState por tecla/colagem):
+  // notificar o React a cada mudança do Lexical re-renderizava o modal
+  // inteiro e travava a aplicação ao colar. Lido só no submit.
+  const descriptionDraftRef = useRef<SerializedEditorState | null>(null)
+  function handleDescriptionChange(json: SerializedEditorState) {
+    descriptionDraftRef.current = json
+  }
   const [categories, setCategories] = useState<string[]>([])
   const [categoryInput, setCategoryInput] = useState('')
   const [subtasks, setSubtasks] = useState<NewSubtaskInput[]>([])
@@ -96,7 +101,7 @@ export default function NewTaskModal({
     setStartDate(initDate)
     setDueDate(initDate)
     setHours('')
-    setDescription(null)
+    descriptionDraftRef.current = null
     setCategories([])
     setCategoryInput('')
     setSubtasks([])
@@ -163,7 +168,7 @@ export default function NewTaskModal({
         start_date: startDate || null,
         due_date: dueDate || null,
         estimated_hours,
-        description: normalizeLexicalForSave(description) as unknown as SerializedEditorState | null,
+        description: normalizeLexicalForSave(descriptionDraftRef.current) as unknown as SerializedEditorState | null,
         categories,
         subtasks: [...subtasks, ...pendingSubtask],
       })
@@ -477,7 +482,7 @@ export default function NewTaskModal({
                     key={open ? 'new-task-open' : 'new-task-closed'}
                     namespace="hub-new-task-description"
                     initialValue={null}
-                    onChange={setDescription}
+                    onChange={handleDescriptionChange}
                     placeholder="Descreva a tarefa, contexto, links úteis…"
                   />
                 </div>
