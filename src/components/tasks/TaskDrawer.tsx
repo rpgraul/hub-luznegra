@@ -293,6 +293,7 @@ export default function TaskDrawer({
   // Flush mais recente sempre acessível ao cleanup de unmount (que tem [] deps).
   const flushDescRef = useRef(() => Promise.resolve())
   const flushTitleRef = useRef(() => Promise.resolve())
+  const flushSubtaskRef = useRef(() => Promise.resolve(false))
 
   useEffect(
     () => () => {
@@ -302,6 +303,7 @@ export default function TaskDrawer({
       window.clearTimeout(descriptionTimer.current)
       void flushDescRef.current().catch(() => {})
       void flushTitleRef.current().catch(() => {})
+      void flushSubtaskRef.current().catch(() => {})
     },
     [],
   )
@@ -468,6 +470,8 @@ export default function TaskDrawer({
       toast.danger('Dê um título para a tarefa antes de salvar.')
       return
     }
+    // Subtarefa digitada mas não confirmada (sem Enter/botão): cria junto.
+    await commitSubtaskDraft()
     setManualSaving(true)
     setSaving(true)
     try {
@@ -664,6 +668,9 @@ export default function TaskDrawer({
       if (created) newSubtaskTitleRef.current?.focus()
     })
   }
+  // Expõe o commit mais recente ao cleanup de unmount (fecha o drawer com
+  // rascunho preenchido → cria em vez de descartar).
+  flushSubtaskRef.current = commitSubtaskDraft
 
   function handleUpdateSubtask(subtaskId: string, patch: Partial<Task>) {
     void creator.updateTask({ id: subtaskId, patch })
@@ -1272,7 +1279,7 @@ export default function TaskDrawer({
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <span className="text-[10px] text-muted-foreground">
-                      Enter ou Adicionar cria a subtarefa.
+                      Enter ou Adicionar cria. Salvar inclui o digitado.
                     </span>
                     <Button
                       size="sm"
