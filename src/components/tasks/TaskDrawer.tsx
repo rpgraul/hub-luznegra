@@ -30,6 +30,8 @@ interface TaskDrawerProps {
   task: Task | null
   projectId: string | null
   projects: Project[]
+  /** Sinal do workspace para abrir o chat direto (badge nas listagens). */
+  autoOpenChatKey?: string | null
   creator: {
     currentUserId: string
     createTask: (input: {
@@ -153,6 +155,7 @@ export default function TaskDrawer({
   projectId,
   projects,
   creator,
+  autoOpenChatKey,
 }: TaskDrawerProps) {
   // ATENÇÃO: o LexicalComposer lê `initialValue` SOMENTE no mount. Como o
   // drawer monta uma única vez por abertura e o `useEffect` de sincronia roda
@@ -186,6 +189,11 @@ export default function TaskDrawer({
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showChat, setShowChat] = useState(false)
+
+  // Badge nas listagens: abre o chat direto (o chat acompanha currentTask).
+  useEffect(() => {
+    if (autoOpenChatKey) setShowChat(true)
+  }, [autoOpenChatKey])
   const [saving, setSaving] = useState(false)
   const [manualSaving, setManualSaving] = useState(false)
   const isNew = !currentTask?.id

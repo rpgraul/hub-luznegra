@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { PRIORITY_ICONS } from '@/utils/status'
+import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
 import { categoryColors } from '@/utils/categories'
 import { formatDateRange, todayIso } from '@/utils/format'
 import { userColor, userRowColor } from '@/utils/colors'
@@ -17,6 +18,7 @@ interface TaskCardProps {
   project?: { name: string; color: string } | null
   parentTaskTitle?: string | null
   memberOf?: (id: string | null) => ProjectMember | null
+  commentCount?: number
 }
 
 export default function TaskCard({
@@ -30,6 +32,7 @@ export default function TaskCard({
   project = null,
   parentTaskTitle = null,
   memberOf,
+  commentCount = 0,
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
@@ -226,6 +229,7 @@ export default function TaskCard({
                 </div>
               )
             })()}
+            <TaskCommentsBadge taskId={task.id} count={commentCount} />
           </div>
 
           {totalSubtasks > 0 && (

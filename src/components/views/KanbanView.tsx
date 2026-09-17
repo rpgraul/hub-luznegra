@@ -7,6 +7,7 @@ import {
 } from '@hello-pangea/dnd'
 import { toast, Button } from '@heroui/react'
 import TaskCard from '@/components/tasks/TaskCard'
+import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { TASK_STATUSES } from '@/hooks/useTasks'
 import type { ProjectMember } from '@/lib/api/members'
@@ -46,6 +47,7 @@ export default function KanbanView({
 
   const projectById = new Map(projects.map((project) => [project.id, project]))
   const taskById = new Map(tasks.map((task) => [task.id, task]))
+  const { counts: commentCounts } = useTaskCommentCounts()
 
   // Partition top-level and subtasks
   const topLevelTasks = tasks.filter((task) => !task.parent_id)
@@ -290,6 +292,7 @@ export default function KanbanView({
                                     compact={false}
                                     parentTaskTitle={parent?.title}
                                     memberOf={memberOf}
+                                    commentCount={commentCounts.get(task.id) ?? 0}
                                     project={
                                       task.project_id
                                         ? projectById.get(task.project_id)

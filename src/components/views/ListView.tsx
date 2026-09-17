@@ -10,6 +10,8 @@ import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
 import StatusSelect from '@/components/tasks/StatusSelect'
+import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
+import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { userColor } from '@/utils/colors'
 import { categoryColors } from '@/utils/categories'
 import { formatDate, todayIso } from '@/utils/format'
@@ -245,6 +247,7 @@ function CategoriesCell({
 interface TaskRowProps {  task: Task
   depth: number
   childrenCount: number
+  commentCount?: number
   memberOf: (id: string | null) => ProjectMember | null
   onToggleDone: (task: Task) => void
   onChangeStatus: (task: Task, status: TaskStatus) => void
@@ -263,6 +266,7 @@ function TaskRow({
   task,
   depth,
   childrenCount,
+  commentCount = 0,
   memberOf: memberLookup,
   onToggleDone,
   onChangeStatus,
@@ -428,6 +432,7 @@ function TaskRow({
             >
               <i className="fa-regular fa-pen-to-square text-[11px]" />
             </button>
+            <TaskCommentsBadge taskId={task.id} count={commentCount} />
           </div>
 
           {/* Description Row (Inline Editable on 2 Clicks) */}
@@ -578,6 +583,7 @@ interface TasksTableProps {
   onOpen: (task: Task) => void
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
+  commentCounts: Map<string, number>
   projectById?: Map<string, Project>
   onSortBy: (field: SortField) => void
   currentSortField: SortField
@@ -595,6 +601,7 @@ function TasksTable({
   onOpen,
   memberOf,
   countSubtasks,
+  commentCounts,
   projectById,
   onSortBy,
   currentSortField,
@@ -708,6 +715,7 @@ function TasksTable({
                     task,
                     depth,
                     childrenCount: countSubtasks(task),
+                    commentCount: commentCounts.get(task.id) ?? 0,
                     memberOf,
                     onToggleDone,
                     onChangeStatus,
@@ -759,6 +767,7 @@ export default function ListView({
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+  const { counts: commentCounts } = useTaskCommentCounts()
 
   const availableCategories = useMemo(() => {
     const set = new Set<string>()
@@ -1087,6 +1096,7 @@ export default function ListView({
                         onOpen={onOpenTask}
                         memberOf={memberOf}
                         countSubtasks={countSubtasks}
+                        commentCounts={commentCounts}
                         projectById={projectById}
                         onSortBy={handleSortBy}
                         currentSortField={sortField}
@@ -1111,6 +1121,7 @@ export default function ListView({
               onOpen={onOpenTask}
               memberOf={memberOf}
               countSubtasks={countSubtasks}
+              commentCounts={commentCounts}
               projectById={projectById}
               onSortBy={handleSortBy}
               currentSortField={sortField}

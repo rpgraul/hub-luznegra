@@ -125,6 +125,8 @@ export default function TaskWorkspace({
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  // Sinal para abrir o chat de comentários direto do badge nas listagens.
+  const [chatKey, setChatKey] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createStartDate, setCreateStartDate] = useState<string | null>(null)
 
@@ -183,6 +185,25 @@ export default function TaskWorkspace({
       window.removeEventListener('hub:open-task-drawer', handleCustomOpenTask)
     }
   }, [tasks, tasksApi])
+
+  // Badge de comentários nas listagens: abre o drawer já com o chat aberto.
+  useEffect(() => {
+    function handleCustomOpenChat(e: Event) {
+      const targetId = (e as CustomEvent<{ taskId: string }>).detail?.taskId
+      if (!targetId) return
+      const found = tasks.find((t) => t.id === targetId)
+      if (found) {
+        setSelectedTask(found)
+        setDrawerOpen(true)
+        setChatKey(`${targetId}:${Date.now()}`)
+      }
+    }
+
+    window.addEventListener('hub:open-task-chat', handleCustomOpenChat)
+    return () => {
+      window.removeEventListener('hub:open-task-chat', handleCustomOpenChat)
+    }
+  }, [tasks])
 
   function openTask(task: Task) {
     setSelectedTask(task)
@@ -358,6 +379,7 @@ export default function TaskWorkspace({
           open={drawerOpen}
           onOpenChange={closeDrawer}
           task={selectedTask}
+          autoOpenChatKey={chatKey}
           projectId={activeProjectId}
           projects={projects}
           creator={{

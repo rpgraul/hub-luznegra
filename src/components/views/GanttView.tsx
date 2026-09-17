@@ -12,6 +12,8 @@ import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
+import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
+import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
@@ -223,6 +225,7 @@ export default function GanttView({
   const [pendingOrder, setPendingOrder] = useState<string[] | null>(null)
 
   const { memberOf } = useProjectMembers(null)
+  const { counts: commentCounts } = useTaskCommentCounts()
   const projectById = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects])
   const wrapperRef = useRef<HTMLDivElement>(null)
   const tableRef = useRef<HTMLDivElement>(null)
@@ -1224,6 +1227,7 @@ export default function GanttView({
                                 {isSubtask && <span className="shrink-0 rounded bg-muted/90 px-1 py-0.2 text-[8px] font-medium text-muted-foreground border border-border/50">sub</span>}
                                 {undated && <span className="shrink-0 rounded border border-dashed border-amber-500/50 bg-amber-500/10 px-1 text-[8px] font-semibold leading-tight text-amber-600 dark:text-amber-400">sem prazo</span>}
                                 {isOverdue && <span className="shrink-0 rounded border border-rose-500/30 bg-rose-500/10 px-1 text-[8px] font-bold leading-tight text-rose-600">atrasada</span>}
+                                <TaskCommentsBadge taskId={task.id} count={commentCounts.get(task.id) ?? 0} />
                               </div>
                               {(task.tags ?? []).length > 0 && (
                                 <div className="flex flex-wrap gap-1 mt-0.5" style={{ paddingLeft: isSubtask ? '14px' : '10px' }}>
