@@ -10,6 +10,7 @@ import {
 } from '@heroui/react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import StatusSelect from '@/components/tasks/StatusSelect'
+import TaskCommentsModal from '@/components/tasks/TaskCommentsModal'
 import DateInput from '@/components/ui/DateInput'
 import { useTaskComments } from '@/hooks/useTaskComments'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
@@ -184,6 +185,7 @@ export default function TaskDrawer({
   const [categoryInput, setCategoryInput] = useState('')
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showChat, setShowChat] = useState(false)
   const [saving, setSaving] = useState(false)
   const [manualSaving, setManualSaving] = useState(false)
   const isNew = !currentTask?.id
@@ -1231,7 +1233,25 @@ export default function TaskDrawer({
 
               {/* Comments Section */}
               <div className="space-y-2.5">
-                <Label className="text-xs font-semibold text-foreground">Comentários e Atividades</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-foreground">
+                    Comentários e Atividades{' '}
+                    {comments.comments.length > 0 && (
+                      <span className="font-normal text-muted-foreground">
+                        ({comments.comments.length})
+                      </span>
+                    )}
+                  </Label>
+                  <button
+                    type="button"
+                    onClick={() => setShowChat(true)}
+                    title="Abrir conversa em tela cheia"
+                    className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-[11px] font-semibold text-[#7b68ee] shadow-2xs transition hover:bg-[#7b68ee]/10"
+                  >
+                    <i className="fa-regular fa-comments text-xs" />
+                    Conversa
+                  </button>
+                </div>
                 <div
                   ref={commentScrollRef}
                   className="max-h-40 space-y-2 overflow-y-auto rounded-md border border-border bg-muted/20 p-2.5 text-xs shadow-2xs"
@@ -1349,6 +1369,18 @@ export default function TaskDrawer({
           </div>
         )}
       </div>
+
+      {/* Chat de comentários em modal */}
+      {currentTask && !isNew && (
+        <TaskCommentsModal
+          open={showChat}
+          onOpenChange={setShowChat}
+          taskId={currentTask.id}
+          taskTitle={currentTask.title}
+          projectId={projectId}
+          currentUserId={creator.currentUserId}
+        />
+      )}
 
       {/* Delete Confirmation Modal (custom com z-index 60 para ficar sobre o Drawer) */}
       {confirmDelete && (
