@@ -169,10 +169,18 @@ export default function TaskDrawer({
   const [editorInitial, setEditorInitial] =
     useState<SerializedEditorState>(() => taskDesc(initialTask ?? null))
   
-  // New subtask inputs
+  // New subtask inputs (rascunho com auto-save: preencheu, criou)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
   const [newSubtaskDesc, setNewSubtaskDesc] = useState('')
   const [newSubtaskDue, setNewSubtaskDue] = useState('')
+  // Espelho mutável do rascunho: timeouts/flush (troca de tarefa, unmount)
+  // precisam do valor atual sem stale closure — mesmo padrão dos autosaves.
+  const subtaskDraftRef = useRef({ title: '', desc: '', due: '' })
+  const newSubtaskTimer = useRef<number | undefined>(undefined)
+  const subtaskCommittingRef = useRef(false)
+  const newSubtaskTitleRef = useRef<HTMLInputElement>(null)
+  const creatorRef = useRef(creator)
+  creatorRef.current = creator
 
   const [newComment, setNewComment] = useState('')
   const [tagInput, setTagInput] = useState('')
@@ -239,6 +247,9 @@ export default function TaskDrawer({
     const nextId = initialTask?.id ?? null
     if (nextId === loadedTaskIdRef.current) return
     loadedTaskIdRef.current = nextId
+    // Rascunho de subtarefa do pai anterior: sempre salva, nunca descarta.
+    // O commit lê o pai antigo via currentTaskRef (ainda não trocado aqui).
+    void commitSubtaskDraft('auto')
     // Qualquer edição pendente da tarefa anterior já foi despachada pelo
     // flush explícito de quem trocou; aqui só limpamos restos locais.
     window.clearTimeout(titleTimer.current)
@@ -252,9 +263,7 @@ export default function TaskDrawer({
       setDescriptionDraft(empty)
       descriptionDraftRef.current = empty
       setEditorInitial(empty)
-      setNewSubtaskTitle('')
-      setNewSubtaskDesc('')
-      setNewSubtaskDue('')
+      clearSubtaskDraft()
       setNewComment('')
       setTagInput('')
       setCategoryInput('')
@@ -388,6 +397,9 @@ export default function TaskDrawer({
   flushTitleRef.current = flushPendingTitle
 
   function openTaskDetails(task: Task) {
+    // Rascunho de subtarefa do pai atual: sempre salva antes de navegar
+    // (o commit usa o pai antigo via currentTaskRef).
+    void commitSubtaskDraft('auto')
     // Trocar de tarefa (pai <-> subtarefa) sem antes dar flush perdia a
     // digitação em voo e ainda salvava no id errado via closure stale.
     const pendingDesc = pendingDescRef.current
@@ -598,30 +610,116 @@ export default function TaskDrawer({
     }
   }
 
-  async function handleCreateSubtask() {
-    const title = newSubtaskTitle.trim()
-    if (!title || !currentTask) return
+  /** Limpa o box de nova subtarefa (estado + espelho + timer). */
+  function clearSubtaskDraft() {
+    window.clearTimeout(newSubtaskTimer.current)
+    subtaskDraftRef.current = { title: '', desc: '', due: '' }
+    setNewSubtaskTitle('')
+    setNewSubtaskDesc('')
+    setNewSubtaskDue('')
+  }
+
+  /** Cria a subtarefa no banco a partir de um snapshot do rascunho. */
+  function persistSubtaskDraft(
+    parent: { id: string; project_id: string; assigned_to: string | null },
+    snap: { title: string; desc: string; due: string },
+  ) {
+    const desc = snap.desc.trim()
+    return creatorRef.current.createTask({
+      title: snap.title.trim(),
+      project_id: parent.project_id,
+      parent_id: parent.id,
+      status: 'todo',
+      assigned_to: parent.assigned_to ?? null,
+      due_date: snap.due || null,
+      description: desc ? buildSimpleLexicalJson(desc) : null,
+    })
+  }
+
+  /**
+   * Salva o rascunho de subtarefa — o gatilho de save, igual à tarefa mãe.
+   * 'manual' (botão/Enter) mostra toast; 'auto' (pausa/blur/troca) é
+   * silencioso. Nunca exige confirmação e nunca descarta preenchido.
+   */
+  async function commitSubtaskDraft(mode: 'manual' | 'auto'): Promise<boolean> {
+    const parent = currentTaskRef.current
+    const snap = { ...subtaskDraftRef.current }
+    if (!snap.title.trim() || !parent?.id || !parent.project_id) return false
+    if (subtaskCommittingRef.current) return false
+    subtaskCommittingRef.current = true
+    window.clearTimeout(newSubtaskTimer.current)
     try {
-      await creator.createTask({
-        title,
-        project_id: currentTask.project_id!,
-        parent_id: currentTask.id,
-        status: 'todo',
-        assigned_to: currentTask.assigned_to,
-        due_date: newSubtaskDue || null,
-        description: newSubtaskDesc.trim() ? buildSimpleLexicalJson(newSubtaskDesc.trim()) : null,
-      })
-      setNewSubtaskTitle('')
-      setNewSubtaskDesc('')
-      setNewSubtaskDue('')
-      creator.refreshTasks?.()
-      toast.success('Subtarefa criada com sucesso!')
+      await persistSubtaskDraft(
+        { id: parent.id, project_id: parent.project_id, assigned_to: parent.assigned_to ?? null },
+        snap,
+      )
+      // Limpa o box só se o rascunho não avançou durante o save
+      // (usuário continuou digitando a próxima).
+      if (subtaskDraftRef.current.title.trim() === snap.title.trim()) {
+        clearSubtaskDraft()
+      }
+      creatorRef.current.refreshTasks?.()
+      if (mode === 'manual') toast.success('Subtarefa criada com sucesso!')
+      return true
     } catch (error) {
       toast.danger(
         error instanceof Error ? error.message : 'Não foi possível criar a subtarefa.',
       )
+      return false
+    } finally {
+      subtaskCommittingRef.current = false
     }
   }
+
+  /** Enter no box = cria na hora e foca o título para a próxima subtarefa. */
+  function handleSubtaskKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    void commitSubtaskDraft('manual').then((created) => {
+      if (created) newSubtaskTitleRef.current?.focus()
+    })
+  }
+
+  function handleSubtaskManual() {
+    void commitSubtaskDraft('manual').then((created) => {
+      if (created) newSubtaskTitleRef.current?.focus()
+    })
+  }
+
+  // Auto-save do rascunho de subtarefa (igual à tarefa mãe): pausou a
+  // digitação com título preenchido → cria sozinha, sem clicar em nada.
+  useEffect(() => {
+    if (!currentTask?.id || !newSubtaskTitle.trim()) return
+    window.clearTimeout(newSubtaskTimer.current)
+    newSubtaskTimer.current = window.setTimeout(() => {
+      void commitSubtaskDraft('auto')
+    }, 800)
+    return () => window.clearTimeout(newSubtaskTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newSubtaskTitle, newSubtaskDesc, newSubtaskDue, currentTask?.id])
+
+  // Rede de segurança: desmontar (fechar o drawer) com rascunho preenchido
+  // nunca descarta — cria a subtarefa em background.
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(newSubtaskTimer.current)
+      const parent = currentTaskRef.current
+      const snap = { ...subtaskDraftRef.current }
+      if (!snap.title.trim() || !parent?.id || !parent.project_id) return
+      if (subtaskCommittingRef.current) return
+      subtaskCommittingRef.current = true
+      void persistSubtaskDraft(
+        { id: parent.id, project_id: parent.project_id, assigned_to: parent.assigned_to ?? null },
+        snap,
+      )
+        .then(() => creatorRef.current.refreshTasks?.())
+        .catch(() => {})
+        .finally(() => {
+          subtaskCommittingRef.current = false
+        })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handleUpdateSubtask(subtaskId: string, patch: Partial<Task>) {
     void creator.updateTask({ id: subtaskId, patch })
@@ -1197,15 +1295,27 @@ export default function TaskDrawer({
                   })}
                 </div>
 
-                {/* Add New Subtask Form */}
-                <div className="rounded-md border border-border bg-card p-3 space-y-2 shadow-2xs">
+                {/* Add New Subtask Form (auto-save: preencheu, criou) */}
+                <div
+                  className="rounded-md border border-border bg-card p-3 space-y-2 shadow-2xs"
+                  onBlur={(e) => {
+                    // Saiu do box com título preenchido → salva sozinho.
+                    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return
+                    void commitSubtaskDraft('auto')
+                  }}
+                >
                   <span className="text-xs font-semibold text-foreground">
                     Nova Subtarefa
                   </span>
                   <input
+                    ref={newSubtaskTitleRef}
                     type="text"
                     value={newSubtaskTitle}
-                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    onChange={(e) => {
+                      setNewSubtaskTitle(e.target.value)
+                      subtaskDraftRef.current.title = e.target.value
+                    }}
+                    onKeyDown={handleSubtaskKeyDown}
                     placeholder="Título da nova subtarefa..."
                     className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                   />
@@ -1213,22 +1323,33 @@ export default function TaskDrawer({
                     <input
                       type="text"
                       value={newSubtaskDesc}
-                      onChange={(e) => setNewSubtaskDesc(e.target.value)}
+                      onChange={(e) => {
+                        setNewSubtaskDesc(e.target.value)
+                        subtaskDraftRef.current.desc = e.target.value
+                      }}
+                      onKeyDown={handleSubtaskKeyDown}
                       placeholder="Descrição (opcional)..."
                       className="flex-1 min-w-[140px] rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                     />
                     <DateInput
                       value={newSubtaskDue}
-                      onChange={setNewSubtaskDue}
+                      onChange={(iso) => {
+                        setNewSubtaskDue(iso)
+                        subtaskDraftRef.current.due = iso
+                      }}
+                      onKeyDown={handleSubtaskKeyDown}
                       ariaLabel="Conclusão da nova subtarefa"
                       className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                     />
                   </div>
-                  <div className="flex justify-end pt-1">
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[10px] text-muted-foreground">
+                      Salvamento automático: preencheu, criou. Enter adiciona a próxima.
+                    </span>
                     <Button
                       size="sm"
                       className="rounded-md bg-[#7b68ee] text-xs font-semibold text-white hover:bg-[#6c5ce7]"
-                      onPress={() => void handleCreateSubtask()}
+                      onPress={handleSubtaskManual}
                       isDisabled={!newSubtaskTitle.trim()}
                     >
                       <i className="fa-solid fa-plus mr-1" />

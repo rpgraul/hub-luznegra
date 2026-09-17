@@ -147,6 +147,11 @@ export default function NewTaskModal({
     const parsedHours = Number.parseFloat(hours)
     const estimated_hours =
       hours.trim() === '' || Number.isNaN(parsedHours) ? null : parsedHours
+    // Texto pendente no campo de subtarefa: sempre salvo junto — não exige
+    // Enter nem clique no "+". É só salvar a tarefa mãe.
+    const pendingSubtask = subtaskInput.trim()
+      ? [{ title: subtaskInput.trim(), due_date: subtaskDueDate || null }]
+      : []
     try {
       await onCreate({
         title: title.trim(),
@@ -160,7 +165,7 @@ export default function NewTaskModal({
         estimated_hours,
         description: normalizeLexicalForSave(description) as unknown as SerializedEditorState | null,
         categories,
-        subtasks,
+        subtasks: [...subtasks, ...pendingSubtask],
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao criar tarefa.')
