@@ -161,8 +161,10 @@ export default function TaskDrawer({
   // abaixo partem de `initialTask` (valor do primeiro mount).
   const [currentTask, setCurrentTask] = useState<Task | null>(initialTask ?? null)
   const [titleDraft, setTitleDraft] = useState(() => initialTask?.title ?? '')
-  const [descriptionDraft, setDescriptionDraft] =
-    useState<SerializedEditorState>(() => taskDesc(initialTask ?? null))
+  // NOTA: o conteúdo vivo da descrição mora em `descriptionDraftRef` (ref,
+  // sem re-render). Um `setState` por tecla aqui re-renderizava o drawer
+  // inteiro a cada caractere e travava a digitação — o estado nunca era lido
+  // em render, então foi removido.
   // Valor inicial congelado no momento da abertura/troca de tarefa: é o que
   // alimenta o Lexical (que só lê `initialValue` no mount). Nunca passar o
   // draft vivo aqui, senão a troca pai <-> subtarefa monta o editor stale.
@@ -220,8 +222,12 @@ export default function TaskDrawer({
   const pendingTitleRef = useRef<{ taskId: string; title: string } | null>(null)
   const currentTaskRef = useRef<Task | null>(null)
   currentTaskRef.current = currentTask
-  const descriptionDraftRef = useRef<SerializedEditorState>(descriptionDraft)
-  descriptionDraftRef.current = descriptionDraft
+  // Espelho mutável do conteúdo do editor. Inicializado uma única vez (o
+  // efeito de troca de tarefa ressincroniza); nunca via setState por tecla.
+  const descriptionDraftRef = useRef<SerializedEditorState | null>(null)
+  if (descriptionDraftRef.current === null) {
+    descriptionDraftRef.current = taskDesc(initialTask ?? null)
+  }
   // Fila que serializa todos os writes de descrição/título do drawer: sem
   // ela, dois autosaves sobrepostos (pausa-digita-pausa rápido) concorrem e o
   // mais antigo pode vencer o mais novo no banco (last-write-wins invertido).
@@ -252,7 +258,6 @@ export default function TaskDrawer({
     if (!initialTask) {
       setTitleDraft('')
       const empty = cloneDesc(null)
-      setDescriptionDraft(empty)
       descriptionDraftRef.current = empty
       setEditorInitial(empty)
       clearSubtaskDraft()
@@ -264,7 +269,6 @@ export default function TaskDrawer({
     }
     setTitleDraft(initialTask.title)
     const json = taskDesc(initialTask)
-    setDescriptionDraft(json)
     descriptionDraftRef.current = json
     setEditorInitial(json)
     clearSubtaskDraft()
@@ -411,7 +415,6 @@ export default function TaskDrawer({
     setCurrentTask(task)
     setTitleDraft(task.title)
     const json = taskDesc(task)
-    setDescriptionDraft(json)
     descriptionDraftRef.current = json
     setEditorInitial(json)
     lastSavedDescByTask.current.set(task.id, JSON.stringify(json))
@@ -432,7 +435,8 @@ export default function TaskDrawer({
   }
 
   function handleDescriptionChange(json: SerializedEditorState) {
-    setDescriptionDraft(json)
+    // Sem setState aqui de propósito: o editor (Lexical) já se atualiza
+    // sozinho; notificar o React por tecla re-renderizava o drawer e travava.
     descriptionDraftRef.current = json
     const target = currentTaskRef.current
     if (!target) return
