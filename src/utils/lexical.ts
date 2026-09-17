@@ -7,7 +7,7 @@ import type { SerializedEditorState } from 'lexical'
  */
 export function normalizeLinkUrl(input: string): string | null {
   const t = input.trim()
-  if (!t || /\s/.test(t)) return null
+  if (!t || t.length > 2048 || /\s/.test(t)) return null
   const withProtocol = /^https?:\/\//i.test(t) ? t : `https://${t}`
   // Domínio com TLD obrigatório (evita "versão 2.0", "item 3.5" etc.)
   if (!/^https?:\/\/([\w-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/\S*)?$/.test(withProtocol)) {
@@ -36,6 +36,11 @@ export function legacyStringToLexicalState(
 ): SerializedEditorState | null {
   const t = raw.trim()
   if (!t) return null
+  // Trava de segurança: entrada gigante vira texto puro fatiado
+  // (nunca regex pesada sobre 100k+ caracteres).
+  if (t.length > 100_000) {
+    return buildParagraph([{ text: t.slice(0, 100_000) }])
+  }
 
   type Seg = { text: string; url?: string }
   const segments: Seg[] = []
@@ -59,19 +64,38 @@ export function legacyStringToLexicalState(
     if (after) segments.push({ text: after })
     if (segments.length === 0) return null
   } else if (!/<[a-z][\s\S]*>/i.test(t)) {
-    // Texto puro — pode ser URL pura ou conter URLs no meio
-    const urlRe = /(https?:\/\/[^\s<]+|www\.[^\s<]+|(?:[\w-]+\.)+[a-zA-Z]{2,}(?::\d+)?(?:\/[^\s<]*)?)/g
-    let last = 0
-    let m: RegExpExecArray | null
-    while ((m = urlRe.exec(t)) !== null) {
-      if (m.index > last) segments.push({ text: t.slice(last, m.index) })
-      const url = normalizeLinkUrl(m[0])
-      if (url) segments.push({ text: m[0], url })
-      else segments.push({ text: m[0] })
-      last = m.index + m[0].length
+    // Texto puro — detecta URLs por token (sem regex com quantificador
+    // aninhado sobre o texto inteiro: evita backtracking catastrófico).
+    const tokens = t.split(/(\s+)/)
+    for (const tok of tokens) {
+      if (!tok) continue
+      if (/^\s+$/.test(tok)) {
+        segments.push({ text: tok })
+        continue
+      }
+      let core = tok
+      let lead = ''
+      let trail = ''
+      const leadMatch = tok.match(/^([([{<"']+)(.+)$/)
+      if (leadMatch) {
+        lead = leadMatch[1]
+        core = leadMatch[2]
+      }
+      const trailMatch = core.match(/^(.*?)[.,;:!?)\]}>]+$/)
+      if (trailMatch && trailMatch[1]) {
+        trail = core.slice(trailMatch[1].length)
+        core = trailMatch[1]
+      }
+      const url = normalizeLinkUrl(core)
+      if (url) {
+        if (lead) segments.push({ text: lead })
+        segments.push({ text: core, url })
+        if (trail) segments.push({ text: trail })
+      } else {
+        segments.push({ text: tok })
+      }
     }
     if (segments.length === 0) return buildParagraph([{ text: t }])
-    if (last < t.length) segments.push({ text: t.slice(last) })
   } else {
     // Outro HTML (ex: <b>, <p>): extrai só o texto e reaproveita a lógica acima
     const plain = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
@@ -137,8 +161,7 @@ function buildParagraph(
     },
   } as unknown as SerializedEditorState
 }
-export function extractLexicalText(description: unknown): string {
-  if (!description) return ''
+export function extractLexicalText(description: unknown): string {  if (!description) return ''
   if (typeof description === 'string') return description
   try {
     const root = (description as { root?: { children?: unknown[] } })?.root
@@ -166,4 +189,173 @@ export function normalizeLexicalForSave(
 ): SerializedEditorState | null {
   if (!value) return null
   return extractLexicalText(value) ? value : null
+}
+
+function inlineTextNode(text: string): Record<string, unknown> {
+  return {
+    type: 'text',
+    text,
+    format: 0,
+    detail: 0,
+    mode: 'normal',
+    style: '',
+    version: 1,
+  }
+}
+
+/** Limpa filhos inline (nível de texto/link). Desconhecido dissolve, texto preserva. */
+function cleanInlineKids(children: unknown): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = []
+  if (!Array.isArray(children)) return out
+  for (const c of children) {
+    if (!c || typeof c !== 'object') continue
+    const n = c as Record<string, unknown>
+    if (n.type === 'text') {
+      if (typeof n.text === 'string' && n.text) out.push(inlineTextNode(n.text))
+      continue
+    }
+    if (
+      (n.type === 'link' || n.type === 'autolink') &&
+      typeof n.url === 'string' &&
+      n.url.trim()
+    ) {
+      const url = n.url.trim()
+      const kids = cleanInlineKids(n.children)
+      out.push({
+        type: 'link',
+        version: 1,
+        url,
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        format: '',
+        indent: 0,
+        direction: 'ltr',
+        children: kids.length > 0 ? kids : [inlineTextNode(url)],
+      })
+      continue
+    }
+    if (Array.isArray(n.children)) {
+      // Container: preserva se for bloco conhecido, senão dissolve o conteúdo.
+      if (
+        n.type === 'paragraph' ||
+        n.type === 'quote' ||
+        n.type === 'heading' ||
+        n.type === 'list' ||
+        n.type === 'listitem'
+      ) {
+        const kids = cleanInlineKids(n.children)
+        out.push({ ...n, children: kids })
+      } else {
+        out.push(...cleanInlineKids(n.children))
+      }
+      continue
+    }
+    if (typeof n.text === 'string' && n.text) out.push(inlineTextNode(n.text))
+  }
+  return out
+}
+
+function cleanBlock(n: Record<string, unknown>): Record<string, unknown> | null {
+  const kids = cleanInlineKids(n.children)
+  if (n.type === 'paragraph' || n.type === 'quote') {
+    return {
+      type: n.type,
+      version: 1,
+      format: '',
+      indent: 0,
+      direction: 'ltr',
+      children: kids,
+    }
+  }
+  if (n.type === 'heading' && typeof n.tag === 'string' && /^h[1-6]$/.test(n.tag)) {
+    return { type: 'heading', version: 1, tag: n.tag, format: '', indent: 0, direction: 'ltr', children: kids }
+  }
+  if (
+    n.type === 'list' &&
+    (n.listType === 'bullet' || n.listType === 'number' || n.listType === 'check')
+  ) {
+    const items = (Array.isArray(n.children) ? n.children : [])
+      .filter(
+        (c): c is Record<string, unknown> =>
+          !!c && typeof c === 'object' && (c as Record<string, unknown>).type === 'listitem',
+      )
+      .map((item) => ({
+        type: 'listitem',
+        version: 1,
+        value: typeof item.value === 'number' ? item.value : 1,
+        ...(item.checked === true ? { checked: true } : {}),
+        format: '',
+        indent: 0,
+        direction: 'ltr' as const,
+        children: cleanInlineKids(item.children),
+      }))
+    if (items.length === 0) return null
+    return {
+      type: 'list',
+      version: 1,
+      listType: n.listType,
+      tag: n.listType === 'number' ? 'ol' : 'ul',
+      start: typeof n.start === 'number' ? n.start : 1,
+      format: '',
+      indent: 0,
+      direction: 'ltr',
+      children: items,
+    }
+  }
+  // Qualquer outra coisa no nível de bloco vira parágrafo (texto preservado).
+  if (kids.length === 0) return null
+  return { type: 'paragraph', version: 1, format: '', indent: 0, direction: 'ltr', children: kids }
+}
+
+/**
+ * Higieniza um JSON Lexical antes do `parseEditorState`: remove nós
+ * inválidos (link sem URL, tipos desconhecidos, campos fora do formato)
+ * preservando o texto, e força `target="_blank"` nos links.
+ *
+ * É o auto-reparo para descrições que travaram o editor: em vez de quebrar
+ * a página, o conteúdo volta como texto (o link pode ser reaplicado à mão).
+ * Retorna `null` quando não há conteúdo aproveitável.
+ */
+export function sanitizeLexicalState(value: unknown): SerializedEditorState | null {
+  try {
+    const root = (value as { root?: unknown })?.root as
+      | Record<string, unknown>
+      | undefined
+    if (!root || !Array.isArray(root.children)) return null
+    const blocks: Record<string, unknown>[] = []
+    for (const c of root.children) {
+      if (!c || typeof c !== 'object') continue
+      const n = c as Record<string, unknown>
+      // Inline solto direto na raiz não é válido: embrulha em parágrafo.
+      if (n.type === 'text' || n.type === 'link' || n.type === 'autolink') {
+        const kids = cleanInlineKids([n])
+        if (kids.length > 0) {
+          blocks.push({
+            type: 'paragraph',
+            version: 1,
+            format: '',
+            indent: 0,
+            direction: 'ltr',
+            children: kids,
+          })
+        }
+        continue
+      }
+      const block = cleanBlock(n)
+      if (block) blocks.push(block)
+    }
+    if (blocks.length === 0) return null
+    return {
+      root: {
+        type: 'root',
+        format: '',
+        indent: 0,
+        version: 1,
+        direction: 'ltr',
+        children: blocks,
+      },
+    } as unknown as SerializedEditorState
+  } catch {
+    return null
+  }
 }

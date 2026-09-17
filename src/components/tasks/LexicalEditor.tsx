@@ -11,7 +11,6 @@ import {
   COMMAND_PRIORITY_LOW,
   FORMAT_TEXT_COMMAND,
   KEY_DOWN_COMMAND,
-  PASTE_COMMAND,
 } from 'lexical'
 import { LexicalComposer } from '@lexical/react/LexicalComposer'
 import { ContentEditable } from '@lexical/react/LexicalContentEditable'
@@ -39,10 +38,12 @@ import {
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Button, Modal } from '@heroui/react'
 import {
+  extractLexicalText,
+  isUrlLike,
   legacyStringToLexicalState,
   normalizeLinkUrl,
+  sanitizeLexicalState,
 } from '@/utils/lexical'
 
 const EDITOR_NODES = [
@@ -54,7 +55,7 @@ const EDITOR_NODES = [
   AutoLinkNode,
 ]
 
-/** Todo link do editor abre em nova aba. */
+/** Todo link criado pelo editor abre em nova aba. */
 const LINK_ATTRS = { target: '_blank', rel: 'noopener noreferrer' } as const
 
 /** E-mails NÃO são links (pedido do produto): só http(s)/www/domínio. */
@@ -71,189 +72,174 @@ function $findLinkParent(selection: RangeSelection): LinkNode | null {
   return null
 }
 
-interface LinkSnapshot {
+interface LinkPopoverData {
+  /** Texto selecionado (somente leitura, estilo Notion). */
   text: string
-  url: string | null
-  hasSelection: boolean
+  /** URL inicial do campo (link existente ou '' ). */
+  initialUrl: string
+  isEditing: boolean
+  /** Seleção colapsada na abertura → insere link novo em vez de envolver. */
+  collapsed: boolean
+  anchor: { top: number; left: number }
 }
 
-function readSnapshot(): LinkSnapshot {
-  const selection = $getSelection()
-  if (!$isRangeSelection(selection)) return { text: '', url: null, hasSelection: false }
-  const link = $findLinkParent(selection)
-  const text = selection.getTextContent() || link?.getTextContent() || ''
-  return { text, url: link?.getURL() ?? null, hasSelection: true }
+/** Posição fixa do popover: abaixo da seleção, com fallback na toolbar. */
+function computeAnchor(toolbar: HTMLElement | null): { top: number; left: number } {
+  const domSel = window.getSelection()
+  const rect =
+    domSel && domSel.rangeCount > 0 ? domSel.getRangeAt(0).getBoundingClientRect() : null
+  let top: number
+  let left: number
+  if (rect && (rect.top !== 0 || rect.left !== 0 || rect.bottom !== 0)) {
+    top = rect.bottom + 8
+    left = rect.left
+  } else {
+    const tb = toolbar?.getBoundingClientRect()
+    top = (tb?.bottom ?? 120) + 8
+    left = tb?.left ?? 120
+  }
+  return {
+    top: Math.max(8, Math.min(top, window.innerHeight - 220)),
+    left: Math.max(8, Math.min(left, window.innerWidth - 336)),
+  }
 }
 
-/** Modal central (shadcn/HeroUI) para inserir ou editar link. */
-function LinkModal({
-  open,
-  onOpenChange,
-  initialText,
-  initialUrl,
-  isEditing,
+/**
+ * Popover de link estilo Notion: pequeno, colado na seleção, só o campo URL.
+ * Enter aplica, Esc fecha.
+ */
+function LinkPopover({
+  data,
+  onClose,
   onApply,
   onRemove,
 }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  initialText: string
-  initialUrl: string
-  isEditing: boolean
-  onApply: (displayText: string, url: string) => void
+  data: LinkPopoverData
+  onClose: () => void
+  onApply: (url: string) => void
   onRemove: () => void
 }) {
-  const [text, setText] = useState(initialText)
-  const [url, setUrl] = useState(initialUrl)
+  const [url, setUrl] = useState(data.initialUrl)
   const [error, setError] = useState<string | null>(null)
-  const urlRef = useRef<HTMLInputElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (open) {
-      setText(initialText)
-      setUrl(initialUrl)
-      setError(null)
-      setTimeout(() => urlRef.current?.focus(), 120)
+    setTimeout(() => {
+      inputRef.current?.focus()
+      inputRef.current?.select()
+    }, 30)
+  }, [])
+
+  useEffect(() => {
+    function handlePointerDown(e: PointerEvent) {
+      if (!boxRef.current?.contains(e.target as Node | null)) onClose()
     }
-  }, [open, initialText, initialUrl])
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [onClose])
 
   const normalized = normalizeLinkUrl(url)
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const valid = normalizeLinkUrl(url)
-    if (!valid) {
-      setError('Informe uma URL válida. Ex.: https://exemplo.com ou www.exemplo.com')
+    if (!normalizeLinkUrl(url)) {
+      setError('Cole uma URL válida. Ex.: https://exemplo.com')
       return
     }
-    onApply(text, valid)
+    onApply(url)
   }
 
-  const inputCls =
-    'w-full rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition focus:border-primary focus:bg-background focus:ring-2 focus:ring-primary/20'
-
   return (
-    <Modal.Backdrop isOpen={open} onOpenChange={onOpenChange}>
-      <Modal.Container>
-        <Modal.Dialog className="sm:max-w-md">
-          <Modal.Header className="shrink-0 border-b border-border pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-                <i className="fa-solid fa-link text-sm text-primary" />
-              </div>
-              <div>
-                <Modal.Heading className="text-base font-bold">
-                  {isEditing ? 'Editar link' : 'Inserir link'}
-                </Modal.Heading>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  O link sempre abre em uma nova aba.
-                </p>
-              </div>
-            </div>
-          </Modal.Header>
-
-          <form onSubmit={handleSubmit}>
-            <Modal.Body className="space-y-4 py-5">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold tracking-wide text-foreground/80 uppercase">
-                  Texto para exibir
-                </label>
-                <input
-                  type="text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder="Ex.: Documentação do projeto"
-                  className={inputCls}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold tracking-wide text-foreground/80 uppercase">
-                  URL <span className="text-destructive">*</span>
-                </label>
-                <input
-                  ref={urlRef}
-                  type="text"
-                  value={url}
-                  onChange={(e) => {
-                    setUrl(e.target.value)
-                    setError(null)
-                  }}
-                  placeholder="https://exemplo.com"
-                  className={inputCls}
-                />
-                {error ? (
-                  <p className="flex items-center gap-1.5 text-[11px] text-destructive">
-                    <i className="fa-solid fa-circle-exclamation text-[10px]" />
-                    {error}
-                  </p>
-                ) : normalized ? (
-                  <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <i className="fa-solid fa-check text-[10px] text-green-500" />
-                    <span className="truncate">{normalized}</span>
-                    <a
-                      href={normalized}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex shrink-0 items-center gap-1 font-semibold text-primary hover:underline"
-                    >
-                      <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
-                      Abrir em nova aba
-                    </a>
-                  </p>
-                ) : url.trim() ? (
-                  <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <i className="fa-solid fa-circle-info text-[10px]" />
-                    Aceitamos https://, www. ou domínio (ex.: empresa.com.br). E-mails ficam como texto normal.
-                  </p>
-                ) : null}
-              </div>
-            </Modal.Body>
-
-            <Modal.Footer className="shrink-0 border-t border-border pt-3">
-              {isEditing && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mr-auto rounded-xl border-destructive/40 px-4 text-xs font-semibold text-destructive"
-                  onPress={onRemove}
-                >
-                  <i className="fa-solid fa-link-slash mr-2" />
-                  Remover link
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                type="button"
-                size="sm"
-                className="rounded-xl border-border px-4 text-xs font-semibold"
-                onPress={() => onOpenChange(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                size="sm"
-                className="rounded-xl bg-primary px-5 text-xs font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
-              >
-                <i className="fa-solid fa-check mr-2" />
-                Aplicar
-              </Button>
-            </Modal.Footer>
-          </form>
-          <Modal.CloseTrigger />
-        </Modal.Dialog>
-      </Modal.Container>
-    </Modal.Backdrop>
+    <div
+      ref={boxRef}
+      className="fixed z-[200] w-80 rounded-xl border border-border bg-popover p-2.5 text-foreground shadow-xl"
+      style={{ top: data.anchor.top, left: data.anchor.left }}
+      role="dialog"
+      aria-label={data.isEditing ? 'Editar link' : 'Inserir link'}
+    >
+      <form onSubmit={handleSubmit}>
+        {data.text && (
+          <p className="mb-1.5 truncate px-1 text-[11px] text-muted-foreground">
+            Texto: <span className="font-semibold text-foreground">{data.text}</span>
+          </p>
+        )}
+        <div className="flex items-center gap-1.5">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/10">
+            <i className="fa-solid fa-link text-[11px] text-primary" />
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={url}
+            onChange={(e) => {
+              setUrl(e.target.value)
+              setError(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+                onClose()
+              }
+            }}
+            placeholder="Colar link…"
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-primary"
+          />
+          {data.isEditing && (
+            <button
+              type="button"
+              title="Remover link"
+              onClick={onRemove}
+              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+            >
+              <i className="fa-solid fa-link-slash text-[11px]" />
+            </button>
+          )}
+          <button
+            type="submit"
+            title="Aplicar (Enter)"
+            className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md bg-primary text-primary-foreground transition hover:bg-primary/90"
+          >
+            <i className="fa-solid fa-check text-[11px]" />
+          </button>
+        </div>
+        {error ? (
+          <p className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] text-destructive">
+            <i className="fa-solid fa-circle-exclamation text-[10px]" />
+            {error}
+          </p>
+        ) : normalized ? (
+          <p className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
+            <i className="fa-solid fa-check text-[10px] text-green-500" />
+            <span className="min-w-0 flex-1 truncate">{normalized}</span>
+            <a
+              href={normalized}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir em nova aba"
+              className="inline-flex shrink-0 items-center gap-1 font-semibold text-primary hover:underline"
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+            </a>
+          </p>
+        ) : (
+          <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
+            Enter aplica · Esc fecha · abre em nova aba
+          </p>
+        )}
+      </form>
+    </div>
   )
 }
 
-function Toolbar() {
+/** Toolbar + popover de link (precisam do mesmo contexto do composer). */
+function ToolbarWithLink() {
   const [editor] = useLexicalComposerContext()
   const [isLink, setIsLink] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [draft, setDraft] = useState({ text: '', url: '' })
+  const [pop, setPop] = useState<LinkPopoverData | null>(null)
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  const popRef = useRef<LinkPopoverData | null>(null)
+  popRef.current = pop
 
   // Estado reativo: acende o botão quando o cursor está dentro de um link.
   useEffect(() => {
@@ -269,14 +255,33 @@ function Toolbar() {
     })
   }, [editor])
 
-  // Atalho moderno: Ctrl/⌘+K abre o editor de link.
+  function openLink() {
+    let snap = { text: '', initialUrl: '', isEditing: false, collapsed: true }
+    editor.getEditorState().read(() => {
+      const selection = $getSelection()
+      if (!$isRangeSelection(selection)) return
+      const link = $findLinkParent(selection)
+      const selectedText = selection.getTextContent().slice(0, 120)
+      const linkText = link?.getTextContent().slice(0, 120) ?? ''
+      const text = selectedText || linkText
+      snap = {
+        text,
+        initialUrl: link?.getURL() ?? (isUrlLike(text) ? text : ''),
+        isEditing: link !== null,
+        collapsed: selection.isCollapsed(),
+      }
+    })
+    setPop({ ...snap, anchor: computeAnchor(toolbarRef.current) })
+  }
+
+  // Atalho estilo Notion: Ctrl/⌘+K abre o popover de link.
   useEffect(() => {
     return editor.registerCommand<KeyboardEvent>(
       KEY_DOWN_COMMAND,
       (event) => {
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
           event.preventDefault()
-          openLinkModal()
+          openLink()
           return true
         }
         return false
@@ -285,35 +290,43 @@ function Toolbar() {
     )
   }, [editor])
 
-  function openLinkModal() {
-    editor.getEditorState().read(() => {
-      const snap = readSnapshot()
-      setDraft({ text: snap.text, url: snap.url ?? snap.text })
-    })
-    setModalOpen(true)
+  function closePop() {
+    setPop(null)
+    editor.focus()
   }
 
-  function applyLink(displayText: string, url: string) {
-    const label = displayText.trim() || url
+  function applyPop(urlRaw: string) {
+    const valid = normalizeLinkUrl(urlRaw)
+    if (!valid) return
+    const wasCollapsed = popRef.current?.collapsed ?? true
+    setPop(null)
     editor.focus()
-    editor.update(() => {
-      const selection = $getSelection()
-      if (!$isRangeSelection(selection)) return
-      selection.removeText()
-      const linkNode = $createLinkNode(url, {
+    if (wasCollapsed) {
+      // Cursor parado: insere link novo com a própria URL como texto.
+      editor.update(() => {
+        const selection = $getSelection()
+        if (!$isRangeSelection(selection)) return
+        const linkNode = $createLinkNode(valid, {
+          target: LINK_ATTRS.target,
+          rel: LINK_ATTRS.rel,
+        })
+        linkNode.append($createTextNode(valid))
+        selection.insertNodes([linkNode])
+      })
+    } else {
+      // Texto selecionado: envolve a seleção (ou atualiza o link existente).
+      editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
+        url: valid,
         target: LINK_ATTRS.target,
         rel: LINK_ATTRS.rel,
       })
-      linkNode.append($createTextNode(label))
-      selection.insertNodes([linkNode])
-    })
-    setModalOpen(false)
+    }
   }
 
-  function removeLink() {
+  function removePop() {
+    setPop(null)
     editor.focus()
     editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
-    setModalOpen(false)
   }
 
   const btn =
@@ -322,7 +335,10 @@ function Toolbar() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
+      <div
+        ref={toolbarRef}
+        className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1"
+      >
         <button type="button" title="Negrito (Ctrl+B)" className={btn} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')}>
           <i className="fa-solid fa-bold" />
         </button>
@@ -343,88 +359,21 @@ function Toolbar() {
           title={isLink ? 'Editar link (Ctrl+K)' : 'Inserir link (Ctrl+K)'}
           className={`${btn} ${isLink ? btnActive : ''}`}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={openLinkModal}
+          onClick={openLink}
         >
           <i className="fa-solid fa-link" />
         </button>
       </div>
-      <LinkModal
-        open={modalOpen}
-        onOpenChange={setModalOpen}
-        initialText={draft.text}
-        initialUrl={draft.url}
-        isEditing={isLink}
-        onApply={applyLink}
-        onRemove={removeLink}
-      />
+      {pop && (
+        <LinkPopover
+          data={pop}
+          onClose={closePop}
+          onApply={applyPop}
+          onRemove={removePop}
+        />
+      )}
     </>
   )
-}
-
-/**
- * Garante `target="_blank" rel="noopener noreferrer"` em todo link —
- * inclusive nós antigos e links vindos de HTML colado.
- */
-function LinkTargetPlugin() {
-  const [editor] = useLexicalComposerContext()
-
-  useEffect(() => {
-    const fix = (node: LinkNode) => {
-      if (node.getTarget() !== '_blank') node.setTarget('_blank')
-      if (node.getRel() !== 'noopener noreferrer') node.setRel('noopener noreferrer')
-    }
-    const offLink = editor.registerNodeTransform(LinkNode, fix)
-    const offAuto = editor.registerNodeTransform(AutoLinkNode, fix)
-    return () => {
-      offLink()
-      offAuto()
-    }
-  }, [editor])
-
-  return null
-}
-
-/**
- * Colar inteligente:
- * - URL pura (texto) com cursor parado vira link clicável (texto = URL);
- * - HTML com `<a href>` usa a importação padrão (o LinkTargetPlugin
- *   garante nova aba) — por isso retornamos `false` nesse caso.
- */
-function PasteLinkPlugin() {
-  const [editor] = useLexicalComposerContext()
-
-  useEffect(() => {
-    return editor.registerCommand(
-      PASTE_COMMAND,
-      (event) => {
-        const clipboard =
-          event instanceof ClipboardEvent ? event.clipboardData : null
-        if (!clipboard) return false
-        const html = clipboard.getData('text/html')
-        if (html && /<a\s[^>]*href=/i.test(html)) return false
-        const plain = (clipboard.getData('text/plain') ?? '').trim()
-        if (!plain || /\s/.test(plain)) return false
-        const url = normalizeLinkUrl(plain)
-        if (!url) return false
-        event.preventDefault()
-        editor.update(() => {
-          const selection = $getSelection()
-          if (!$isRangeSelection(selection)) return
-          selection.removeText()
-          const linkNode = $createLinkNode(url, {
-            target: LINK_ATTRS.target,
-            rel: LINK_ATTRS.rel,
-          })
-          linkNode.append($createTextNode(plain))
-          selection.insertNodes([linkNode])
-        })
-        return true
-      },
-      COMMAND_PRIORITY_LOW,
-    )
-  }, [editor])
-
-  return null
 }
 
 /**
@@ -458,9 +407,10 @@ function EmitChangePlugin({
 }
 
 /**
- * Normaliza o valor inicial (objeto Lexical, string JSON, texto puro ou
- * HTML legado com `<a href>`) para `SerializedEditorState`.
- * Retorna `null` quando vazio.
+ * Normaliza o valor inicial para `SerializedEditorState`. Todo JSON passa
+ * pelo `sanitizeLexicalState` (remove nó inválido preservando o texto), de
+ * modo que uma descrição corrompida nunca quebra a página — no pior caso o
+ * conteúdo volta como texto puro. Retorna `null` quando vazio.
  */
 function normalizeInitial(
   value: SerializedEditorState | string | null,
@@ -472,14 +422,20 @@ function normalizeInitial(
     try {
       const parsed = JSON.parse(t) as unknown
       if (parsed && typeof parsed === 'object' && 'root' in parsed) {
-        return parsed as SerializedEditorState
+        return (
+          sanitizeLexicalState(parsed) ??
+          legacyStringToLexicalState(extractLexicalText(parsed))
+        )
       }
     } catch {
       // texto puro ou HTML: converte abaixo
     }
     return legacyStringToLexicalState(t)
   }
-  return Object.keys(value).length > 0 ? value : null
+  return (
+    sanitizeLexicalState(value) ??
+    legacyStringToLexicalState(extractLexicalText(value))
+  )
 }
 
 export default function LexicalEditor({
@@ -523,7 +479,7 @@ export default function LexicalEditor({
         onError: (error) => console.error('Lexical error:', error),
       }}
     >
-      <Toolbar />
+      <ToolbarWithLink />
       <div className="relative min-h-28 px-3 py-2 text-xs text-foreground sm:min-h-32">
         <RichTextPlugin
           contentEditable={<ContentEditable className="min-h-28 text-xs text-foreground caret-foreground outline-none sm:min-h-32" />}
@@ -537,11 +493,14 @@ export default function LexicalEditor({
       </div>
       <HistoryPlugin />
       <ListPlugin />
+      {/*
+        Colar URL pura vira link sozinho via `validateUrl` (nativo do LinkPlugin).
+        Sem handler custom de paste e sem transforms vivos: eram as causas do
+        travamento (writes concorrentes + mutação em node transform).
+      */}
       <LinkPlugin validateUrl={validateLinkUrl} attributes={{ ...LINK_ATTRS }} />
       <AutoLinkPlugin matchers={[autoLinkUrlMatcher]} />
       <ClickableLinkPlugin newTab />
-      <LinkTargetPlugin />
-      <PasteLinkPlugin />
       <EmitChangePlugin onChange={onChange} />
     </LexicalComposer>
   )
