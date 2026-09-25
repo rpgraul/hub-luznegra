@@ -17,8 +17,8 @@ interface SidebarProps {
   onHideDoneChange?: (hide: boolean) => void
   tasks?: Task[]
   onOpenAi?: () => void
-  activeTab?: 'tasks' | 'links' | 'documents'
-  onSelectTab?: (tab: 'tasks' | 'links' | 'documents') => void
+  activeTab?: 'tasks' | 'links' | 'documents' | 'vendors'
+  onSelectTab?: (tab: 'tasks' | 'links' | 'documents' | 'vendors') => void
 }
 
 export default function Sidebar({
@@ -166,6 +166,19 @@ export default function Sidebar({
             }`}
           >
             <i className="fa-solid fa-folder-open text-xs" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onSelectTab?.('vendors')}
+            title="Fornecedores / Colaboradores"
+            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+              activeTab === 'vendors'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <i className="fa-solid fa-user-group text-xs" />
           </button>
 
           <div className="my-1 h-px w-8 bg-border" />
@@ -411,7 +424,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* Navegação Rápida: Tarefas, Links Úteis e Documentos */}
+      {/* Navegação Rápida: Tarefas, Links Úteis, Documentos e Fornecedores */}
       <div className="border-t border-border px-2 py-1.5 space-y-0.5">
         <button
           type="button"
@@ -455,6 +468,21 @@ export default function Sidebar({
           <span className="flex items-center gap-2">
             <i className="fa-solid fa-folder-open text-xs" />
             <span>Documentos</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onSelectTab?.('vendors')}
+          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+            activeTab === 'vendors'
+              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <i className="fa-solid fa-user-group text-xs" />
+            <span>Fornecedores</span>
           </span>
         </button>
       </div>

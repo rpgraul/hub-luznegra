@@ -111,6 +111,62 @@ export type HubDocument = {
   updated_at: string
 }
 
+/**
+ * Tipo do fornecedor/colaborador. Por enquanto tudo é "ilustrador" (ver
+ * `0020_vendors.sql`); os outros valores existem para diferenciação futura.
+ */
+export type VendorKind =
+  | 'ilustrador'
+  | 'fornecedor'
+  | 'autor'
+  | 'colaborador'
+  | 'outro'
+
+export const VENDOR_KINDS: VendorKind[] = [
+  'ilustrador',
+  'fornecedor',
+  'autor',
+  'colaborador',
+  'outro',
+]
+
+export const VENDOR_KIND_LABELS: Record<VendorKind, string> = {
+  ilustrador: 'Ilustrador',
+  fornecedor: 'Fornecedor',
+  autor: 'Autor',
+  colaborador: 'Colaborador',
+  outro: 'Outro',
+}
+
+/** Cor da pill de tipo (15% de opacidade no card, cheia na pill). */
+export const VENDOR_KIND_COLORS: Record<VendorKind, string> = {
+  ilustrador: '#7B68EE',
+  fornecedor: '#3B82F6',
+  autor: '#F59E0B',
+  colaborador: '#10B981',
+  outro: '#6B7280',
+}
+
+export type Vendor = {
+  id: string
+  name: string
+  kind: VendorKind
+  phone: string | null
+  email: string | null
+  link1: string | null
+  link2: string | null
+  link3: string | null
+  style: string | null
+  /** Observação em Lexical (JSONB), igual `tasks.description`. */
+  notes: Json | null
+  pix: string | null
+  images: string[]
+  image_keys: string[]
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -320,6 +376,46 @@ export interface Database {
           extracted_text?: string | null
           tags?: string[]
           task_id?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      hub_vendors: {
+        Row: Vendor
+        Insert: {
+          id?: string
+          name: string
+          kind?: VendorKind
+          phone?: string | null
+          email?: string | null
+          link1?: string | null
+          link2?: string | null
+          link3?: string | null
+          style?: string | null
+          notes?: Json | null
+          pix?: string | null
+          images?: string[]
+          image_keys?: string[]
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          kind?: VendorKind
+          phone?: string | null
+          email?: string | null
+          link1?: string | null
+          link2?: string | null
+          link3?: string | null
+          style?: string | null
+          notes?: Json | null
+          pix?: string | null
+          images?: string[]
+          image_keys?: string[]
           created_by?: string | null
           created_at?: string
           updated_at?: string

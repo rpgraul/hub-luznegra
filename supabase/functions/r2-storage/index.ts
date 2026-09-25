@@ -17,6 +17,19 @@ interface UploadPayload {
   fileType?: string
   fileBase64?: string
   fileKey?: string
+  /**
+   * Prefixo da chave no bucket. Default 'documents' (comportamento antigo);
+   * 'fornecedores' é usado pelas artes de exemplo dos fornecedores.
+   * Same bucket em todos os casos — só muda o caminho do objeto.
+   */
+  folder?: string
+}
+
+/** Whitelist de pastas (nada de '../' ou barras exóticas vindo do cliente). */
+function safeFolder(folder: string | undefined): string {
+  if (!folder) return 'documents'
+  const clean = folder.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40)
+  return clean || 'documents'
 }
 
 Deno.serve(async (req) => {
@@ -59,7 +72,7 @@ Deno.serve(async (req) => {
       }
 
       const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const objectKey = `documents/${Date.now()}_${safeName}`
+      const objectKey = `${safeFolder(payload.folder)}/${Date.now()}_${safeName}`
 
       if (hasR2Config) {
         const s3 = new S3Client({

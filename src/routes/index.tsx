@@ -16,11 +16,16 @@ export default function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="links" element={<DashboardPage />} />
         <Route path="documentos" element={<DashboardPage />} />
+        <Route path="fornecedores" element={<DashboardPage />} />
         <Route path="task/:taskId" element={<TaskPage />} />
         <Route path="admin/users" element={<UserManagement />} />
       </Route>
       <Route path="/links" element={<Navigate to="/dashboard/links" replace />} />
       <Route path="/documentos" element={<Navigate to="/dashboard/documentos" replace />} />
+      <Route
+        path="/fornecedores"
+        element={<Navigate to="/dashboard/fornecedores" replace />}
+      />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )

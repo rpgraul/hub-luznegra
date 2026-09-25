@@ -23,6 +23,7 @@ import Sidebar from '@/components/layout/Sidebar'
 import TaskWorkspace from '@/components/tasks/TaskWorkspace'
 import LinksView from '@/components/links/LinksView'
 import DocumentsView from '@/components/documents/DocumentsView'
+import VendorsView from '@/components/vendors/VendorsView'
 import ProjectModal from '@/components/projects/ProjectModal'
 import AIAssistantModal from '@/components/ai/AIAssistantModal'
 import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal'
@@ -35,7 +36,7 @@ import type { Json } from '@/types/database'
 interface DashboardLayoutProps {
   children?: ReactNode
   initialTaskId?: string
-  defaultTab?: 'tasks' | 'links' | 'documents'
+  defaultTab?: 'tasks' | 'links' | 'documents' | 'vendors'
 }
 
 export default function DashboardLayout({
@@ -57,21 +58,25 @@ export default function DashboardLayout({
   const [usersDrawerOpen, setUsersDrawerOpen] = useState(false)
 
   // Determina aba ativa baseada na rota ou propriedade
-  const currentTab: 'tasks' | 'links' | 'documents' =
+  const currentTab: 'tasks' | 'links' | 'documents' | 'vendors' =
     defaultTab ||
     (location.pathname.includes('/links')
       ? 'links'
       : location.pathname.includes('/documentos')
         ? 'documents'
-        : 'tasks')
+        : location.pathname.includes('/fornecedores')
+          ? 'vendors'
+          : 'tasks')
 
-  const [activeTab, setActiveTab] = useState<'tasks' | 'links' | 'documents'>(currentTab)
+  const [activeTab, setActiveTab] = useState<'tasks' | 'links' | 'documents' | 'vendors'>(
+    currentTab,
+  )
 
   useEffect(() => {
     setActiveTab(currentTab)
   }, [currentTab])
 
-  function handleSelectTab(tab: 'tasks' | 'links' | 'documents') {
+  function handleSelectTab(tab: 'tasks' | 'links' | 'documents' | 'vendors') {
     setActiveTab(tab)
     if (tab === 'tasks') {
       navigate('/dashboard')
@@ -79,6 +84,8 @@ export default function DashboardLayout({
       navigate('/dashboard/links')
     } else if (tab === 'documents') {
       navigate('/dashboard/documentos')
+    } else {
+      navigate('/dashboard/fornecedores')
     }
   }
 
@@ -248,6 +255,8 @@ export default function DashboardLayout({
           <LinksView />
         ) : activeTab === 'documents' ? (
           <DocumentsView />
+        ) : activeTab === 'vendors' ? (
+          <VendorsView />
         ) : (
           <>
             <TopBar
