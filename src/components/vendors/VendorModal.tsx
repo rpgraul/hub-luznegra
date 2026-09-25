@@ -4,7 +4,6 @@
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
-import ImageLightbox from '@/components/vendors/ImageLightbox'
 import {
   MAX_VENDOR_IMAGES,
   removeVendorImage,
@@ -70,7 +69,7 @@ export default function VendorModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  const [dragging, setDragging] = useState(false)
   // Callback estável: o LexicalEditor é memoizado e só re-renderiza se isto
   // mudar de identidade.
   const handleDescriptionChange = useCallback((json: SerializedEditorState) => {
@@ -129,10 +128,16 @@ export default function VendorModal({
 
   if (!open) return null
 
-  async function handleFiles(e: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? [])
-    e.target.value = ''
+  async function addFiles(files: File[]) {
     if (files.length === 0) return
+    const onlyImages = files.filter((f) => f.type.startsWith('image/'))
+    if (onlyImages.length === 0) {
+      setError('Só é possível enviar arquivos de imagem.')
+      return
+    }
+    if (onlyImages.length < files.length) {
+      setError('Alguns arquivos foram ignorados: só entram imagens.')
+    }
     const room = MAX_VENDOR_IMAGES - images.length
     if (room <= 0) {
       setError(`Máximo de ${MAX_VENDOR_IMAGES} imagens por fornecedor.`)
@@ -140,9 +145,8 @@ export default function VendorModal({
     }
     setUploading(true)
     dirtyRef.current = true
-    setError(null)
     const added: ImageItem[] = []
-    for (const file of files.slice(0, room)) {
+    for (const file of onlyImages.slice(0, room)) {
       try {
         const up = await uploadVendorImage(file)
         added.push({ url: up.url, key: up.key, isNew: true })
@@ -152,6 +156,21 @@ export default function VendorModal({
     }
     if (added.length > 0) setImages((prev) => [...prev, ...added])
     setUploading(false)
+  }
+
+  function handleFiles(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? [])
+    // Permite reescolher o MESMO arquivo depois de removê-lo.
+    e.target.value = ''
+    void addFiles(files)
+  }
+
+  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault()
+    setDragging(false)
+    if (uploading) return
+    const files = Array.from(e.dataTransfer?.files ?? [])
+    void addFiles(files)
   }
 
   function handleRemoveImage(index: number) {
@@ -427,7 +446,8 @@ export default function VendorModal({
               />
             </div>
 
-            {/* Exemplo (artes) */}
+            {/* Exemplo (artes): múltiplas, por clique OU arrastando. Durante o
+                cadastro NADA abre em lightbox — só o preview em miniatura. */}
             <div>
               <label className={labelClass}>
                 <i className="fa-regular fa-image mr-1 text-[10px] text-muted-foreground" />
@@ -441,20 +461,37 @@ export default function VendorModal({
                 className="hidden"
                 onChange={handleFiles}
               />
-              <div className="flex flex-wrap gap-2">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  if (!uploading) setDragging(true)
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={handleDrop}
+                className={`flex flex-wrap gap-2 rounded-lg border border-dashed p-2 transition ${
+                  dragging
+                    ? 'border-primary bg-primary/10'
+                    : 'border-transparent p-0'
+                }`}
+              >
+                {dragging && (
+                  <p className="w-full py-3 text-center text-[11px] font-semibold text-primary">
+                    <i className="fa-solid fa-file-arrow-down mr-1.5" />
+                    Solte as imagens aqui
+                  </p>
+                )}
                 {images.map((img, i) => (
                   <div
                     key={`${img.key}-${i}`}
                     className="group/img relative size-20 overflow-hidden rounded-lg border border-border"
                   >
-                    <button
-                      type="button"
-                      onClick={() => setLightboxIndex(i)}
-                      title="Ampliar"
-                      className="h-full w-full cursor-zoom-in"
-                    >
-                      <img src={img.url} alt="" className="h-full w-full object-cover" />
-                    </button>
+                    {/* Miniatura pura: não abre nada (evita o lightbox). */}
+                    <img
+                      src={img.url}
+                      alt=""
+                      title="Artes de exemplo"
+                      className="h-full w-full cursor-default object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => handleRemoveImage(i)}
@@ -471,6 +508,7 @@ export default function VendorModal({
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
+                    title="Selecionar imagens (várias de uma vez)"
                     className="flex size-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border text-[10px] text-muted-foreground transition hover:border-primary hover:text-primary disabled:opacity-50"
                   >
                     {uploading ? (
@@ -483,7 +521,8 @@ export default function VendorModal({
                 )}
               </div>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                {images.length}/{MAX_VENDOR_IMAGES} imagens · clique para ampliar
+                {images.length}/{MAX_VENDOR_IMAGES} imagens · arraste para cá ou clique em
+                Adicionar (várias de uma vez)
               </p>
             </div>
 
@@ -547,17 +586,6 @@ export default function VendorModal({
       </div>
 
       </div>
-
-      {/* Fora do overlay: o portal do lightbox ainda propaga o evento pela
-          árvore React, então ficar DENTRO do overlay clicável chamava
-          `handleCancel` e derrubava o modal junto com o cadastro preenchido. */}
-      <ImageLightbox
-        images={images.map((i) => i.url)}
-        index={lightboxIndex ?? 0}
-        onIndexChange={setLightboxIndex}
-        onClose={() => setLightboxIndex(null)}
-        title={name || 'Artes'}
-      />
     </>
   )
 }
