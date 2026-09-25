@@ -191,14 +191,55 @@ export function normalizeLexicalForSave(
   return extractLexicalText(value) ? value : null
 }
 
-function inlineTextNode(text: string): Record<string, unknown> {
+/** Bits de formatação de texto do Lexical (bold/italic/sublinhado/...). */
+const TEXT_FORMAT_BITS =
+  1 | 2 | 4 | 8 | 16 | 32 | 64 | 128
+
+/** `format` de texto: só os bits conhecidos, senão 0 (nunca fratura/NaN). */
+function safeTextFormat(format: unknown): number {
+  if (typeof format !== 'number' || !Number.isFinite(format)) return 0
+  const asInt = Math.trunc(format)
+  if (asInt < 0) return 0
+  return asInt & TEXT_FORMAT_BITS
+}
+
+/** `format` de bloco (alinhamento etc.): inteiro pequeno, senão 0. */
+function safeBlockFormat(format: unknown): number {
+  if (typeof format !== 'number' || !Number.isFinite(format)) return 0
+  const asInt = Math.trunc(format)
+  if (asInt < 0 || asInt > 15) return 0
+  return asInt
+}
+
+function safeIndent(indent: unknown): number {
+  if (typeof indent !== 'number' || !Number.isFinite(indent)) return 0
+  const asInt = Math.trunc(indent)
+  if (asInt < 0 || asInt > 8) return 0
+  return asInt
+}
+
+function safeStyle(style: unknown): string {
+  return typeof style === 'string' && style.length <= 4096 ? style : ''
+}
+
+/**
+ * Nó de texto preservando a formatação. Antes esta função zerava `format` e
+ * `style`, o que fazia negrito/itálico/sublinhado sumirem ao reabrir a tarefa
+ * (o `sanitizeLexicalState` roda em toda montagem do editor) — e a perda virava
+ * permanente no próximo auto-save.
+ */
+function inlineTextNode(
+  text: string,
+  format?: unknown,
+  style?: unknown,
+): Record<string, unknown> {
   return {
     type: 'text',
     text,
-    format: 0,
+    format: format === undefined ? 0 : safeTextFormat(format),
     detail: 0,
     mode: 'normal',
-    style: '',
+    style: style === undefined ? '' : safeStyle(style),
     version: 1,
   }
 }
@@ -211,7 +252,9 @@ function cleanInlineKids(children: unknown): Record<string, unknown>[] {
     if (!c || typeof c !== 'object') continue
     const n = c as Record<string, unknown>
     if (n.type === 'text') {
-      if (typeof n.text === 'string' && n.text) out.push(inlineTextNode(n.text))
+      if (typeof n.text === 'string' && n.text) {
+        out.push(inlineTextNode(n.text, n.format, n.style))
+      }
       continue
     }
     if (
@@ -244,13 +287,22 @@ function cleanInlineKids(children: unknown): Record<string, unknown>[] {
         n.type === 'listitem'
       ) {
         const kids = cleanInlineKids(n.children)
-        out.push({ ...n, children: kids })
+        // `format`/`indent` do bloco são preservados (alinhamento e aninhamento
+        // de subtópicos) — só normalizados para valores válidos.
+        out.push({
+          ...n,
+          format: safeBlockFormat(n.format),
+          indent: safeIndent(n.indent),
+          children: kids,
+        })
       } else {
         out.push(...cleanInlineKids(n.children))
       }
       continue
     }
-    if (typeof n.text === 'string' && n.text) out.push(inlineTextNode(n.text))
+    if (typeof n.text === 'string' && n.text) {
+      out.push(inlineTextNode(n.text, n.format, n.style))
+    }
   }
   return out
 }
@@ -261,14 +313,22 @@ function cleanBlock(n: Record<string, unknown>): Record<string, unknown> | null 
     return {
       type: n.type,
       version: 1,
-      format: '',
-      indent: 0,
+      format: safeBlockFormat(n.format),
+      indent: safeIndent(n.indent),
       direction: 'ltr',
       children: kids,
     }
   }
   if (n.type === 'heading' && typeof n.tag === 'string' && /^h[1-6]$/.test(n.tag)) {
-    return { type: 'heading', version: 1, tag: n.tag, format: '', indent: 0, direction: 'ltr', children: kids }
+    return {
+      type: 'heading',
+      version: 1,
+      tag: n.tag,
+      format: safeBlockFormat(n.format),
+      indent: safeIndent(n.indent),
+      direction: 'ltr',
+      children: kids,
+    }
   }
   if (
     n.type === 'list' &&
@@ -284,20 +344,24 @@ function cleanBlock(n: Record<string, unknown>): Record<string, unknown> | null 
         version: 1,
         value: typeof item.value === 'number' ? item.value : 1,
         ...(item.checked === true ? { checked: true } : {}),
-        format: '',
-        indent: 0,
+        // `indent` preserva sub-listas aninhadas (antes voltavam a 0).
+        format: safeBlockFormat(item.format),
+        indent: safeIndent(item.indent),
         direction: 'ltr' as const,
         children: cleanInlineKids(item.children),
       }))
     if (items.length === 0) return null
+    // `check` não tem nó registrado no editor (ver EDITOR_NODES): vira bullet
+    // em vez de gerar JSON que o Lexical rejeitaria e perderia a formatação.
+    const listType = n.listType === 'check' ? 'bullet' : n.listType
     return {
       type: 'list',
       version: 1,
-      listType: n.listType,
-      tag: n.listType === 'number' ? 'ol' : 'ul',
-      start: typeof n.start === 'number' ? n.start : 1,
-      format: '',
-      indent: 0,
+      listType,
+      tag: listType === 'number' ? 'ol' : 'ul',
+      start: typeof n.start === 'number' && n.start > 0 ? n.start : 1,
+      format: safeBlockFormat(n.format),
+      indent: safeIndent(n.indent),
       direction: 'ltr',
       children: items,
     }
@@ -348,8 +412,8 @@ export function sanitizeLexicalState(value: unknown): SerializedEditorState | nu
     return {
       root: {
         type: 'root',
-        format: '',
-        indent: 0,
+        format: safeBlockFormat(root.format),
+        indent: safeIndent(root.indent),
         version: 1,
         direction: 'ltr',
         children: blocks,

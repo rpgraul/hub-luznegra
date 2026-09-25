@@ -355,7 +355,27 @@ export default function GanttView({
 
   const ganttTasks = useMemo(
     () =>
-      taskRows.map(({ task, undated, isSubtask }) => {
+      // A timeline repete a MESMA ordem da tabela, incluindo as linhas
+      // "Adicionar subtarefa": sem elas o Frappe empilha as barras e as linhas
+      // de baixo saem deslocadas em relação à tabela.
+      rows.flatMap((row) => {
+        if (row.kind === 'add-subtask') {
+          // Barra-fantasma: só reserva a linha da tabela na timeline.
+          const parent = tasksById.get(row.parentId)
+          const start = parent?.start_date ?? parent?.due_date ?? today
+          const end = addDaysLocal(parent?.due_date ?? start, 1)
+          return [
+            {
+              id: `add-${row.parentId}`,
+              name: '',
+              start,
+              end,
+              progress: 0,
+              custom_class: 'gantt-addrow-spacer',
+            },
+          ]
+        }
+        const { task, undated, isSubtask } = row
         const rawStart = task.start_date ?? today
         const rawEnd = task.due_date ?? task.start_date ?? today
         let start = rawStart
@@ -405,20 +425,22 @@ export default function GanttView({
           ((!!parentTask.start_date && start < parentTask.start_date) ||
             (!!parentTask.due_date && end > addDaysLocal(parentTask.due_date, 1)))
 
-        return {
-          id: task.id,
-          name: taskTitle.length > 35 ? `${taskTitle.slice(0, 34)}…` : taskTitle,
-          start,
-          end: finalEnd,
-          progress,
-          dependencies:
-            task.parent_id && !outsideParentWindow ? [task.parent_id] : undefined,
-          custom_class: customClass,
-          // A cor da barra representa o status da tarefa (fonte única: utils/status)
-          color: STATUS_COLORS[task.status],
-        }
+        return [
+          {
+            id: task.id,
+            name: taskTitle.length > 35 ? `${taskTitle.slice(0, 34)}…` : taskTitle,
+            start,
+            end: finalEnd,
+            progress,
+            dependencies:
+              task.parent_id && !outsideParentWindow ? [task.parent_id] : undefined,
+            custom_class: customClass,
+            // A cor da barra representa o status da tarefa (fonte única: utils/status)
+            color: STATUS_COLORS[task.status],
+          },
+        ]
       }),
-    [taskRows, today, tasksById],
+    [rows, today, tasksById],
   )
 
   // Close context menu on outside click / Escape

@@ -384,3 +384,21 @@ html[data-theme='dark'],
   font-size: 10px !important;
   font-weight: 500 !important;
 }
+
+/* Linha "Adicionar subtarefa": existe só para a timeline ficar alinhada com a
+   tabela (mesma altura de linha). A barra em si é invisível e não clicável. */
+.gantt .bar-wrapper.gantt-addrow-spacer {
+  pointer-events: none;
+}
+
+.gantt .bar-wrapper.gantt-addrow-spacer .bar,
+.gantt .bar-wrapper.gantt-addrow-spacer .bar-progress,
+.gantt .bar-wrapper.gantt-addrow-spacer .handle {
+  fill: transparent !important;
+  stroke: none !important;
+  opacity: 0 !important;
+}
+
+.gantt .bar-wrapper.gantt-addrow-spacer .bar-label {
+  display: none !important;
+}
