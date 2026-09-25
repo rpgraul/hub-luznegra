@@ -4,6 +4,7 @@
 
 import { useMemo, useState } from 'react'
 import VendorModal from '@/components/vendors/VendorModal'
+import VendorDetailModal from '@/components/vendors/VendorDetailModal'
 import ImageLightbox from '@/components/vendors/ImageLightbox'
 import { useVendors } from '@/hooks/useVendors'
 import { extractLexicalText } from '@/utils/lexical'
@@ -40,6 +41,10 @@ function getLinkIcon(url: string): string {
 
 const MAX_THUMBS = 3
 
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
 export default function VendorsView() {
   const { vendors, isLoading, createVendor, updateVendor, deleteVendor, isDeleting } =
     useVendors()
@@ -48,6 +53,7 @@ export default function VendorsView() {
   const [kindFilter, setKindFilter] = useState<VendorKind | null>(null)
   const [sortMode, setSortMode] = useState<SortMode>('name')
   const [modalOpen, setModalOpen] = useState(false)
+  const [detailVendor, setDetailVendor] = useState<Vendor | null>(null)
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
   const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -100,6 +106,7 @@ export default function VendorsView() {
   }
 
   function openEdit(vendor: Vendor) {
+    setDetailVendor(null)
     setEditingVendor(vendor)
     setModalOpen(true)
   }
@@ -295,8 +302,9 @@ export default function VendorsView() {
               return (
                 <div
                   key={vendor.id}
-                  className="flex flex-col rounded-xl border border-border bg-card p-3.5 shadow-xs transition hover:border-primary/40 hover:shadow-md"
+                  className="flex cursor-pointer flex-col rounded-xl border border-border bg-card p-3.5 shadow-xs transition hover:border-primary/40 hover:shadow-md"
                   style={{ boxShadow: `inset 3px 0 0 0 ${kindColor}22` }}
+                  onClick={() => setDetailVendor(vendor)}
                 >
                   {/* Nome + tipo */}
                   <div className="flex items-start justify-between gap-2">
@@ -311,7 +319,10 @@ export default function VendorsView() {
                         {VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
                       </span>
                     </div>
-                    <div className="flex shrink-0 items-center gap-1">
+                    <div
+                      className="flex shrink-0 items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         onClick={() => openEdit(vendor)}
@@ -332,103 +343,141 @@ export default function VendorsView() {
                     </div>
                   </div>
 
-                  {/* Contato */}
+                  {/* Contato (2 linhas, sempre visível) */}
                   <div className="mt-2.5 space-y-1">
-                    {vendor.phone && (
+                    {vendor.phone ? (
                       <a
                         href={`tel:${vendor.phone.replace(/\D/g, '')}`}
-                        className="flex items-center gap-2 text-[11px] text-muted-foreground transition hover:text-foreground"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 text-[11px] text-foreground/90 transition hover:text-primary"
                       >
-                        <i className="fa-solid fa-mobile-screen w-3.5 text-center" />
+                        <i className="fa-solid fa-mobile-screen w-3.5 text-center text-muted-foreground" />
                         <span className="truncate">{vendor.phone}</span>
                       </a>
+                    ) : (
+                      <p className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                        <i className="fa-solid fa-mobile-screen w-3.5 text-center" />
+                        Sem celular
+                      </p>
                     )}
-                    {vendor.email && (
+                    {vendor.email ? (
                       <a
                         href={`mailto:${vendor.email}`}
-                        className="flex items-center gap-2 text-[11px] text-muted-foreground transition hover:text-foreground"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-2 text-[11px] text-foreground/90 transition hover:text-primary"
                       >
-                        <i className="fa-solid fa-envelope w-3.5 text-center" />
+                        <i className="fa-solid fa-envelope w-3.5 text-center text-muted-foreground" />
                         <span className="truncate">{vendor.email}</span>
                       </a>
-                    )}
-                    {!vendor.phone && !vendor.email && (
-                      <p className="text-[11px] text-muted-foreground/60">Sem contato</p>
+                    ) : (
+                      <p className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                        <i className="fa-solid fa-envelope w-3.5 text-center" />
+                        Sem e-mail
+                      </p>
                     )}
                   </div>
 
-                  {/* Descrição (texto do campo rico) */}
-                  {description && (
-                    <p className="mt-2 line-clamp-2 text-[11px] text-foreground/80">
-                      {description}
+                  {/* Links com identificação (ícone + domínio), não só ícone */}
+                  <div className="mt-2.5 space-y-1">
+                    {links.length > 0 ? (
+                      links.slice(0, 3).map((url, i) => (
+                        <a
+                          key={`${url}-${i}`}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={url}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2 py-1 transition hover:border-primary/50 hover:bg-muted/50"
+                        >
+                          <i className={`${getLinkIcon(url)} w-3.5 shrink-0 text-center text-muted-foreground`} />
+                          <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground/80">
+                            {getDomainFromUrl(url)}
+                          </span>
+                          <i className="fa-solid fa-arrow-up-right-from-square shrink-0 text-[9px] text-muted-foreground" />
+                        </a>
+                      ))
+                    ) : (
+                      <p className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                        <i className="fa-solid fa-link w-3.5 text-center" />
+                        Sem links
+                      </p>
+                    )}
+                  </div>
+
+                  {/* PIX: o VALOR aparece, não só o botão */}
+                  {vendor.pix ? (
+                    <div className="mt-2.5 flex items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/8 px-2 py-1.5">
+                      <i className="fa-solid fa-qrcode shrink-0 text-[11px] text-emerald-600" />
+                      <span
+                        title={vendor.pix}
+                        className="min-w-0 flex-1 truncate font-mono text-[10px] text-emerald-700 dark:text-emerald-400"
+                      >
+                        {vendor.pix}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleCopyPix(vendor)
+                        }}
+                        title="Copiar chave PIX"
+                        className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
+                      >
+                        <i
+                          className={`fa-solid ${copiedId === vendor.id ? 'fa-check' : 'fa-copy'}`}
+                        />
+                        {copiedId === vendor.id ? 'Copiado' : 'Copiar'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="mt-2.5 flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                      <i className="fa-solid fa-qrcode w-3.5 text-center" />
+                      Sem chave PIX
                     </p>
                   )}
 
-                  {/* Observação curta */}
-                  {vendor.note && (
-                    <p className="mt-1.5 line-clamp-2 text-[11px] text-muted-foreground/90">
-                      <i className="fa-solid fa-comment-dots mr-1.5 text-[10px]" />
-                      {vendor.note}
-                    </p>
-                  )}
-
-                  {/* Artes de exemplo */}
+                  {/* Artes: só a contagem/mini-miniatura, o resto fica no modal */}
                   {images.length > 0 && (
-                    <div className="mt-3 flex items-center gap-1.5">
+                    <div className="mt-2.5 flex items-center gap-1.5">
                       {images.slice(0, MAX_THUMBS).map((url, i) => (
                         <button
                           key={`${url}-${i}`}
                           type="button"
-                          onClick={() => setLightbox({ images, index: i })}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setLightbox({ images, index: i })
+                          }}
                           title="Ampliar"
-                          className="size-12 cursor-zoom-in overflow-hidden rounded-lg border border-border transition hover:border-primary/60"
+                          className="size-9 cursor-zoom-in overflow-hidden rounded-md border border-border transition hover:border-primary/60"
                         >
                           <img src={url} alt="" className="h-full w-full object-cover" />
                         </button>
                       ))}
                       {images.length > MAX_THUMBS && (
-                        <span className="flex size-12 items-center justify-center rounded-lg border border-border bg-muted text-[10px] font-semibold text-muted-foreground">
+                        <span className="flex size-9 items-center justify-center rounded-md border border-border bg-muted text-[10px] font-semibold text-muted-foreground">
                           +{images.length - MAX_THUMBS}
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Footer: links + PIX */}
-                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2.5">
-                    <div className="flex items-center gap-1">
-                      {links.map((url, i) => (
-                        <a
-                          key={`${url}-${i}`}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={getDomainFromUrl(url)}
-                          className="flex size-6 items-center justify-center rounded text-[11px] text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
-                        >
-                          <i className={getLinkIcon(url)} />
-                        </a>
-                      ))}
-                      {links.length === 0 && (
-                        <span className="text-[10px] text-muted-foreground/60">Sem links</span>
-                      )}
-                    </div>
-
-                    {vendor.pix ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleCopyPix(vendor)}
-                        title="Copiar chave PIX"
-                        className="flex cursor-pointer items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
-                      >
-                        <i
-                          className={`fa-solid ${copiedId === vendor.id ? 'fa-check' : 'fa-qrcode'}`}
-                        />
-                        {copiedId === vendor.id ? 'Copiado' : 'PIX'}
-                      </button>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground/60">Sem PIX</span>
-                    )}
+                  {/* Footer: atalho para o modal de detalhes */}
+                  <div
+                    className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-2.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span className="truncate text-[10px] text-muted-foreground/70">
+                      {description ? truncate(description, 60) : 'Sem descrição'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDetailVendor(vendor)}
+                      className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 text-[10px] font-semibold text-foreground transition hover:bg-muted"
+                    >
+                      <i className="fa-solid fa-eye text-[10px]" />
+                      Detalhes
+                    </button>
                   </div>
                 </div>
               )
@@ -436,6 +485,12 @@ export default function VendorsView() {
           </div>
         )}
       </div>
+
+      <VendorDetailModal
+        vendor={detailVendor}
+        onClose={() => setDetailVendor(null)}
+        onEdit={openEdit}
+      />
 
       <VendorModal
         open={modalOpen}
