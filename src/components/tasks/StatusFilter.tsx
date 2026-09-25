@@ -77,11 +77,10 @@ export default function StatusFilter({ selected, onChange, counts }: StatusFilte
       </Dropdown.Trigger>
       <Dropdown.Popover>
         <Dropdown.Menu className="min-w-[200px]">
-          <Dropdown.Item
-            key="__all"
-            onAction={() => onChange([])}
-            className="gap-2"
-          >
+          {/* `Dropdown.Section` (e não <div>): um elemento solto dentro de
+              `Dropdown.Menu` quebra a coleção do React Aria e só o primeiro
+              item é renderizado. */}
+          <Dropdown.Item key="__all" onAction={() => onChange([])} className="gap-2">
             <i
               className={`fa-solid ${allActive ? 'fa-square-check' : 'fa-square'} w-3.5 text-center`}
               style={allActive ? { color: STATUS_COLORS.todo } : undefined}
@@ -93,8 +92,8 @@ export default function StatusFilter({ selected, onChange, counts }: StatusFilte
               </span>
             )}
           </Dropdown.Item>
-          <div className="my-1 border-t border-border" />
-          {TASK_STATUSES.map((status) => {
+          <Dropdown.Section>
+            {TASK_STATUSES.map((status) => {
             const active = selected.includes(status)
             const color = STATUS_COLORS[status]
             const count = counts?.[status] ?? 0
@@ -104,27 +103,27 @@ export default function StatusFilter({ selected, onChange, counts }: StatusFilte
                 onAction={() => toggle(status)}
                 className="gap-2"
               >
-                <i
-                  className={`fa-solid ${active ? 'fa-square-check' : 'fa-square'} w-3.5 text-center`}
-                  style={active ? { color } : undefined}
-                />
-                <i
-                  className={`fa-solid ${ICONS[status]} w-3.5 text-center text-[10px]`}
-                  style={{ color }}
-                />
-                <span className="flex-1">{STATUS_LABELS[status]}</span>
-                <span className="text-[10px] text-muted-foreground">{count}</span>
-              </Dropdown.Item>
-            )
+                  <i
+                    className={`fa-solid ${active ? 'fa-square-check' : 'fa-square'} w-3.5 text-center`}
+                    style={active ? { color } : undefined}
+                  />
+                  <i
+                    className={`fa-solid ${ICONS[status]} w-3.5 text-center text-[10px]`}
+                    style={{ color }}
+                  />
+                  <span className="flex-1">{STATUS_LABELS[status]}</span>
+                  <span className="text-[10px] text-muted-foreground">{count}</span>
+                </Dropdown.Item>
+              )
           })}
+          </Dropdown.Section>
           {!allActive && (
-            <>
-              <div className="my-1 border-t border-border" />
+            <Dropdown.Section>
               <Dropdown.Item key="__clear" onAction={() => onChange([])}>
                 <i className="fa-solid fa-xmark mr-2 w-3.5 text-center text-muted-foreground" />
                 Limpar filtro
               </Dropdown.Item>
-            </>
+            </Dropdown.Section>
           )}
         </Dropdown.Menu>
       </Dropdown.Popover>
