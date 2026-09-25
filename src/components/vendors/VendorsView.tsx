@@ -5,7 +5,6 @@
 import { useMemo, useState } from 'react'
 import VendorModal from '@/components/vendors/VendorModal'
 import VendorDetailModal from '@/components/vendors/VendorDetailModal'
-import ImageLightbox from '@/components/vendors/ImageLightbox'
 import { useVendors } from '@/hooks/useVendors'
 import { extractLexicalText } from '@/utils/lexical'
 import {
@@ -18,68 +17,39 @@ import type { CreateVendorInput } from '@/lib/api/vendors'
 
 type SortMode = 'name' | 'recent'
 
+/**
+ * Rótulo mínimo de um link: só a identidade, sem protocolo/caminho.
+ * `https://www.instagram.com/r2pg` -> `instagram`
+ * `https://www.r2pg.com.br`        -> `r2pg`
+ * `https://drive.google.com/...`   -> `drive`
+ */
 function getDomainFromUrl(url: string): string {
   try {
-    return new URL(url).hostname.replace(/^www\./, '')
+    const host = new URL(url).hostname.replace(/^www\./, '')
+    return host.split('.')[0] || host
   } catch {
-    return url
+    return url.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
   }
 }
 
+/** Ícone pela identidade mínima do host (`instagram`, `r2pg`, `drive`…). */
 function getLinkIcon(url: string): string {
-  const domain = getDomainFromUrl(url).toLowerCase()
-  if (domain.includes('instagram.com')) return 'fa-brands fa-instagram'
-  if (domain.includes('behance.net')) return 'fa-brands fa-behance'
-  if (domain.includes('linkedin.com')) return 'fa-brands fa-linkedin'
-  if (domain.includes('dribbble.com')) return 'fa-brands fa-dribbble'
-  if (domain.includes('github.com')) return 'fa-brands fa-github'
-  if (domain.includes('patreon.com') || domain.includes('ko-fi.com'))
-    return 'fa-solid fa-mug-hot'
-  if (domain.includes('drive.google.com')) return 'fa-brands fa-google-drive'
-  return 'fa-arrow-up-right-from-square text-primary'
-}
-
-const MAX_THUMBS = 3
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
-}
-
-/** Rótulo de bloco dentro do card (ex.: CONTATO, LINKS, PIX). */
-function BlockLabel({ icon, children }: { icon: string; children: React.ReactNode }) {
-  return (
-    <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
-      <i className={`fa-solid ${icon} text-[9px]`} />
-      {children}
-    </p>
-  )
-}
-
-/** Linha de dado: ícone fixo + conteúdo, com o mesmo alinhamento em todo o card. */
-function InfoRow({
-  icon,
-  children,
-  muted = false,
-}: {
-  /** Classe completa do ícone (ex.: 'fa-brands fa-instagram'). */
-  icon: string
-  children: React.ReactNode
-  muted?: boolean
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${
-        muted ? 'bg-transparent' : 'border border-border/60 bg-muted/25'
-      }`}
-    >
-      <i
-        className={`${icon.startsWith('fa-brands') ? '' : 'fa-solid '} ${icon} w-3.5 shrink-0 text-center text-[11px] ${
-          muted ? 'text-muted-foreground/50' : 'text-muted-foreground'
-        }`}
-      />
-      <div className="min-w-0 flex-1">{children}</div>
-    </div>
-  )
+  const host = getDomainFromUrl(url).toLowerCase()
+  if (host.includes('instagram')) return 'fa-brands fa-instagram'
+  if (host.includes('behance')) return 'fa-brands fa-behance'
+  if (host.includes('linkedin')) return 'fa-brands fa-linkedin'
+  if (host.includes('dribbble')) return 'fa-brands fa-dribbble'
+  if (host.includes('github')) return 'fa-brands fa-github'
+  if (host.includes('behance')) return 'fa-brands fa-behance'
+  if (host.includes('youtube')) return 'fa-brands fa-youtube'
+  if (host.includes('twitter') || host === 'x') return 'fa-brands fa-x-twitter'
+  if (host.includes('patreon') || host.includes('ko-fi')) return 'fa-solid fa-mug-hot'
+  if (host.includes('drive') || host.includes('docs')) return 'fa-brands fa-google-drive'
+  if (host.includes('youtube')) return 'fa-brands fa-youtube'
+  if (host.includes('catarse') || host.includes('apoiase')) return 'fa-solid fa-heart'
+  if (host.includes('spotify') || host.includes('soundcloud')) return 'fa-solid fa-music'
+  if (host.includes('wa.me') || host.includes('whatsapp')) return 'fa-brands fa-whatsapp'
+  return 'fa-solid fa-link'
 }
 
 export default function VendorsView() {
@@ -92,7 +62,6 @@ export default function VendorsView() {
   const [modalOpen, setModalOpen] = useState(false)
   const [detailVendor, setDetailVendor] = useState<Vendor | null>(null)
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
-  const [lightbox, setLightbox] = useState<{ images: string[]; index: number } | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   const kindCounts = useMemo(() => {
@@ -162,7 +131,6 @@ export default function VendorsView() {
       return
     }
     await deleteVendor({ id: vendor.id, imageKeys: vendor.image_keys ?? [] })
-    setLightbox(null)
   }
 
   async function handleCopyPix(vendor: Vendor) {
@@ -327,220 +295,138 @@ export default function VendorsView() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
             {filteredVendors.map((vendor) => {
               const kindColor = VENDOR_KIND_COLORS[vendor.kind] ?? '#6B7280'
               const links = [vendor.link1, vendor.link2, vendor.link3].filter(
                 (l): l is string => !!l,
               )
-              const images = vendor.images ?? []
-              const description = extractLexicalText(vendor.description)
-
               return (
                 <div
                   key={vendor.id}
                   onClick={() => setDetailVendor(vendor)}
-                  className="group flex cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs transition hover:border-primary/50 hover:shadow-md"
+                  className="group relative flex cursor-pointer flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5 transition hover:border-primary/50 hover:bg-muted/20"
                 >
-                  {/* Faixa com a cor do tipo */}
-                  <span className="h-1 w-full shrink-0" style={{ backgroundColor: kindColor }} />
+                  {/* Linha 1: nome + tipo */}
+                  <div className="flex items-center gap-1.5 pr-16">
+                    <span
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: kindColor }}
+                      title={VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
+                    />
+                    <span className="truncate text-xs font-semibold text-foreground">
+                      {vendor.name}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                      {VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
+                    </span>
+                  </div>
 
-                  <div className="flex flex-1 flex-col gap-3.5 p-4">
-                    {/* Nome + tipo + ações */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-foreground group-hover:text-primary transition">
-                          {vendor.name}
-                        </h3>
-                        <span
-                          className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                          style={{ backgroundColor: `${kindColor}18`, color: kindColor }}
-                        >
-                          <span
-                            className="size-1.5 rounded-full"
-                            style={{ backgroundColor: kindColor }}
-                          />
-                          {VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
-                        </span>
-                      </div>
-                      <div
-                        className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+                  {/* Linha 2: contato em uma linha só */}
+                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                    {vendor.phone ? (
+                      <a
+                        href={`tel:${vendor.phone.replace(/\D/g, '')}`}
+                        title={vendor.phone}
                         onClick={(e) => e.stopPropagation()}
+                        className="flex min-w-0 items-center gap-1 transition hover:text-primary"
                       >
-                        <button
-                          type="button"
-                          onClick={() => openEdit(vendor)}
-                          title="Editar"
-                          className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
-                        >
-                          <i className="fa-solid fa-pen-to-square text-xs" />
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isDeleting}
-                          onClick={() => void handleDelete(vendor)}
-                          title="Excluir"
-                          className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <i className="fa-solid fa-trash text-xs" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Contato */}
-                    <div>
-                      <BlockLabel icon="fa-address-book">Contato</BlockLabel>
-                      <div className="space-y-1">
-                        {vendor.phone ? (
-                          <InfoRow icon="fa-mobile-screen">
-                            <a
-                              href={`tel:${vendor.phone.replace(/\D/g, '')}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="block truncate text-[11px] text-foreground transition hover:text-primary"
-                            >
-                              {vendor.phone}
-                            </a>
-                          </InfoRow>
-                        ) : (
-                          <InfoRow icon="fa-mobile-screen" muted>
-                            <span className="text-[11px] text-muted-foreground/60">
-                              Sem celular
-                            </span>
-                          </InfoRow>
-                        )}
-                        {vendor.email ? (
-                          <InfoRow icon="fa-envelope">
-                            <a
-                              href={`mailto:${vendor.email}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="block truncate text-[11px] text-foreground transition hover:text-primary"
-                            >
-                              {vendor.email}
-                            </a>
-                          </InfoRow>
-                        ) : (
-                          <InfoRow icon="fa-envelope" muted>
-                            <span className="text-[11px] text-muted-foreground/60">
-                              Sem e-mail
-                            </span>
-                          </InfoRow>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Links (domínio legível, nunca só o ícone) */}
-                    <div>
-                      <BlockLabel icon="fa-link">
-                        Links{links.length > 0 ? ` (${links.length})` : ''}
-                      </BlockLabel>
-                      {links.length > 0 ? (
-                        <div className="space-y-1">
-                          {links.map((url, i) => (
-                            <InfoRow key={`${url}-${i}`} icon={getLinkIcon(url)}>
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={url}
-                                onClick={(e) => e.stopPropagation()}
-                                className="flex items-center gap-1.5"
-                              >
-                                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground/85 transition group-hover:text-primary">
-                                  {getDomainFromUrl(url)}
-                                </span>
-                                <i className="fa-solid fa-arrow-up-right-from-square shrink-0 text-[9px] text-muted-foreground" />
-                              </a>
-                            </InfoRow>
-                          ))}
-                        </div>
-                      ) : (
-                        <InfoRow icon="fa-link" muted>
-                          <span className="text-[11px] text-muted-foreground/60">
-                            Sem links
-                          </span>
-                        </InfoRow>
-                      )}
-                    </div>
-
-                    {/* PIX: o valor à vista */}
-                    <div>
-                      <BlockLabel icon="fa-qrcode">PIX</BlockLabel>
-                      {vendor.pix ? (
-                        <div className="flex items-center gap-2 rounded-md border border-emerald-500/25 bg-emerald-500/8 px-2 py-1.5">
-                          <span
-                            title={vendor.pix}
-                            className="min-w-0 flex-1 truncate font-mono text-[11px] font-medium text-emerald-700 dark:text-emerald-400"
-                          >
-                            {vendor.pix}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void handleCopyPix(vendor)
-                            }}
-                            title="Copiar chave PIX"
-                            className="flex shrink-0 cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 transition hover:bg-emerald-500/20"
-                          >
-                            <i
-                              className={`fa-solid ${copiedId === vendor.id ? 'fa-check' : 'fa-copy'}`}
-                            />
-                            {copiedId === vendor.id ? 'Copiado' : 'Copiar'}
-                          </button>
-                        </div>
-                      ) : (
-                        <p className="px-2 py-1 text-[11px] text-muted-foreground/60">
-                          Sem chave PIX
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Artes (miniatura compacta; o resto fica no modal) */}
-                    {images.length > 0 && (
-                      <div>
-                        <BlockLabel icon="fa-image">
-                          Artes{images.length > 1 ? ` (${images.length})` : ''}
-                        </BlockLabel>
-                        <div className="flex items-center gap-1.5">
-                          {images.slice(0, MAX_THUMBS).map((url, i) => (
-                            <button
-                              key={`${url}-${i}`}
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setLightbox({ images, index: i })
-                              }}
-                              title="Ampliar"
-                              className="size-10 cursor-zoom-in overflow-hidden rounded-md border border-border transition hover:border-primary/60"
-                            >
-                              <img src={url} alt="" className="h-full w-full object-cover" />
-                            </button>
-                          ))}
-                          {images.length > MAX_THUMBS && (
-                            <span className="flex size-10 items-center justify-center rounded-md border border-border bg-muted text-[10px] font-semibold text-muted-foreground">
-                              +{images.length - MAX_THUMBS}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                        <i className="fa-solid fa-mobile-screen text-[9px]" />
+                        <span className="truncate">{vendor.phone}</span>
+                      </a>
+                    ) : null}
+                    {vendor.email ? (
+                      <a
+                        href={`mailto:${vendor.email}`}
+                        title={vendor.email}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex min-w-0 items-center gap-1 transition hover:text-primary"
+                      >
+                        <i className="fa-solid fa-envelope text-[9px]" />
+                        <span className="truncate">{vendor.email}</span>
+                      </a>
+                    ) : null}
+                    {!vendor.phone && !vendor.email && (
+                      <span className="text-muted-foreground/50">Sem contato</span>
                     )}
                   </div>
 
-                  {/* Rodapé: acesso aos detalhes */}
-                  <div className="mt-auto border-t border-border/70 bg-muted/20 px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-[10px] text-muted-foreground/70">
-                        {description ? truncate(description, 48) : 'Sem descrição'}
-                      </p>
+                  {/* Linha 3: links minimizados, em uma linha só */}
+                  {links.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      {links.map((url, i) => (
+                        <a
+                          key={`${url}-${i}`}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={url}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex max-w-[120px] items-center gap-1 rounded border border-border/70 bg-background/60 px-1.5 py-0.5 text-[10px] font-medium text-foreground/80 transition hover:border-primary/60 hover:text-primary"
+                        >
+                          <i className={`${getLinkIcon(url)} shrink-0 text-[9px]`} />
+                          <span className="truncate">{getDomainFromUrl(url)}</span>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Linha 4: PIX em uma linha só */}
+                  {vendor.pix ? (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <i className="fa-solid fa-qrcode shrink-0 text-[9px] text-emerald-600" />
+                      <span
+                        title={vendor.pix}
+                        className="min-w-0 flex-1 truncate font-mono text-emerald-700 dark:text-emerald-400"
+                      >
+                        {vendor.pix}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setDetailVendor(vendor)}
-                        className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-semibold text-primary transition hover:bg-primary/10"
+                        title="Copiar chave PIX"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          void handleCopyPix(vendor)
+                        }}
+                        className="shrink-0 cursor-pointer rounded px-1 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-emerald-600"
                       >
-                        Ver detalhes
-                        <i className="fa-solid fa-chevron-right text-[9px]" />
+                        <i
+                          className={`fa-solid ${copiedId === vendor.id ? 'fa-check text-emerald-600' : 'fa-copy'}`}
+                        />
                       </button>
                     </div>
+                  ) : null}
+
+                  {/* Ações no hover + atalho para o modal de detalhes */}
+                  <div
+                    className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setDetailVendor(vendor)}
+                      title="Ver detalhes"
+                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-primary"
+                    >
+                      <i className="fa-solid fa-eye text-[11px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(vendor)}
+                      title="Editar"
+                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                    >
+                      <i className="fa-solid fa-pen-to-square text-[11px]" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={() => void handleDelete(vendor)}
+                      title="Excluir"
+                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <i className="fa-solid fa-trash text-[11px]" />
+                    </button>
                   </div>
                 </div>
               )
@@ -562,18 +448,6 @@ export default function VendorsView() {
         onSave={handleSave}
       />
 
-      {lightbox && (
-        <ImageLightbox
-          images={lightbox.images}
-          index={lightbox.index}
-          onIndexChange={(index) => setLightbox((prev) => (prev ? { ...prev, index } : prev))}
-          onClose={() => setLightbox(null)}
-          title={
-            filteredVendors.find((v) => (v.images ?? []).includes(lightbox.images[0]))?.name ??
-            'Artes'
-          }
-        />
-      )}
     </div>
   )
 }
