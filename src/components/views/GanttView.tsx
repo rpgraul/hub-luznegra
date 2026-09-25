@@ -1147,8 +1147,10 @@ export default function GanttView({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background select-none">
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs backdrop-blur">
-        <div className="flex items-center gap-2">
+      {/* `flex-nowrap`: o bloco da direita (zoom + Hoje) fica sempre colado à
+          direita; quem pode quebrar linha é só o grupo da esquerda. */}
+      <div className="flex flex-nowrap items-center gap-3 border-b border-border bg-card/40 px-4 py-2 text-xs backdrop-blur">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <Button size="sm" variant={showTable ? 'secondary' : 'outline'} className="h-7 gap-1.5 px-2.5 text-xs font-medium" onPress={() => setShowTable(!showTable)}>
             <i className={`fa-solid ${showTable ? 'fa-table-columns' : 'fa-table'} text-xs`} />
             <span>{showTable ? 'Ocultar Tabela' : 'Mostrar Tabela'}</span>
@@ -1175,7 +1177,7 @@ export default function GanttView({
             onChange={setCategoryFilter}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <div className="flex items-center rounded-lg border border-border bg-background/80 p-0.5 shadow-2xs">
             <button type="button" aria-label="Aumentar Zoom" title="Aumentar Zoom (Ctrl + Scroll para cima)" disabled={zoomIndex === 0} onClick={handleZoomIn} className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:opacity-30">
               <i className="fa-solid fa-magnifying-glass-plus text-[11px]" />

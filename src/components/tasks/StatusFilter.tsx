@@ -1,3 +1,4 @@
+import { Dropdown } from '@heroui/react'
 import { STATUS_COLORS, STATUS_LABELS, TASK_STATUSES } from '@/utils/status'
 import type { TaskStatus } from '@/types/database'
 
@@ -8,8 +9,19 @@ interface StatusFilterProps {
   counts?: Record<string, number>
 }
 
-/** Filtro multi-seleção por status (pills toggle + "Todas"). */
+const ICONS: Record<TaskStatus, string> = {
+  uncertain: 'fa-circle-question',
+  backlog: 'fa-inbox',
+  todo: 'fa-circle',
+  in_progress: 'fa-spinner',
+  review: 'fa-magnifying-glass',
+  done: 'fa-circle-check',
+}
+
+/** Dropdown multi-seleção por status (a coluna do Kanban também é filtro aqui). */
 export default function StatusFilter({ selected, onChange, counts }: StatusFilterProps) {
+  const allActive = selected.length === 0
+
   function toggle(status: TaskStatus) {
     onChange(
       selected.includes(status)
@@ -18,61 +30,104 @@ export default function StatusFilter({ selected, onChange, counts }: StatusFilte
     )
   }
 
-  const allActive = selected.length === 0
+  const label = allActive
+    ? 'Status'
+    : selected.length === 1
+      ? STATUS_LABELS[selected[0]]
+      : `${selected.length} status`
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <span className="text-xs font-bold text-foreground">Status:</span>
-      <button
-        type="button"
-        onClick={() => onChange([])}
-        title="Mostrar todos os status"
-        className={`h-7 rounded-md border px-2 text-xs font-semibold transition cursor-pointer ${
-          allActive
-            ? 'border-primary bg-primary text-primary-foreground shadow-2xs'
-            : 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
-        }`}
-      >
-        Todos
-      </button>
-      {TASK_STATUSES.map((status) => {
-        const active = selected.includes(status)
-        const color = STATUS_COLORS[status]
-        const count = counts?.[status] ?? 0
-        return (
-          <button
-            key={status}
-            type="button"
-            onClick={() => toggle(status)}
-            title={active ? `Remover filtro ${STATUS_LABELS[status]}` : `Filtrar por ${STATUS_LABELS[status]}`}
-            className="h-7 rounded-md border px-2 text-xs font-semibold transition cursor-pointer"
-            style={
-              active
-                ? {
-                    backgroundColor: color,
-                    color: '#FFFFFF',
-                    borderColor: color,
-                  }
-                : { color }
-            }
-          >
-            {STATUS_LABELS[status]}
-            {counts && count > 0 && (
-              <span className="ml-1 opacity-70">{count}</span>
-            )}
-          </button>
-        )
-      })}
-      {!allActive && (
+    <Dropdown.Root>
+      <Dropdown.Trigger>
         <button
           type="button"
-          onClick={() => onChange([])}
-          title="Limpar filtro"
-          className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          title="Filtrar por status"
+          className={`flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-xs font-semibold transition ${
+            allActive
+              ? 'border-border bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
+              : 'border-primary bg-primary/10 text-primary hover:bg-primary/15'
+          }`}
         >
-          <i className="fa-solid fa-xmark text-[10px]" />
+          <i className="fa-solid fa-filter text-[10px]" />
+          <span className="max-w-[120px] truncate">{label}</span>
+          {allActive ? (
+            <i className="fa-solid fa-chevron-down text-[9px] opacity-60" />
+          ) : (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Limpar filtro"
+              onClick={(e) => {
+                e.stopPropagation()
+                onChange([])
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation()
+                  e.preventDefault()
+                  onChange([])
+                }
+              }}
+              className="flex size-4 items-center justify-center rounded hover:bg-primary/20"
+            >
+              <i className="fa-solid fa-xmark text-[9px]" />
+            </span>
+          )}
         </button>
-      )}
-    </div>
+      </Dropdown.Trigger>
+      <Dropdown.Popover>
+        <Dropdown.Menu className="min-w-[200px]">
+          <Dropdown.Item
+            key="__all"
+            onAction={() => onChange([])}
+            className="gap-2"
+          >
+            <i
+              className={`fa-solid ${allActive ? 'fa-square-check' : 'fa-square'} w-3.5 text-center`}
+              style={allActive ? { color: STATUS_COLORS.todo } : undefined}
+            />
+            <span className="flex-1 font-semibold">Todos os status</span>
+            {counts && (
+              <span className="text-[10px] text-muted-foreground">
+                {Object.values(counts).reduce((a, b) => a + b, 0)}
+              </span>
+            )}
+          </Dropdown.Item>
+          <div className="my-1 border-t border-border" />
+          {TASK_STATUSES.map((status) => {
+            const active = selected.includes(status)
+            const color = STATUS_COLORS[status]
+            const count = counts?.[status] ?? 0
+            return (
+              <Dropdown.Item
+                key={status}
+                onAction={() => toggle(status)}
+                className="gap-2"
+              >
+                <i
+                  className={`fa-solid ${active ? 'fa-square-check' : 'fa-square'} w-3.5 text-center`}
+                  style={active ? { color } : undefined}
+                />
+                <i
+                  className={`fa-solid ${ICONS[status]} w-3.5 text-center text-[10px]`}
+                  style={{ color }}
+                />
+                <span className="flex-1">{STATUS_LABELS[status]}</span>
+                <span className="text-[10px] text-muted-foreground">{count}</span>
+              </Dropdown.Item>
+            )
+          })}
+          {!allActive && (
+            <>
+              <div className="my-1 border-t border-border" />
+              <Dropdown.Item key="__clear" onAction={() => onChange([])}>
+                <i className="fa-solid fa-xmark mr-2 w-3.5 text-center text-muted-foreground" />
+                Limpar filtro
+              </Dropdown.Item>
+            </>
+          )}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown.Root>
   )
 }
