@@ -11,6 +11,13 @@ import {
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import TaskCommentsModal from '@/components/tasks/TaskCommentsModal'
+import SubtaskDateConflictModal from '@/components/tasks/SubtaskDateConflictModal'
+import {
+  detectSubtaskConflict,
+  extendParentToFitSubtask,
+  fitSubtaskIntoParent,
+  type SubtaskDateConflict,
+} from '@/utils/subtaskDates'
 import DateInput from '@/components/ui/DateInput'
 import { useTaskComments } from '@/hooks/useTaskComments'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
@@ -189,6 +196,15 @@ export default function TaskDrawer({
   const [createProjectId, setCreateProjectId] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showChat, setShowChat] = useState(false)
+  // Conflito de datas (subtarefa fora da janela do pai) aguardando decisão.
+  const [dateConflict, setDateConflict] = useState<SubtaskDateConflict | null>(null)
+  const [conflictBusy, setConflictBusy] = useState(false)
+  const pendingSubtaskRef = useRef<{
+    title: string
+    description: string
+    start_date: string | null
+    due_date: string | null
+  } | null>(null)
 
   // Badge nas listagens: abre o chat direto (o chat acompanha currentTask).
   useEffect(() => {
@@ -245,6 +261,10 @@ export default function TaskDrawer({
     loadedTaskIdRef.current = nextId
     // Troca de tarefa: descarta o rascunho local (quem navegou já salvou).
     clearDirty()
+    // Conflito de datas não sobrevive à troca/fechamento do drawer.
+    pendingSubtaskRef.current = null
+    setDateConflict(null)
+    setConflictBusy(false)
     setCurrentTask(initialTask ?? null)
     if (!initialTask) {
       setTitleDraft('')
@@ -436,6 +456,9 @@ export default function TaskDrawer({
    */
   function handleCloseWithSave() {
     if (manualSaving || saving) return
+    // Fechar descarta a decisão de conflito pendente (nada foi salvo).
+    pendingSubtaskRef.current = null
+    setDateConflict(null)
     void (async () => {
       const target = currentTaskRef.current
       if (target?.id && (dirtyRef.current || newSubtaskTitle.trim())) {
@@ -451,7 +474,6 @@ export default function TaskDrawer({
       onOpenChange(false)
     })()
   }
-
   function handleStartDate(value: string) {
     if (!currentTask) return
     const next = value || null
@@ -564,6 +586,8 @@ export default function TaskDrawer({
   /**
    * Cria a subtarefa — SOMENTE por ação explícita (botão ou Enter).
    * Antes de criar, persiste o rascunho do pai (um dos 3 gatilhos de save).
+   * Se as datas caírem fora da janela da tarefa pai, abre o modal de decisão
+   * e NÃO grava nada até o usuário escolher como resolver.
    */
   async function commitSubtaskDraft(): Promise<boolean> {
     const parent = currentTaskRef.current
@@ -577,13 +601,31 @@ export default function TaskDrawer({
       // Gatilho de save: o pai vai junto com a subtarefa.
       const ok = await saveDraft({ silent: true })
       if (!ok) return false
+
+      const payload = {
+        title,
+        description: desc,
+        start_date: null,
+        due_date: due || null,
+      }
+      const conflict = detectSubtaskConflict(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: payload.start_date, due_date: payload.due_date },
+      )
+      if (conflict) {
+        pendingSubtaskRef.current = payload
+        setDateConflict(conflict)
+        return false
+      }
+
       await creator.createTask({
         title,
         project_id: parent.project_id,
         parent_id: parent.id,
         status: 'todo',
         assigned_to: parent.assigned_to ?? null,
-        due_date: due || null,
+        start_date: payload.start_date,
+        due_date: payload.due_date,
         description: desc ? buildSimpleLexicalJson(desc) : null,
       })
       clearSubtaskDraft()
@@ -597,6 +639,97 @@ export default function TaskDrawer({
       return false
     } finally {
       subtaskCommittingRef.current = false
+    }
+  }
+
+  /** Opção 1 do modal: estende o período do pai para caber a subtarefa. */
+  async function resolveConflictByParent() {
+    const parent = currentTaskRef.current
+    const pending = pendingSubtaskRef.current
+    if (!parent?.id || !pending) return
+    setConflictBusy(true)
+    try {
+      const nextParent = extendParentToFitSubtask(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start_date, due_date: pending.due_date },
+      )
+      if (nextParent.start_date !== parent.start_date || nextParent.due_date !== parent.due_date) {
+        await creator.updateTask({
+          id: parent.id,
+          patch: {
+            start_date: nextParent.start_date,
+            due_date: nextParent.due_date,
+          },
+        })
+        setCurrentTask((prev) =>
+          prev ? { ...prev, ...nextParent } : prev,
+        )
+        if (currentTaskRef.current) {
+          currentTaskRef.current = { ...currentTaskRef.current, ...nextParent }
+        }
+        creator.refreshTasks?.()
+      }
+      pendingSubtaskRef.current = null
+      setDateConflict(null)
+      await createPendingSubtask()
+    } catch (error) {
+      toast.danger(
+        error instanceof Error ? error.message : 'Não foi possível ajustar a tarefa principal.',
+      )
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  /** Opção 2 do modal: ajusta a subtarefa para a janela do pai. */
+  async function resolveConflictBySubtask() {
+    const parent = currentTaskRef.current
+    const pending = pendingSubtaskRef.current
+    if (!parent || !pending) return
+    setConflictBusy(true)
+    try {
+      const fitted = fitSubtaskIntoParent(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start_date, due_date: pending.due_date },
+      )
+      pendingSubtaskRef.current = { ...pending, ...fitted }
+      setDateConflict(null)
+      await createPendingSubtask()
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  function cancelConflict() {
+    pendingSubtaskRef.current = null
+    setDateConflict(null)
+  }
+
+  /** Grava a subtarefa pendente (já com as datas resolvidas). */
+  async function createPendingSubtask() {
+    const parent = currentTaskRef.current
+    const pending = pendingSubtaskRef.current
+    if (!parent?.id || !parent.project_id || !pending) return false
+    try {
+      await creator.createTask({
+        title: pending.title,
+        project_id: parent.project_id,
+        parent_id: parent.id,
+        status: 'todo',
+        assigned_to: parent.assigned_to ?? null,
+        start_date: pending.start_date,
+        due_date: pending.due_date,
+        description: pending.description ? buildSimpleLexicalJson(pending.description) : null,
+      })
+      clearSubtaskDraft()
+      creator.refreshTasks?.()
+      toast.success('Subtarefa criada com sucesso!')
+      return true
+    } catch (error) {
+      toast.danger(
+        error instanceof Error ? error.message : 'Não foi possível criar a subtarefa.',
+      )
+      return false
     }
   }
 
@@ -1216,13 +1349,21 @@ export default function TaskDrawer({
                       value={newSubtaskDue}
                       onChange={setNewSubtaskDue}
                       onKeyDown={handleSubtaskKeyDown}
+                      min={currentTask?.start_date || undefined}
                       ariaLabel="Conclusão da nova subtarefa"
                       className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-[#7b68ee] focus:outline-none shadow-2xs"
                     />
                   </div>
                   <div className="flex items-center justify-between gap-2 pt-1">
                     <span className="text-[10px] text-muted-foreground">
-                      Enter ou Adicionar cria. Salvar/Fechar inclui o digitado.
+                      {newSubtaskDue && currentTask?.start_date && newSubtaskDue < currentTask.start_date ? (
+                        <span className="text-amber-600">
+                          <i className="fa-solid fa-triangle-exclamation mr-1" />
+                          Antes do início da tarefa ({newSubtaskDue}) — você será questionado ao criar.
+                        </span>
+                      ) : (
+                        'Enter ou Adicionar cria. Salvar/Fechar inclui o digitado.'
+                      )}
                     </span>
                     <Button
                       size="sm"
@@ -1432,6 +1573,15 @@ export default function TaskDrawer({
           </div>
         </div>
       )}
+
+      <SubtaskDateConflictModal
+        conflict={dateConflict}
+        parentTitle={currentTask?.title ?? ''}
+        busy={conflictBusy}
+        onExtendParent={() => void resolveConflictByParent()}
+        onFitSubtask={() => void resolveConflictBySubtask()}
+        onCancel={cancelConflict}
+      />
     </>
   )
 }

@@ -3,6 +3,13 @@ import { Button, Modal } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import StatusSelect from '@/components/tasks/StatusSelect'
+import SubtaskDateConflictModal from '@/components/tasks/SubtaskDateConflictModal'
+import {
+  detectSubtaskConflict,
+  extendParentToFitSubtask,
+  fitSubtaskIntoParent,
+  type SubtaskDateConflict,
+} from '@/utils/subtaskDates'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { normalizeLexicalForSave } from '@/utils/lexical'
@@ -27,6 +34,8 @@ interface SubtaskModalProps {
   projects: Project[]
   currentUserId: string
   createTask: (input: NewTaskInput) => Promise<Task>
+  updateTask?: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
+  refreshTasks?: () => void
   onCreated?: () => void
 }
 
@@ -50,6 +59,8 @@ export default function SubtaskModal({
   projects,
   currentUserId,
   createTask,
+  updateTask,
+  refreshTasks,
   onCreated,
 }: SubtaskModalProps) {
   const [title, setTitle] = useState('')
@@ -63,6 +74,9 @@ export default function SubtaskModal({
     useState<SerializedEditorState | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Conflito de janela pai/subtarefa aguardando decisão do usuário.
+  const [dateConflict, setDateConflict] = useState<SubtaskDateConflict | null>(null)
+  const [conflictBusy, setConflictBusy] = useState(false)
 
   const titleRef = useRef<HTMLInputElement>(null)
   const { members } = useProjectMembers(parent?.project_id ?? null)
@@ -80,6 +94,8 @@ export default function SubtaskModal({
     setDescription(null)
     setError(null)
     setSubmitting(false)
+    setDateConflict(null)
+    setConflictBusy(false)
     setTimeout(() => titleRef.current?.focus(), 80)
   }, [open, parent, currentUserId])
 
@@ -106,6 +122,23 @@ export default function SubtaskModal({
       setError('A data de início não pode ser depois da conclusão.')
       return
     }
+    // Fora da janela da tarefa pai? Decide com o usuário antes de gravar.
+    if (parent) {
+      const conflict = detectSubtaskConflict(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: startDate || null, due_date: dueDate || null },
+      )
+      if (conflict) {
+        setDateConflict(conflict)
+        return
+      }
+    }
+    await doCreate({ start_date: startDate || null, due_date: dueDate || null })
+  }
+
+  /** Executa a criação de fato (com as datas já resolvidas). */
+  async function doCreate(dates: { start_date: string | null; due_date: string | null }) {
+    if (!parent?.project_id) return
     setSubmitting(true)
     setError(null)
     const parsedHours = Number.parseFloat(hours)
@@ -120,8 +153,8 @@ export default function SubtaskModal({
         priority,
         assigned_to: assignees.length > 0 ? assignees[0] : null,
         assignees: assignees.length > 0 ? assignees : null,
-        start_date: startDate || null,
-        due_date: dueDate || null,
+        start_date: dates.start_date,
+        due_date: dates.due_date,
         estimated_hours,
         description: normalizeLexicalForSave(description) as unknown as Json,
       })
@@ -131,6 +164,47 @@ export default function SubtaskModal({
       setError(err instanceof Error ? err.message : 'Erro ao criar subtarefa.')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  /** Opção 1: estende o período da tarefa principal para caber a subtarefa. */
+  async function resolveConflictByParent() {
+    if (!parent) return
+    setConflictBusy(true)
+    try {
+      const nextParent = extendParentToFitSubtask(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: startDate || null, due_date: dueDate || null },
+      )
+      if (updateTask && (nextParent.start_date !== parent.start_date || nextParent.due_date !== parent.due_date)) {
+        await updateTask({ id: parent.id, patch: nextParent })
+        refreshTasks?.()
+      }
+      setDateConflict(null)
+      await doCreate({ start_date: startDate || null, due_date: dueDate || null })
+    } catch (err) {
+      setDateConflict(null)
+      setError(err instanceof Error ? err.message : 'Não foi possível ajustar a tarefa principal.')
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  /** Opção 2: move a subtarefa para dentro da janela da tarefa principal. */
+  async function resolveConflictBySubtask() {
+    if (!parent) return
+    setConflictBusy(true)
+    try {
+      const fitted = fitSubtaskIntoParent(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: startDate || null, due_date: dueDate || null },
+      )
+      setStartDate(fitted.start_date ?? '')
+      setDueDate(fitted.due_date ?? '')
+      setDateConflict(null)
+      await doCreate({ start_date: fitted.start_date ?? null, due_date: fitted.due_date ?? null })
+    } finally {
+      setConflictBusy(false)
     }
   }
 
@@ -294,6 +368,7 @@ export default function SubtaskModal({
                   <label className="block text-xs font-medium text-foreground/70">Início</label>
                   <DateInput
                     value={startDate}
+                    min={parent?.start_date || undefined}
                     onChange={setStartDate}
                     ariaLabel="Data de início"
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none transition hover:border-primary/50 focus:border-primary focus:ring-1 focus:ring-primary/20"
@@ -329,6 +404,15 @@ export default function SubtaskModal({
                   </div>
                 </div>
               </div>
+              {parent && detectSubtaskConflict(
+                { start_date: parent.start_date, due_date: parent.due_date },
+                { start_date: startDate || null, due_date: dueDate || null },
+              ) && (
+                <p className="flex items-center gap-1.5 text-[11px] text-amber-600">
+                  <i className="fa-solid fa-triangle-exclamation text-[10px]" />
+                  Fora do período da tarefa principal — ao criar, você escolhe se estende a tarefa ou move a subtarefa.
+                </p>
+              )}
               {startDate && dueDate && dueDate < startDate && (
                 <p className="flex items-center gap-1.5 text-[11px] text-destructive">
                   <i className="fa-solid fa-triangle-exclamation text-[10px]" />
@@ -394,6 +478,14 @@ export default function SubtaskModal({
           <Modal.CloseTrigger />
         </Modal.Dialog>
       </Modal.Container>
+      <SubtaskDateConflictModal
+        conflict={dateConflict}
+        parentTitle={parent?.title ?? ''}
+        busy={conflictBusy}
+        onExtendParent={() => void resolveConflictByParent()}
+        onFitSubtask={() => void resolveConflictBySubtask()}
+        onCancel={() => setDateConflict(null)}
+      />
     </Modal.Backdrop>
   )
 }

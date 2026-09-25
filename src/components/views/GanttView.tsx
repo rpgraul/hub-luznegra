@@ -12,6 +12,7 @@ import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
+import StatusFilter from '@/components/tasks/StatusFilter'
 import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
 import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
@@ -33,6 +34,9 @@ interface GanttViewProps {
   deleteTask?: (id: string) => Promise<unknown>
   reorderMany?: (orderedIds: string[]) => Promise<unknown>
   currentUserId?: string
+  /** Abre o modo foco: exibe só a tarefa e suas subtarefas. */
+  onFocusTask?: (task: Task) => void
+  focusedTaskId?: string | null
 }
 
 const BAR_HEIGHT = 24
@@ -212,6 +216,8 @@ export default function GanttView({
   deleteTask,
   reorderMany,
   currentUserId,
+  onFocusTask,
+  focusedTaskId = null,
 }: GanttViewProps) {
   const [zoomIndex, setZoomIndex] = useState(2)
   const [showTable, setShowTable] = useState(true)
@@ -219,6 +225,7 @@ export default function GanttView({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
+  const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([])
   // Ordem local aplicada no instante do drop: a tabela reflete o arrasto
   // imediatamente, sem esperar o cache/servidor (evita o snap-back do DnD).
   // Limpa no settled/erro da mutação.
@@ -234,6 +241,8 @@ export default function GanttView({
   const isSyncingScroll = useRef(false)
   const isInteractingRef = useRef(false)
   const pendingChangeRef = useRef<{ taskId: string; start: string; due: string } | null>(null)
+  // Abre/fecha o menu de contexto por coords (usado também pelas barras).
+  const openContextMenuRef = useRef<(x: number, y: number, task: Task) => void>(() => {})
 
   const currentZoom = ZOOM_CONFIGS[zoomIndex]
   const today = todayIso()
@@ -246,11 +255,46 @@ export default function GanttView({
     return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [tasks])
 
-  const filteredTasks = useMemo(() => {
-    if (categoryFilter.length === 0) return tasks
-    const selected = new Set(categoryFilter)
-    return tasks.filter((t) => (t.categories ?? []).some((cat) => selected.has(cat)))
+  // Contagem por status dentro do filtro de categorias (o usuário vê o que
+  // existe antes de escolher).
+  const statusCounts = useMemo(() => {
+    const base = tasks.filter(
+      (t) =>
+        categoryFilter.length === 0 ||
+        (t.categories ?? []).some((cat) => categoryFilter.includes(cat)),
+    )
+    const counts: Record<string, number> = {}
+    for (const t of base) counts[t.status] = (counts[t.status] ?? 0) + 1
+    return counts
   }, [tasks, categoryFilter])
+
+  const filteredTasks = useMemo(() => {
+    if (categoryFilter.length === 0 && statusFilter.length === 0) return tasks
+
+    const byCategory = (t: Task) =>
+      categoryFilter.length === 0 ||
+      (t.categories ?? []).some((cat) => categoryFilter.includes(cat))
+    const byStatus = (t: Task) =>
+      statusFilter.length === 0 || statusFilter.includes(t.status)
+
+    // Hierarquia é lei no Gantt: se uma subtarefa casa, os ancestrais dela
+    // também entram (senão a linha viraria raiz órfã).
+    const byId = new Map(tasks.map((t) => [t.id, t]))
+    const keep = new Set<string>()
+    for (const t of tasks) {
+      if (!byCategory(t) || !byStatus(t)) continue
+      keep.add(t.id)
+      let parentId = t.parent_id
+      let guard = 0
+      while (parentId && guard < 50) {
+        if (keep.has(parentId)) break
+        keep.add(parentId)
+        parentId = byId.get(parentId)?.parent_id ?? null
+        guard += 1
+      }
+    }
+    return tasks.filter((t) => keep.has(t.id))
+  }, [tasks, categoryFilter, statusFilter])
 
   // Build rows — respects expandedIds, sorted by order_index per level.
   // Enquanto há um arrasto pendente, a posição no pendingOrder prevalece
@@ -307,6 +351,8 @@ export default function GanttView({
 
   const taskRows = useMemo(() => rows.filter((r): r is TaskRow => r.kind === 'task'), [rows])
 
+  const tasksById = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks])
+
   const ganttTasks = useMemo(
     () =>
       taskRows.map(({ task, undated, isSubtask }) => {
@@ -351,19 +397,28 @@ export default function GanttView({
             ? `✓ ${task.title}`
             : task.title
 
+        // Linha de dependência só é segura quando a subtarefa está contida na
+        // janela do pai; fora disso o Frappe desenha barras invertidas/travava.
+        const parentTask = task.parent_id ? tasksById.get(task.parent_id) : undefined
+        const outsideParentWindow =
+          !!parentTask &&
+          ((!!parentTask.start_date && start < parentTask.start_date) ||
+            (!!parentTask.due_date && end > addDaysLocal(parentTask.due_date, 1)))
+
         return {
           id: task.id,
           name: taskTitle.length > 35 ? `${taskTitle.slice(0, 34)}…` : taskTitle,
           start,
           end: finalEnd,
           progress,
-          dependencies: task.parent_id ? [task.parent_id] : undefined,
+          dependencies:
+            task.parent_id && !outsideParentWindow ? [task.parent_id] : undefined,
           custom_class: customClass,
           // A cor da barra representa o status da tarefa (fonte única: utils/status)
           color: STATUS_COLORS[task.status],
         }
       }),
-    [taskRows, today],
+    [taskRows, today, tasksById],
   )
 
   // Close context menu on outside click / Escape
@@ -509,6 +564,19 @@ export default function GanttView({
     setContextMenu({ x: e.clientX, y: e.clientY, task })
   }
 
+  // Mesma coisa, porém a partir de um evento nativo (barras do Frappe).
+  useEffect(() => {
+    openContextMenuRef.current = (x, y, task) => setContextMenu({ x, y, task })
+  }, [])
+
+  /** Ativa o modo foco na tarefa (ou sai, se já for a focada). */
+  function handleToggleFocus(task: Task) {
+    if (!onFocusTask) return
+    setContextMenu(null)
+    setExpandedIds((prev) => new Set([...prev, task.id]))
+    onFocusTask(task)
+  }
+
   async function handleDuplicate(task: Task) {
     if (!createTask) return
     const pid = task.project_id ?? activeProjectId
@@ -632,11 +700,26 @@ export default function GanttView({
       if (task) onOpenTaskRef.current(task)
     }
 
+    // Clique direito na barra abre o mesmo menu da linha da tabela.
+    function handleContextMenuNative(event: MouseEvent) {
+      const target = event.target as Element | null
+      const bar = target?.closest?.('.bar-wrapper[data-id]')
+      const id = bar?.getAttribute('data-id')
+      if (!id) return
+      const task = tasksByIdRef.current.get(id)
+      if (!task) return
+      event.preventDefault()
+      event.stopPropagation()
+      openContextMenuRef.current(event.clientX, event.clientY, task)
+    }
+
     wrapper.addEventListener('mousedown', handleTimelineMouseDown)
     wrapper.addEventListener('dblclick', handleDoubleClick)
+    wrapper.addEventListener('contextmenu', handleContextMenuNative)
     return () => {
       wrapper.removeEventListener('mousedown', handleTimelineMouseDown)
       wrapper.removeEventListener('dblclick', handleDoubleClick)
+      wrapper.removeEventListener('contextmenu', handleContextMenuNative)
     }
   }, [])
 
@@ -1072,12 +1155,20 @@ export default function GanttView({
           </Button>
           <span className="text-[11px] text-muted-foreground font-medium">
             {taskRows.length} tarefa{taskRows.length !== 1 ? 's' : ''}
+            {(statusFilter.length > 0 || categoryFilter.length > 0) && (
+              <span className="text-muted-foreground/70"> de {tasks.length}</span>
+            )}
           </span>
           {undatedCount > 0 && (
             <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
               <i className="fa-regular fa-clock" />{undatedCount} sem prazo
             </span>
           )}
+          <StatusFilter
+            selected={statusFilter}
+            onChange={setStatusFilter}
+            counts={statusCounts}
+          />
           <CategoryFilter
             available={availableCategories}
             selected={categoryFilter}
@@ -1388,6 +1479,14 @@ export default function GanttView({
             </button>
           )}
 
+          {onFocusTask && tasks.some((t) => t.parent_id === contextMenu.task.id) && (
+            <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-foreground transition hover:bg-muted"
+              onClick={() => handleToggleFocus(contextMenu.task)}>
+              <i className={`fa-solid ${focusedTaskId === contextMenu.task.id ? 'fa-circle-xmark' : 'fa-bullseye'} w-3.5 text-center text-muted-foreground`} />
+              <span>{focusedTaskId === contextMenu.task.id ? 'Sair do foco nesta tarefa' : 'Focar na tarefa'}</span>
+            </button>
+          )}
+
           <div className="my-1 border-t border-border" />
 
           {deleteTask && (
@@ -1409,6 +1508,7 @@ export default function GanttView({
           projects={projects}
           currentUserId={currentUserId ?? ''}
           createTask={createTask}
+          updateTask={updateTask}
           onCreated={() => {
             toast.success('Subtarefa criada!')
           }}

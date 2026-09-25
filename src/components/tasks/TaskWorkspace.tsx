@@ -129,6 +129,8 @@ export default function TaskWorkspace({
   const [chatKey, setChatKey] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [createStartDate, setCreateStartDate] = useState<string | null>(null)
+  // Modo foco: exibe apenas a tarefa escolhida + todas as suas subtarefas.
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
 
   const containerRef = useRef<HTMLDivElement | null>(null)
 
@@ -136,7 +138,34 @@ export default function TaskWorkspace({
   const { tasks } = tasksApi
   const { memberOf } = useProjectMembers(activeProjectId)
 
+  // Conjunto exibido: base (projeto + concluídas) ∩ modo foco.
+  // No foco valem as duas regras abaixo:
+  //  - a tarefa focada e TODOS os descendentes aparecem, inclusive concluídos
+  //    (o foco serve justamente para ver a árvore inteira da tarefa);
+  //  - o filtro de projeto deixa de valer, senão trocar/excluir o projeto
+  //    esconderia a tarefa que o usuário está tentando focar.
   const visibleTasks = useMemo(() => {
+    if (focusedTaskId) {
+      const byParent = new Map<string | null, Task[]>()
+      for (const task of tasks) {
+        const list = byParent.get(task.parent_id) ?? []
+        list.push(task)
+        byParent.set(task.parent_id, list)
+      }
+      const focused: Task[] = []
+      let level = byParent.get(focusedTaskId) ?? []
+      let guard = 0
+      while (level.length > 0 && guard < 20) {
+        focused.push(...level)
+        const next: Task[] = []
+        for (const parent of level) {
+          next.push(...(byParent.get(parent.id) ?? []))
+        }
+        level = next
+        guard += 1
+      }
+      return focused
+    }
     let list = tasks
     if (activeProjectId) {
       list = list.filter((task) => task.project_id === activeProjectId)
@@ -145,7 +174,57 @@ export default function TaskWorkspace({
       list = list.filter((task) => task.status !== 'done')
     }
     return list
-  }, [tasks, activeProjectId, hideDoneTasks])
+  }, [tasks, activeProjectId, hideDoneTasks, focusedTaskId])
+
+  const focusedTask = useMemo(
+    () => (focusedTaskId ? tasks.find((t) => t.id === focusedTaskId) ?? null : null),
+    [tasks, focusedTaskId],
+  )
+  const focusedSubtaskCount = useMemo(
+    () => (focusedTaskId ? visibleTasks.length - 1 : 0),
+    [focusedTaskId, visibleTasks],
+  )
+
+  // A tarefa focada sumiu (excluída ou removida do cache): encerra o foco.
+  useEffect(() => {
+    if (focusedTaskId && !focusedTask) {
+      setFocusedTaskId(null)
+    }
+  }, [focusedTaskId, focusedTask])
+
+  // Trocar de projeto descarta o foco (o contexto do foco era outro).
+  const prevProjectRef = useRef<string | null>(activeProjectId)
+  useEffect(() => {
+    if (prevProjectRef.current !== activeProjectId) {
+      prevProjectRef.current = activeProjectId
+      setFocusedTaskId(null)
+    }
+  }, [activeProjectId])
+
+  function toggleFocus(task: Task) {
+    setFocusedTaskId((prev) => (prev === task.id ? null : task.id))
+  }
+
+  function exitFocus() {
+    setFocusedTaskId(null)
+  }
+
+  // Esc encerra o modo foco.
+  useEffect(() => {
+    if (!focusedTaskId) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        const el = document.activeElement
+        const tag = el?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (el as HTMLElement | null)?.isContentEditable) {
+          return
+        }
+        setFocusedTaskId(null)
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [focusedTaskId])
 
   useEffect(() => {
     if (!initialTaskId || !visibleTasks) return
@@ -294,6 +373,8 @@ export default function TaskWorkspace({
             deleteTask={tasksApi.deleteTask}
             reorderMany={tasksApi.reorderMany}
             currentUserId={user!.id}
+            onFocusTask={toggleFocus}
+            focusedTaskId={focusedTaskId}
           />
         )
       case 'kanban':
@@ -317,7 +398,7 @@ export default function TaskWorkspace({
           <ListView
             tasks={visibleTasks}
             projects={projects}
-            grouped={!activeProjectId}
+            grouped={!activeProjectId && !focusedTaskId}
             onOpenTask={openTask}
             memberOf={memberOf}
             moveTaskStatus={tasksApi.moveTaskStatus}
@@ -340,10 +421,35 @@ export default function TaskWorkspace({
   }
 
   return (
-    <div className="relative h-full">
+    <div className="relative flex h-full flex-col">
+      {focusedTask && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-primary/30 bg-primary/10 px-4 py-1.5 text-xs">
+          <i className="fa-solid fa-bullseye shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-semibold text-foreground">
+              Focado em: {focusedTask.title}
+            </span>
+            {focusedSubtaskCount > 0 && (
+              <span className="text-muted-foreground">
+                {' '}
+                · {focusedSubtaskCount} subtarefa
+                {focusedSubtaskCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={exitFocus}
+            className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-primary/40 bg-background/70 px-2 py-1 text-[11px] font-semibold text-primary transition hover:bg-primary/10"
+          >
+            <i className="fa-solid fa-xmark text-[10px]" />
+            Sair do foco
+          </button>
+        </div>
+      )}
       <div
         ref={containerRef}
-        className="flex h-full overflow-hidden"
+        className="flex min-h-0 flex-1 overflow-hidden"
         style={{
           flexDirection: layout.layout === 'column' ? 'column' : 'row',
         }}
