@@ -305,7 +305,7 @@ export default function VendorsView() {
                 <div
                   key={vendor.id}
                   onClick={() => setDetailVendor(vendor)}
-                  className="group relative flex cursor-pointer flex-col gap-1.5 rounded-lg border border-border bg-card px-3 py-2.5 transition hover:border-primary/50 hover:bg-muted/20"
+                  className="group relative flex cursor-pointer flex-col gap-2 rounded-lg border border-border bg-card px-3.5 py-3 transition hover:border-primary/50 hover:bg-muted/20"
                 >
                   {/* Linha 1: nome + tipo */}
                   <div className="flex items-center gap-1.5 pr-16">
@@ -314,16 +314,16 @@ export default function VendorsView() {
                       style={{ backgroundColor: kindColor }}
                       title={VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
                     />
-                    <span className="truncate text-xs font-semibold text-foreground">
+                    <span className="truncate text-sm font-semibold text-foreground">
                       {vendor.name}
                     </span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground/70">
+                    <span className="shrink-0 text-[11px] text-muted-foreground/70">
                       {VENDOR_KIND_LABELS[vendor.kind] ?? vendor.kind}
                     </span>
                   </div>
 
                   {/* Linha 2: contato em uma linha só */}
-                  <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {vendor.phone ? (
                       <a
                         href={`tel:${vendor.phone.replace(/\D/g, '')}`}
@@ -331,7 +331,7 @@ export default function VendorsView() {
                         onClick={(e) => e.stopPropagation()}
                         className="flex min-w-0 items-center gap-1 transition hover:text-primary"
                       >
-                        <i className="fa-solid fa-mobile-screen text-[9px]" />
+                        <i className="fa-solid fa-mobile-screen text-[10px]" />
                         <span className="truncate">{vendor.phone}</span>
                       </a>
                     ) : null}
@@ -342,12 +342,12 @@ export default function VendorsView() {
                         onClick={(e) => e.stopPropagation()}
                         className="flex min-w-0 items-center gap-1 transition hover:text-primary"
                       >
-                        <i className="fa-solid fa-envelope text-[9px]" />
+                        <i className="fa-solid fa-envelope text-[10px]" />
                         <span className="truncate">{vendor.email}</span>
                       </a>
                     ) : null}
                     {!vendor.phone && !vendor.email && (
-                      <span className="text-muted-foreground/50">Sem contato</span>
+                      <span className="text-[11px] text-muted-foreground/50">Sem contato</span>
                     )}
                   </div>
 
@@ -362,9 +362,9 @@ export default function VendorsView() {
                           rel="noopener noreferrer"
                           title={url}
                           onClick={(e) => e.stopPropagation()}
-                          className="flex max-w-[120px] items-center gap-1 rounded border border-border/70 bg-background/60 px-1.5 py-0.5 text-[10px] font-medium text-foreground/80 transition hover:border-primary/60 hover:text-primary"
+                          className="flex max-w-[130px] items-center gap-1.5 rounded border border-border/70 bg-background/60 px-2 py-1 text-[11px] font-medium text-foreground/80 transition hover:border-primary/60 hover:text-primary"
                         >
-                          <i className={`${getLinkIcon(url)} shrink-0 text-[9px]`} />
+                          <i className={`${getLinkIcon(url)} shrink-0 text-[10px]`} />
                           <span className="truncate">{getDomainFromUrl(url)}</span>
                         </a>
                       ))}
@@ -373,11 +373,11 @@ export default function VendorsView() {
 
                   {/* Linha 4: PIX em uma linha só */}
                   {vendor.pix ? (
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <i className="fa-solid fa-qrcode shrink-0 text-[9px] text-emerald-600" />
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <i className="fa-solid fa-qrcode shrink-0 text-[10px] text-emerald-600" />
                       <span
                         title={vendor.pix}
-                        className="min-w-0 flex-1 truncate font-mono text-emerald-700 dark:text-emerald-400"
+                        className="min-w-0 flex-1 truncate font-mono text-[11px] text-emerald-700 dark:text-emerald-400"
                       >
                         {vendor.pix}
                       </span>
@@ -388,7 +388,7 @@ export default function VendorsView() {
                           e.stopPropagation()
                           void handleCopyPix(vendor)
                         }}
-                        className="shrink-0 cursor-pointer rounded px-1 text-[10px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-emerald-600"
+                        className="shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground transition hover:bg-muted hover:text-emerald-600"
                       >
                         <i
                           className={`fa-solid ${copiedId === vendor.id ? 'fa-check text-emerald-600' : 'fa-copy'}`}
@@ -406,26 +406,26 @@ export default function VendorsView() {
                       type="button"
                       onClick={() => setDetailVendor(vendor)}
                       title="Ver detalhes"
-                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-primary"
+                      className="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-muted hover:text-primary"
                     >
-                      <i className="fa-solid fa-eye text-[11px]" />
+                      <i className="fa-solid fa-eye text-xs" />
                     </button>
                     <button
                       type="button"
                       onClick={() => openEdit(vendor)}
                       title="Editar"
-                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
+                      className="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-primary/10 hover:text-primary"
                     >
-                      <i className="fa-solid fa-pen-to-square text-[11px]" />
+                      <i className="fa-solid fa-pen-to-square text-xs" />
                     </button>
                     <button
                       type="button"
                       disabled={isDeleting}
                       onClick={() => void handleDelete(vendor)}
                       title="Excluir"
-                      className="flex size-6 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                      className="flex size-7 cursor-pointer items-center justify-center rounded text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                     >
-                      <i className="fa-solid fa-trash text-[11px]" />
+                      <i className="fa-solid fa-trash text-xs" />
                     </button>
                   </div>
                 </div>
