@@ -2,7 +2,7 @@
 // Cadastro/edição de Fornecedor ou Colaborador (ilustrador, autor, ...).
 // Shell no mesmo padrão de LinkModal (z-50, animate-in, blur no backdrop).
 
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import LexicalEditor from '@/components/tasks/LexicalEditor'
 import ImageLightbox from '@/components/vendors/ImageLightbox'
 import {
@@ -53,7 +53,14 @@ export default function VendorModal({
   const [email, setEmail] = useState('')
   const [links, setLinks] = useState({ link1: '', link2: '', link3: '' })
   // Descrição = campo rico (Lexical); Observação = texto curto, sem formatação.
-  const [description, setDescription] = useState<SerializedEditorState | null>(null)
+  // O conteúdo vivo da descrição mora num REF, sem re-render: um setState por
+  // tecla re-renderiza o modal inteiro (com thumbs, links, editor) e trava a
+  // digitação — foi exatamente o que trava ao clicar em Descrição.
+  const descriptionRef = useRef<SerializedEditorState | null>(null)
+  // Valor inicial congelado na abertura/edição: é o que o Lexical lê no mount.
+  const [descriptionInitial, setDescriptionInitial] = useState<SerializedEditorState | null>(
+    null,
+  )
   const [note, setNote] = useState('')
   const [pix, setPix] = useState('')
   /** Rede de segurança: avisa antes de descartar o que foi digitado. */
@@ -64,6 +71,12 @@ export default function VendorModal({
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
+  // Callback estável: o LexicalEditor é memoizado e só re-renderiza se isto
+  // mudar de identidade.
+  const handleDescriptionChange = useCallback((json: SerializedEditorState) => {
+    dirtyRef.current = true
+    descriptionRef.current = json
+  }, [])
   const [copiedPix, setCopiedPix] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -82,9 +95,9 @@ export default function VendorModal({
         link3: vendorToEdit.link3 ?? '',
       })
       setPix(vendorToEdit.pix ?? '')
-      setDescription(
-        (vendorToEdit.description as unknown as SerializedEditorState) ?? null,
-      )
+      const initialDesc = (vendorToEdit.description as unknown as SerializedEditorState) ?? null
+      descriptionRef.current = initialDesc
+      setDescriptionInitial(initialDesc)
       setNote(vendorToEdit.note ?? '')
       setImages(
         (vendorToEdit.images ?? []).map((url, i) => ({
@@ -100,7 +113,8 @@ export default function VendorModal({
       setPhone('')
       setEmail('')
       setLinks({ link1: '', link2: '', link3: '' })
-      setDescription(null)
+      descriptionRef.current = null
+      setDescriptionInitial(null)
       setNote('')
       setPix('')
       setImages([])
@@ -201,7 +215,7 @@ export default function VendorModal({
         link1: links.link1.trim() || null,
         link2: links.link2.trim() || null,
         link3: links.link3.trim() || null,
-        description: description as unknown as Json,
+        description: descriptionRef.current as unknown as Json,
         note: note.trim() || null,
         pix: pix.trim() || null,
         images: images.map((i) => i.url),
@@ -219,10 +233,9 @@ export default function VendorModal({
 
   return (
     <>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
-        onClick={handleCancel}
-      >
+      {/* Sem `onClick` de fechar: clicar fora NÃO fecha o modal (perde dados
+          de um cadastro longo). Só o X e o Cancelar fecham. */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in">
       <div
         className="max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}
@@ -389,11 +402,8 @@ export default function VendorModal({
                 <LexicalEditor
                   key={`vendor-desc-${vendorToEdit?.id ?? 'new'}-${open ? 'open' : 'closed'}`}
                   namespace="hub-vendor-description"
-                  initialValue={description}
-                  onChange={(json) => {
-                    dirtyRef.current = true
-                    setDescription(json)
-                  }}
+                  initialValue={descriptionInitial}
+                  onChange={handleDescriptionChange}
                   placeholder="Estilo de traço, técnica, prazos, preferências de trabalho..."
                 />
               </div>

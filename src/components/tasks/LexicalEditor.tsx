@@ -37,7 +37,7 @@ import {
 } from '@lexical/list'
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { memo, useEffect, useRef, useState, type FormEvent } from 'react'
 import {
   extractLexicalText,
   isUrlLike,
@@ -269,13 +269,18 @@ function ToolbarWithLink() {
           return
         }
         setIsLink($findLinkParent(selection) !== null)
-        setActiveFormats({
+        const next: Record<FormatKey, boolean> = {
           bold: selection.hasFormat('bold'),
           italic: selection.hasFormat('italic'),
           underline: selection.hasFormat('underline'),
           strikethrough: selection.hasFormat('strikethrough'),
           code: selection.hasFormat('code'),
-        })
+        }
+        setActiveFormats((prev) =>
+          (Object.keys(next) as FormatKey[]).every((k) => prev[k] === next[k])
+            ? prev
+            : next,
+        )
       })
     })
   }, [editor])
@@ -478,7 +483,7 @@ function normalizeInitial(
   )
 }
 
-export default function LexicalEditor({
+function LexicalEditor({
   initialValue,
   onChange,
   placeholder = 'Escreva a descrição...',
@@ -561,6 +566,13 @@ export default function LexicalEditor({
     </LexicalComposer>
   )
 }
+
+/**
+ * Memoizado: o editor é o pedaço mais pesado da tela e não depende de nada
+ * que muda a cada tecla nos pais. Sem isso, digitar numa descrição
+ * re-renderiza o modal/drawer inteiro a cada caractere.
+ */
+export default memo(LexicalEditor)
 
 interface LexicalEditorProps {
   initialValue: SerializedEditorState | string | null
