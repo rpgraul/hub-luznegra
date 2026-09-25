@@ -233,9 +233,20 @@ function LinkPopover({
 }
 
 /** Toolbar + popover de link (precisam do mesmo contexto do composer). */
+type FormatKey = 'bold' | 'italic' | 'underline' | 'strikethrough' | 'code'
+
 function ToolbarWithLink() {
   const [editor] = useLexicalComposerContext()
   const [isLink, setIsLink] = useState(false)
+  // Formatações ativas na seleção: sem isso o usuário não tem como saber o
+  // estado real (e acabava clicando de novo, que TOGLA e desligava).
+  const [activeFormats, setActiveFormats] = useState<Record<FormatKey, boolean>>({
+    bold: false,
+    italic: false,
+    underline: false,
+    strikethrough: false,
+    code: false,
+  })
   const [pop, setPop] = useState<LinkPopoverData | null>(null)
   const toolbarRef = useRef<HTMLDivElement>(null)
   const popRef = useRef<LinkPopoverData | null>(null)
@@ -248,9 +259,23 @@ function ToolbarWithLink() {
         const selection = $getSelection()
         if (!$isRangeSelection(selection)) {
           setIsLink(false)
+          setActiveFormats((prev) => {
+            const allOff =
+              !prev.bold && !prev.italic && !prev.underline && !prev.strikethrough && !prev.code
+            return allOff
+              ? prev
+              : { bold: false, italic: false, underline: false, strikethrough: false, code: false }
+          })
           return
         }
         setIsLink($findLinkParent(selection) !== null)
+        setActiveFormats({
+          bold: selection.hasFormat('bold'),
+          italic: selection.hasFormat('italic'),
+          underline: selection.hasFormat('underline'),
+          strikethrough: selection.hasFormat('strikethrough'),
+          code: selection.hasFormat('code'),
+        })
       })
     })
   }, [editor])
@@ -329,9 +354,18 @@ function ToolbarWithLink() {
     editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
   }
 
+  /**
+   * Aplica/remove UMA formatação sem tocar nas outras.
+   * `FORMAT_TEXT_COMMAND` já é toggle, mas usar `setFormat` (número) com o bit
+   * preservado deixa o comportamento explícito: bold+italic+underline juntos.
+   */
+  function toggleFormat(format: FormatKey) {
+    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format)
+  }
+
   const btn =
     'flex size-7 items-center justify-center rounded text-xs text-muted-foreground hover:bg-accent hover:text-foreground'
-  const btnActive = 'bg-accent text-foreground'
+  const btnActive = 'bg-accent text-primary'
 
   return (
     <>
@@ -339,13 +373,19 @@ function ToolbarWithLink() {
         ref={toolbarRef}
         className="flex flex-wrap items-center gap-0.5 border-b border-border px-2 py-1"
       >
-        <button type="button" title="Negrito (Ctrl+B)" className={btn} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')}>
+        <button type="button" title="Negrito (Ctrl+B)" aria-pressed={activeFormats.bold}
+          className={`${btn} ${activeFormats.bold ? btnActive : ''}`}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFormat('bold')}>
           <i className="fa-solid fa-bold" />
         </button>
-        <button type="button" title="Itálico (Ctrl+I)" className={btn} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')}>
+        <button type="button" title="Itálico (Ctrl+I)" aria-pressed={activeFormats.italic}
+          className={`${btn} ${activeFormats.italic ? btnActive : ''}`}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFormat('italic')}>
           <i className="fa-solid fa-italic" />
         </button>
-        <button type="button" title="Sublinhado (Ctrl+U)" className={btn} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')}>
+        <button type="button" title="Sublinhado (Ctrl+U)" aria-pressed={activeFormats.underline}
+          className={`${btn} ${activeFormats.underline ? btnActive : ''}`}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => toggleFormat('underline')}>
           <i className="fa-solid fa-underline" />
         </button>
         <button type="button" title="Lista com marcadores" className={btn} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)}>
@@ -471,6 +511,22 @@ export default function LexicalEditor({
         namespace,
         nodes: EDITOR_NODES,
         theme: {
+          // O Lexical só aplica as classes de formatação quando `theme.text`
+          // existe ($createTextInnerDOM). Sem este mapa, negrito/itálico/
+          // sublinhado eram gravados no estado mas não apareciam.
+          text: {
+            bold: 'font-bold',
+            italic: 'italic',
+            underline: 'underline underline-offset-2',
+            strikethrough: 'line-through',
+            code: 'rounded bg-muted px-1 py-0.5 font-mono text-[11px]',
+            highlight: 'rounded bg-yellow-300/50 px-0.5',
+            subscript: 'align-sub text-[0.75em]',
+            superscript: 'align-super text-[0.75em]',
+            lowercase: 'lowercase',
+            uppercase: 'uppercase',
+            capitalize: 'capitalize',
+          },
           paragraph: 'mb-1',
           list: { ul: 'ml-5 list-disc', ol: 'ml-5 list-decimal', listitem: 'mb-0.5' },
           link: 'cursor-pointer text-primary underline underline-offset-2 hover:text-primary/80',
