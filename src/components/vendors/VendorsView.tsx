@@ -301,6 +301,7 @@ export default function VendorsView() {
               const links = [vendor.link1, vendor.link2, vendor.link3].filter(
                 (l): l is string => !!l,
               )
+              const images = (vendor.images ?? []).slice(0, 3)
               return (
                 <div
                   key={vendor.id}
@@ -368,6 +369,31 @@ export default function VendorsView() {
                           <span className="truncate">{getDomainFromUrl(url)}</span>
                         </a>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Miniaturas de referência (32x32) — abre os detalhes */}
+                  {images.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      {images.map((url, i) => (
+                        <button
+                          key={`${url}-${i}`}
+                          type="button"
+                          title="Ver detalhes"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDetailVendor(vendor)
+                          }}
+                          className="size-8 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border/70 transition hover:border-primary/60"
+                        >
+                          <img src={url} alt="" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                      {(vendor.images?.length ?? 0) > images.length && (
+                        <span className="text-[10px] text-muted-foreground/70">
+                          +{(vendor.images?.length ?? 0) - images.length}
+                        </span>
+                      )}
                     </div>
                   )}
 
