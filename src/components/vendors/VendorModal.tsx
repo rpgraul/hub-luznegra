@@ -21,6 +21,7 @@ import {
   type VendorKind,
 } from '@/types/database'
 import type { SerializedEditorState } from 'lexical'
+import { maskPhoneBR } from '@/utils/format'
 
 interface VendorModalProps {
   open: boolean
@@ -51,9 +52,12 @@ export default function VendorModal({
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [links, setLinks] = useState({ link1: '', link2: '', link3: '' })
-  const [style, setStyle] = useState('')
+  // Descrição = campo rico (Lexical); Observação = texto curto, sem formatação.
+  const [description, setDescription] = useState<SerializedEditorState | null>(null)
+  const [note, setNote] = useState('')
   const [pix, setPix] = useState('')
-  const [notes, setNotes] = useState<SerializedEditorState | null>(null)
+  /** Rede de segurança: avisa antes de descartar o que foi digitado. */
+  const dirtyRef = useRef(false)
   const [images, setImages] = useState<ImageItem[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -77,9 +81,11 @@ export default function VendorModal({
         link2: vendorToEdit.link2 ?? '',
         link3: vendorToEdit.link3 ?? '',
       })
-      setStyle(vendorToEdit.style ?? '')
       setPix(vendorToEdit.pix ?? '')
-      setNotes((vendorToEdit.notes as unknown as SerializedEditorState) ?? null)
+      setDescription(
+        (vendorToEdit.description as unknown as SerializedEditorState) ?? null,
+      )
+      setNote(vendorToEdit.note ?? '')
       setImages(
         (vendorToEdit.images ?? []).map((url, i) => ({
           url,
@@ -94,9 +100,9 @@ export default function VendorModal({
       setPhone('')
       setEmail('')
       setLinks({ link1: '', link2: '', link3: '' })
-      setStyle('')
+      setDescription(null)
+      setNote('')
       setPix('')
-      setNotes(null)
       setImages([])
       originalKeysRef.current = []
     }
@@ -104,6 +110,7 @@ export default function VendorModal({
     setFieldErrors({})
     setUploading(false)
     setCopiedPix(false)
+    dirtyRef.current = false
   }, [vendorToEdit, open])
 
   if (!open) return null
@@ -118,6 +125,7 @@ export default function VendorModal({
       return
     }
     setUploading(true)
+    dirtyRef.current = true
     setError(null)
     const added: ImageItem[] = []
     for (const file of files.slice(0, room)) {
@@ -135,12 +143,17 @@ export default function VendorModal({
   function handleRemoveImage(index: number) {
     const target = images[index]
     if (!target) return
+    dirtyRef.current = true
     setImages((prev) => prev.filter((_, i) => i !== index))
     // Arte upada agora vira lixo se o usuário cancelar: apaga na hora.
     if (target.isNew) void removeVendorImage(target.key)
   }
 
   function handleCancel() {
+    // Nunca perde o que foi digitado sem perguntar.
+    if (dirtyRef.current && !window.confirm('Descartar as alterações não salvas?')) {
+      return
+    }
     // Limpa apenas o que foi upado nesta sessão (nada foi salvo no banco).
     const orphans = images.filter((img) => img.isNew)
     if (orphans.length > 0) {
@@ -188,9 +201,9 @@ export default function VendorModal({
         link1: links.link1.trim() || null,
         link2: links.link2.trim() || null,
         link3: links.link3.trim() || null,
-        style: style.trim() || null,
+        description: description as unknown as Json,
+        note: note.trim() || null,
         pix: pix.trim() || null,
-        notes: notes as unknown as Json,
         images: images.map((i) => i.url),
         image_keys: images.map((i) => i.key),
       })
@@ -205,10 +218,11 @@ export default function VendorModal({
   const kindColor = VENDOR_KIND_COLORS[kind]
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
-      onClick={handleCancel}
-    >
+    <>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
+        onClick={handleCancel}
+      >
       <div
         className="max-h-[92vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-card shadow-2xl animate-in zoom-in-95"
         onClick={(e) => e.stopPropagation()}
@@ -258,7 +272,10 @@ export default function VendorModal({
                   type="text"
                   placeholder="Ex: Marina Alves"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    dirtyRef.current = true
+                    setName(e.target.value)
+                  }}
                   required
                   className={`${inputClass} ${fieldErrors.name ? 'border-destructive' : ''}`}
                 />
@@ -270,7 +287,10 @@ export default function VendorModal({
                 <label className={labelClass}>Tipo</label>
                 <select
                   value={kind}
-                  onChange={(e) => setKind(e.target.value as VendorKind)}
+                  onChange={(e) => {
+                    dirtyRef.current = true
+                    setKind(e.target.value as VendorKind)
+                  }}
                   className={`${inputClass} cursor-pointer`}
                 >
                   {VENDOR_KINDS.map((k) => (
@@ -297,7 +317,10 @@ export default function VendorModal({
                     inputMode="tel"
                     placeholder="(11) 99999-0000"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => {
+                      dirtyRef.current = true
+                      setPhone(maskPhoneBR(e.target.value))
+                    }}
                     className={`${inputClass} pl-8`}
                   />
                 </div>
@@ -310,7 +333,10 @@ export default function VendorModal({
                     type="email"
                     placeholder="contato@exemplo.com"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      dirtyRef.current = true
+                      setEmail(e.target.value)
+                    }}
                     className={`${inputClass} pl-8 ${fieldErrors.email ? 'border-destructive' : ''}`}
                   />
                 </div>
@@ -338,7 +364,10 @@ export default function VendorModal({
                         type="text"
                         placeholder="https://instagram.com/...  (opcional)"
                         value={links[key]}
-                        onChange={(e) => setLinks((prev) => ({ ...prev, [key]: e.target.value }))}
+                        onChange={(e) => {
+                          dirtyRef.current = true
+                          setLinks((prev) => ({ ...prev, [key]: e.target.value }))
+                        }}
                         className={`${inputClass} pl-[5.5rem] ${fieldErrors[key] ? 'border-destructive' : ''}`}
                       />
                     </div>
@@ -350,33 +379,42 @@ export default function VendorModal({
               </div>
             </div>
 
-            {/* Estilo */}
-            <div>
-              <label className={labelClass}>Estilo</label>
-              <input
-                type="text"
-                placeholder="Ex: nanquim e aquarela, traço solto, cores terrosas"
-                value={style}
-                onChange={(e) => setStyle(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-
-            {/* Observação (Lexical) */}
+            {/* Descrição (campo rico — guarda o que antes era "Estilo" + "Observação") */}
             <div>
               <label className={labelClass}>
                 <i className="fa-regular fa-file-lines mr-1 text-[10px] text-muted-foreground" />
-                Observação
+                Descrição
               </label>
               <div className="overflow-hidden rounded-lg border border-border bg-background">
                 <LexicalEditor
-                  key={`vendor-notes-${vendorToEdit?.id ?? 'new'}-${open ? 'open' : 'closed'}`}
-                  namespace="hub-vendor-notes"
-                  initialValue={notes}
-                  onChange={setNotes}
-                  placeholder="Fofocas, prazos, preferências de trabalho..."
+                  key={`vendor-desc-${vendorToEdit?.id ?? 'new'}-${open ? 'open' : 'closed'}`}
+                  namespace="hub-vendor-description"
+                  initialValue={description}
+                  onChange={(json) => {
+                    dirtyRef.current = true
+                    setDescription(json)
+                  }}
+                  placeholder="Estilo de traço, técnica, prazos, preferências de trabalho..."
                 />
               </div>
+            </div>
+
+            {/* Observação (curta, texto simples) */}
+            <div>
+              <label className={labelClass}>
+                <i className="fa-solid fa-comment-dots mr-1 text-[10px] text-muted-foreground" />
+                Observação
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Anotação rápida (sem formatação)."
+                value={note}
+                onChange={(e) => {
+                  dirtyRef.current = true
+                  setNote(e.target.value)
+                }}
+                className="w-full resize-none rounded-md border border-border bg-background p-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+              />
             </div>
 
             {/* Exemplo (artes) */}
@@ -450,7 +488,10 @@ export default function VendorModal({
                   type="text"
                   placeholder="CPF/CNPJ, e-mail, telefone ou chave aleatória"
                   value={pix}
-                  onChange={(e) => setPix(e.target.value)}
+                  onChange={(e) => {
+                    dirtyRef.current = true
+                    setPix(e.target.value)
+                  }}
                   className={inputClass}
                 />
                 <button
@@ -495,6 +536,11 @@ export default function VendorModal({
         </form>
       </div>
 
+      </div>
+
+      {/* Fora do overlay: o portal do lightbox ainda propaga o evento pela
+          árvore React, então ficar DENTRO do overlay clicável chamava
+          `handleCancel` e derrubava o modal junto com o cadastro preenchido. */}
       <ImageLightbox
         images={images.map((i) => i.url)}
         index={lightboxIndex ?? 0}
@@ -502,6 +548,6 @@ export default function VendorModal({
         onClose={() => setLightboxIndex(null)}
         title={name || 'Artes'}
       />
-    </div>
+    </>
   )
 }

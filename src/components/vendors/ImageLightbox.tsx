@@ -50,7 +50,14 @@ export default function ImageLightbox({
   const current = images[safeIndex]
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex flex-col bg-black/90 backdrop-blur-sm animate-in fade-in">
+    <div
+      // `stopPropagation` defensivo: o portal fica no `document.body`, mas o
+      // React ainda sobe o evento pela árvore — sem isto, um clique na arte
+      // fecha o modal que está por trás.
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.stopPropagation()}
+      className="fixed inset-0 z-[80] flex flex-col bg-black/90 backdrop-blur-sm animate-in fade-in"
+    >
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 text-white">
         <div className="min-w-0">

@@ -156,9 +156,10 @@ export type Vendor = {
   link1: string | null
   link2: string | null
   link3: string | null
-  style: string | null
-  /** Observação em Lexical (JSONB), igual `tasks.description`. */
-  notes: Json | null
+  /** Descrição em Lexical (JSONB), igual `tasks.description`. */
+  description: Json | null
+  /** Observação curta, texto simples (sem formatação). */
+  note: string | null
   pix: string | null
   images: string[]
   image_keys: string[]
@@ -393,8 +394,8 @@ export interface Database {
           link1?: string | null
           link2?: string | null
           link3?: string | null
-          style?: string | null
-          notes?: Json | null
+          description?: Json | null
+          note?: string | null
           pix?: string | null
           images?: string[]
           image_keys?: string[]
@@ -411,8 +412,8 @@ export interface Database {
           link1?: string | null
           link2?: string | null
           link3?: string | null
-          style?: string | null
-          notes?: Json | null
+          description?: Json | null
+          note?: string | null
           pix?: string | null
           images?: string[]
           image_keys?: string[]

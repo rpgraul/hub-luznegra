@@ -15,8 +15,8 @@ CREATE TABLE IF NOT EXISTS public.hub_vendors (
   link1 TEXT,               -- hiperlinks genéricos
   link2 TEXT,
   link3 TEXT,
-  style TEXT,               -- estilo de traço/arte
-  notes JSONB,              -- observação (estado serializado do Lexical)
+  description JSONB,        -- descrição (estado serializado do Lexical)
+  note TEXT,                -- observação curta (texto simples, sem formatação)
   pix TEXT,                 -- chave PIX para pagamento
   images TEXT[] DEFAULT '{}',    -- URLs públicas das artes de exemplo
   image_keys TEXT[] DEFAULT '{}',-- chaves no R2/Storage (permite apagar o arquivo)

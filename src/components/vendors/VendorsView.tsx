@@ -72,13 +72,13 @@ export default function VendorsView() {
           v.name,
           v.phone,
           v.email,
-          v.style,
+          v.note,
           v.pix,
           v.link1,
           v.link2,
           v.link3,
           VENDOR_KIND_LABELS[v.kind] ?? v.kind,
-          extractLexicalText(v.notes),
+          extractLexicalText(v.description),
         ]
           .filter(Boolean)
           .join(' ')
@@ -290,7 +290,7 @@ export default function VendorsView() {
                 (l): l is string => !!l,
               )
               const images = vendor.images ?? []
-              const notes = extractLexicalText(vendor.notes)
+              const description = extractLexicalText(vendor.description)
 
               return (
                 <div
@@ -357,18 +357,18 @@ export default function VendorsView() {
                     )}
                   </div>
 
-                  {/* Estilo */}
-                  {vendor.style && (
-                    <p className="mt-2 line-clamp-1 text-[11px] text-foreground/80">
-                      <i className="fa-solid fa-palette mr-1.5 text-[10px] text-muted-foreground" />
-                      {vendor.style}
+                  {/* Descrição (texto do campo rico) */}
+                  {description && (
+                    <p className="mt-2 line-clamp-2 text-[11px] text-foreground/80">
+                      {description}
                     </p>
                   )}
 
-                  {/* Observação */}
-                  {notes && (
+                  {/* Observação curta */}
+                  {vendor.note && (
                     <p className="mt-1.5 line-clamp-2 text-[11px] text-muted-foreground/90">
-                      {notes}
+                      <i className="fa-solid fa-comment-dots mr-1.5 text-[10px]" />
+                      {vendor.note}
                     </p>
                   )}
 

@@ -19,8 +19,10 @@ export interface CreateVendorInput {
   link1?: string | null
   link2?: string | null
   link3?: string | null
-  style?: string | null
-  notes?: Json | null
+  /** Descrição (Lexical). */
+  description?: Json | null
+  /** Observação curta, texto simples. */
+  note?: string | null
   pix?: string | null
   images?: string[]
   image_keys?: string[]
@@ -98,8 +100,8 @@ export async function createVendor(input: CreateVendorInput): Promise<Vendor> {
       phone: nullIfEmpty(input.phone),
       email: nullIfEmpty(input.email),
       ...links,
-      style: nullIfEmpty(input.style),
-      notes: input.notes ?? null,
+      description: input.description ?? null,
+      note: nullIfEmpty(input.note),
       pix: nullIfEmpty(input.pix),
       images: input.images ?? [],
       image_keys: input.image_keys ?? [],
@@ -125,8 +127,8 @@ export async function updateVendor(input: UpdateVendorInput): Promise<Vendor> {
     link1?: string | null
     link2?: string | null
     link3?: string | null
-    style?: string | null
-    notes?: Json | null
+    description?: Json | null
+    note?: string | null
     pix?: string | null
     images?: string[]
     image_keys?: string[]
@@ -135,8 +137,8 @@ export async function updateVendor(input: UpdateVendorInput): Promise<Vendor> {
   if (input.kind !== undefined) patch.kind = input.kind
   if (input.phone !== undefined) patch.phone = nullIfEmpty(input.phone)
   if (input.email !== undefined) patch.email = nullIfEmpty(input.email)
-  if (input.style !== undefined) patch.style = nullIfEmpty(input.style)
-  if (input.notes !== undefined) patch.notes = input.notes ?? null
+  if (input.description !== undefined) patch.description = input.description ?? null
+  if (input.note !== undefined) patch.note = nullIfEmpty(input.note)
   if (input.pix !== undefined) patch.pix = nullIfEmpty(input.pix)
   if (input.images !== undefined) patch.images = input.images
   if (input.image_keys !== undefined) patch.image_keys = input.image_keys
