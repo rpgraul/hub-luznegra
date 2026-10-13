@@ -745,13 +745,36 @@ export default function GanttView({
     }
   }, [])
 
-  // Scroll da tabela -> timeline (elemento da tabela é estável).
+  // Scroll da tabela -> timeline. A tabela REMONTA ao alternar exibir/ocultar
+  // (render condicional), então o listener precisa ser re-anexado no toggle —
+  // com deps [] ele morria junto com o elemento antigo.
   useEffect(() => {
     const tableEl = tableRef.current
     if (!tableEl) return
     tableEl.addEventListener('scroll', syncGanttToTable, { passive: true })
     return () => {
       tableEl.removeEventListener('scroll', syncGanttToTable)
+    }
+  }, [showTable])
+
+  // Scroll da timeline -> tabela. O `.gantt-container` é recriado a cada
+  // rebuild da timeline, então o listener não pode viver nele: no caminho de
+  // refresh (só os dados mudam) o antigo attach nunca era re-executado e a
+  // tabela parava de seguir a timeline após a 1ª atualização de dados.
+  // Em CAPTURE no wrapper — div estável, sempre montada — o scroll de
+  // qualquer `.gantt-container` descendente é capturado (scroll não borbulha,
+  // mas propaga na captura), sobrevivendo a rebuilds, refreshes e zoom.
+  useEffect(() => {
+    const wrapper = wrapperRef.current
+    if (!wrapper) return
+    function onWrapperScroll(e: Event) {
+      const target = e.target as HTMLElement | null
+      if (!target?.classList.contains('gantt-container')) return
+      syncTableToGantt()
+    }
+    wrapper.addEventListener('scroll', onWrapperScroll, { capture: true, passive: true })
+    return () => {
+      wrapper.removeEventListener('scroll', onWrapperScroll, { capture: true })
     }
   }, [])
 
@@ -868,16 +891,15 @@ export default function GanttView({
     }
 
     const tableEl = tableRef.current
-    if (ganttContainer) {
-      ganttContainer.addEventListener('scroll', syncTableToGantt, { passive: true })
-      if (tableEl) ganttContainer.scrollTop = tableEl.scrollTop
-    }
+    // O listener de scroll (timeline -> tabela) agora vive no wrapper, em
+    // fase de captura — ver efeito dedicado acima. Aqui só sincroniza a
+    // posição vertical inicial após construir a timeline.
+    if (ganttContainer && tableEl) ganttContainer.scrollTop = tableEl.scrollTop
 
     const timer = setTimeout(() => scrollToToday(false), 60)
 
     return () => {
       clearTimeout(timer)
-      if (ganttContainer) ganttContainer.removeEventListener('scroll', syncTableToGantt)
     }
   }, [ganttTasks, currentZoom, scrollToToday, showTable])
 
