@@ -1125,27 +1125,29 @@ export default function GanttView({
       if (!isDescendantOf(reducedTaskRows[i].task, parentId, byId)) break
       blockEnd = i
     }
-    // destination.index é na lista original (com o arrastado); converte para a reduzida
-    const destInReduced =
-      destination.index > source.index ? destination.index - 1 : destination.index
-    if (destInReduced < parentPos || destInReduced > blockEnd) {
+    // `destination.index` já vem na convenção do arrayMove do
+    // @hello-pangea/dnd (splice out do arrastado + splice in nesta posição da
+    // lista SEM ele). Usar `destination.index - 1` aqui fazia o drop para cima
+    // recalcular a posição de origem e nada era salvo (a linha voltava).
+    const insertPos = destination.index
+    if (insertPos <= parentPos || insertPos > blockEnd + 1) {
       toast.danger('Subtarefas só podem ser reordenadas dentro da tarefa pai.')
       return
     }
-    const siblings = taskRows
+    const allSiblings = taskRows
       .filter((r) => r.task.parent_id === parentId)
       .map((r) => r.task)
-      .filter((t) => t.id !== dragged.id)
+    const originPos = allSiblings.findIndex((t) => t.id === dragged.id)
+    const siblings = allSiblings.filter((t) => t.id !== dragged.id)
+    // Quantos irmãos (já sem o arrastado) ficam ANTES do slot de destino —
+    // esse é o índice de inserção na lista de irmãos.
     let destPos = 0
-    for (let i = 0; i <= destInReduced && i < reducedTaskRows.length; i++) {
+    for (let i = 0; i < insertPos && i < reducedTaskRows.length; i++) {
       if (reducedTaskRows[i].task.parent_id === parentId) destPos++
     }
-    // Ajusta: se o slot está logo após o último sibling, destPos já conta certo;
-    // garante limite
     destPos = Math.min(destPos, siblings.length)
-    // Se o destino aponta para dentro do bloco mas antes de siblings (ex: no pai),
-    // conta siblings anteriores — o loop acima já faz isso; se destPos ficou 0 e o
-    // slot é após algum sibling, o loop corrige.
+    // Drop no mesmo lugar: nada a salvar (evita criar ordem duplicada/escrita inútil).
+    if (destPos === originPos) return
     siblings.splice(destPos, 0, dragged)
     const topOrder = taskRows
       .filter((r) => r.depth === 0)
