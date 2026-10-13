@@ -188,14 +188,11 @@ export function useTasks(showAll: boolean) {
           const parent = nextTasks.find((t) => t.id === parentId)
           const siblings = nextTasks.filter((t) => t.parent_id === parentId)
           if (siblings.length > 0) {
+            // Espelho otimista de moveTaskStatus: ativa o pai na primeira
+            // subtarefa concluída, mas NUNCA o conclui sozinho (regra dos
+            // financiamentos — o status do pai é controlado manualmente).
             const allSiblingsDone = siblings.every((t) => t.status === 'done')
-            if (allSiblingsDone) {
-              nextTasks = nextTasks.map((t) =>
-                t.id === parentId
-                  ? { ...t, status: 'done', updated_at: new Date().toISOString() }
-                  : t,
-              )
-            } else if (status === 'done' && parent && (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')) {
+            if (!allSiblingsDone && status === 'done' && parent && (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')) {
               nextTasks = nextTasks.map((t) =>
                 t.id === parentId
                   ? { ...t, status: 'in_progress', updated_at: new Date().toISOString() }

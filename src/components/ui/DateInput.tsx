@@ -325,6 +325,11 @@ export default function DateInput({
         // Ref: @react-aria/overlays `ariaHideOutside` → `isAlwaysVisibleNode`.
         data-react-aria-top-layer
         onMouseDown={(e) => e.preventDefault()}
+        // Portal move o DOM, mas eventos sintéticos React continuam
+        // propagando pela árvore React: sem isso, o duplo clique aqui
+        // dentro disparava o onDoubleClick da linha (ex.: abrir a tarefa
+        // no Gantt/Lista). Interrompe na raiz do popup.
+        onDoubleClick={(e) => e.stopPropagation()}
         className="fixed z-[300] w-[236px] rounded-xl border border-border bg-popover p-2.5 text-foreground shadow-xl"
         style={{ top: pos.top, left: pos.left }}
         role="dialog"

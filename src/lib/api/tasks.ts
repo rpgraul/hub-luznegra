@@ -237,7 +237,11 @@ export async function moveTaskStatus(
       if (subError) throw new Error(subError.message)
     }
 
-    // 2. Subtask completed: update parent task status
+    // 2. Subtarefa concluída: ativa o pai (todo/backlog/uncertain ->
+    // in_progress) na primeira subtarefa concluída, mas NUNCA o conclui
+    // automaticamente — financiamentos têm status próprios ('financing'/
+    // 'funded') controlados manualmente; completar todas as subtarefas
+    // não muda nada no pai.
     if (currentTask?.parent_id) {
       const { data: parent } = await supabase
         .from('tasks')
@@ -250,19 +254,16 @@ export async function moveTaskStatus(
         .select('id, status')
         .eq('parent_id', currentTask.parent_id)
 
-      if (siblings && siblings.length > 0) {
-        const allDone = siblings.every((s) => s.status === 'done')
-        if (allDone) {
-          await supabase
-            .from('tasks')
-            .update({ status: 'done' })
-            .eq('id', currentTask.parent_id)
-        } else if (parent && (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')) {
-          await supabase
-            .from('tasks')
-            .update({ status: 'in_progress' })
-            .eq('id', currentTask.parent_id)
-        }
+      const allDone = (siblings ?? []).every((s) => s.status === 'done')
+      if (
+        !allDone &&
+        parent &&
+        (parent.status === 'todo' || parent.status === 'backlog' || parent.status === 'uncertain')
+      ) {
+        await supabase
+          .from('tasks')
+          .update({ status: 'in_progress' })
+          .eq('id', currentTask.parent_id)
       }
     }
   } else if (currentTask?.parent_id) {

@@ -238,7 +238,7 @@ export default function VendorDetailModal({
                       type="button"
                       onClick={() => setLightboxIndex(i)}
                       title="Ampliar"
-                      className="size-20 cursor-zoom-in overflow-hidden rounded-lg border border-border transition hover:border-primary/60"
+                      className="size-[120px] cursor-zoom-in overflow-hidden rounded-lg border border-border transition hover:border-primary/60"
                     >
                       <img src={url} alt="" className="h-full w-full object-cover" />
                     </button>

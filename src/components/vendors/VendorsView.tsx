@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react'
 import VendorModal from '@/components/vendors/VendorModal'
 import VendorDetailModal from '@/components/vendors/VendorDetailModal'
+import ImageLightbox from '@/components/vendors/ImageLightbox'
 import { useVendors } from '@/hooks/useVendors'
 import { extractLexicalText } from '@/utils/lexical'
 import {
@@ -61,6 +62,9 @@ export default function VendorsView() {
   const [sortMode, setSortMode] = useState<SortMode>('name')
   const [modalOpen, setModalOpen] = useState(false)
   const [detailVendor, setDetailVendor] = useState<Vendor | null>(null)
+  // Lightbox aberto direto do card: guarda as artes do fornecedor + índice
+  // clicado (não passa pelo modal de detalhes).
+  const [lightbox, setLightbox] = useState<{ images: string[]; index: number; title?: string } | null>(null)
   const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -301,7 +305,7 @@ export default function VendorsView() {
               const links = [vendor.link1, vendor.link2, vendor.link3].filter(
                 (l): l is string => !!l,
               )
-              const images = (vendor.images ?? []).slice(0, 3)
+              const images = vendor.images ?? []
               return (
                 <div
                   key={vendor.id}
@@ -372,28 +376,25 @@ export default function VendorsView() {
                     </div>
                   )}
 
-                  {/* Miniaturas de referência (32x32) — abre os detalhes */}
+                  {/* Artes de referência (120x120) — TODAS visíveis; o clique
+                      abre o lightbox direto, não o modal do fornecedor. */}
                   {images.length > 0 && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-start gap-2">
                       {images.map((url, i) => (
                         <button
                           key={`${url}-${i}`}
                           type="button"
-                          title="Ver detalhes"
+                          title="Ampliar"
+                          aria-label={`Ampliar arte ${i + 1} de ${vendor.name}`}
                           onClick={(e) => {
                             e.stopPropagation()
-                            setDetailVendor(vendor)
+                            setLightbox({ images, index: i, title: vendor.name })
                           }}
-                          className="size-8 shrink-0 cursor-pointer overflow-hidden rounded-md border border-border/70 transition hover:border-primary/60"
+                          className="size-[120px] shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border/70 transition hover:border-primary/60"
                         >
                           <img src={url} alt="" className="h-full w-full object-cover" />
                         </button>
                       ))}
-                      {(vendor.images?.length ?? 0) > images.length && (
-                        <span className="text-[10px] text-muted-foreground/70">
-                          +{(vendor.images?.length ?? 0) - images.length}
-                        </span>
-                      )}
                     </div>
                   )}
 
@@ -473,6 +474,18 @@ export default function VendorsView() {
         vendorToEdit={editingVendor}
         onSave={handleSave}
       />
+
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          onIndexChange={(next) =>
+            setLightbox((prev) => (prev ? { ...prev, index: next } : prev))
+          }
+          onClose={() => setLightbox(null)}
+          title={lightbox.title}
+        />
+      )}
 
     </div>
   )
