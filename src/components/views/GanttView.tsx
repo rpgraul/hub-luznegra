@@ -45,6 +45,16 @@ const ROW_HEIGHT = BAR_HEIGHT + PADDING
 const UPPER_HEADER_HEIGHT = 28
 const LOWER_HEADER_HEIGHT = 28
 const HEADER_HEIGHT = UPPER_HEADER_HEIGHT + LOWER_HEADER_HEIGHT
+/**
+ * A lib calcula `config.header_height = upper + lower + 10` e desenha as
+ * faixas/barras do SVG a partir dessa altura. O thead da tabela (e o header
+ * sticky da timeline) têm HEADER_HEIGHT (56) — para a linha N da tabela cair
+ * exatamente sobre a faixa N da timeline, o header_height da lib também tem
+ * que ser 56: compensamos o "+10" dela passando lower = 28 - 10 = 18.
+ * (Os textos do header são elementos HTML posicionados a partir de `upper`,
+ * que continua 28 — visual do header não muda.)
+ */
+const GANTT_LOWER_HEADER = LOWER_HEADER_HEIGHT - 10
 
 interface ZoomConfig {
   name: string
@@ -813,7 +823,7 @@ export default function GanttView({
       bar_height: BAR_HEIGHT,
       padding: PADDING,
       upper_header_height: UPPER_HEADER_HEIGHT,
-      lower_header_height: LOWER_HEADER_HEIGHT,
+      lower_header_height: GANTT_LOWER_HEADER,
       today_button: false,
       readonly_progress: true,
       popup_on: 'hover',
@@ -1255,7 +1265,11 @@ export default function GanttView({
         <div className="flex h-full w-full overflow-hidden">
           {showTable && (
             <DragDropContext onDragEnd={handleDragEnd}>
-            <div ref={tableRef} className="w-[880px] max-w-[62vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-8">
+            {/* pb-0.5 (2px): iguala o scrollHeight da tabela ao da timeline.
+                O grid_height da lib é header + padding + linhas - 10, ou seja
+                2px além do conteúdo da tabela (thead + linhas) — com extents
+                iguais, o sync 1:1 de scrollTop não briga com clamp no fim. */}
+            <div ref={tableRef} className="w-[880px] max-w-[62vw] shrink-0 overflow-y-auto overflow-x-hidden border-r border-border bg-background select-text pb-0.5">
               <table className="w-full table-fixed border-collapse text-xs">
                 <thead>
                   <tr className="sticky top-0 z-20 border-b border-border bg-slate-100 dark:bg-slate-800" style={{ height: HEADER_HEIGHT }}>
@@ -1338,7 +1352,7 @@ export default function GanttView({
                           {/* Title */}
                           <td className="px-2 overflow-hidden">
                             <div onDoubleClick={() => onOpenTask(task)} title={`${task.title}\n(Duplo clique para abrir • Clique direito para opções)`}
-                              style={{ paddingLeft: `${depth * 14}px` }} className="flex flex-col w-full text-left transition select-none min-w-0">
+                              style={{ paddingLeft: `${depth * 14}px`, maxHeight: ROW_HEIGHT }} className="flex flex-col w-full text-left transition select-none min-w-0 overflow-hidden">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 {isSubtask ? (
                                   <span className="text-muted-foreground/70 text-[11px] font-bold shrink-0 select-none">↳</span>
@@ -1370,7 +1384,7 @@ export default function GanttView({
                                 <TaskCommentsBadge taskId={task.id} count={commentCounts.get(task.id) ?? 0} />
                               </div>
                               {(task.tags ?? []).length > 0 && (
-                                <div className="flex flex-wrap gap-1 mt-0.5" style={{ paddingLeft: isSubtask ? '14px' : '10px' }}>
+                                <div className="flex flex-nowrap gap-1 mt-0.5 overflow-hidden" style={{ paddingLeft: isSubtask ? '14px' : '10px' }}>
                                   {task.tags!.map((tag) => (
                                     <span key={tag} className="rounded bg-[#7b68ee]/10 px-1 text-[8px] font-semibold text-[#7b68ee]">#{tag}</span>
                                   ))}
@@ -1457,7 +1471,10 @@ export default function GanttView({
           )}
 
           {/* Gantt Timeline */}
-          <div className="relative min-w-0 flex-1 overflow-hidden pb-8" ref={wrapperRef} />
+          {/* Sem pb: a viewport da timeline (.gantt-container height:100%)
+              precisa ter a MESMA altura da viewport da tabela — se um lado
+              for mais curto, o scroll máximo diverge e desalinha no fim. */}
+          <div className="relative min-w-0 flex-1 overflow-hidden" ref={wrapperRef} />
         </div>
       </div>
 
