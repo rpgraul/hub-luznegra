@@ -60,7 +60,8 @@ interface ZoomConfig {
   name: string
   label: string
   shortLabel: string
-  view_mode: Gantt.viewMode
+  /** View mode da lib: 'Day' | 'Week' | 'Month' | 'Year' (string na v1.2.2). */
+  view_mode: string
   column_width: number
   snap_at: string
 }
@@ -209,6 +210,15 @@ function GanttCategoryCell({
   )
 }
 
+interface DragHint {
+  /** 'start' = ponta esquerda | 'due' = ponta direita | 'move' = barra inteira */
+  mode: 'start' | 'due' | 'move'
+  startIso: string
+  dueIso: string
+  x: number
+  y: number
+}
+
 interface ContextMenuState {
   x: number
   y: number
@@ -233,6 +243,11 @@ export default function GanttView({
   const [showTable, setShowTable] = useState(true)
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set())
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  // Tooltip de arraste: ao segurar a ponta (ou a barra) mostra a data de
+  // início/fim; o on_date_change atualiza o valor ao vivo durante o arraste.
+  const [dragHint, setDragHint] = useState<DragHint | null>(null)
+  const dragOriginRef = useRef<{ taskId: string; mode: DragHint['mode']; start: string | null; due: string | null } | null>(null)
+  const lastPointerRef = useRef({ x: 0, y: 0 })
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([])
@@ -518,12 +533,23 @@ export default function GanttView({
       .catch(() => toast.danger('Erro ao salvar as alterações de prazo.'))
   }, [tasks, today, updateTask])
 
+  // Cursor global (só ref, sem re-render) — posiciona o tooltip de arraste.
+  useEffect(() => {
+    function onPointerMove(e: PointerEvent) {
+      lastPointerRef.current = { x: e.clientX, y: e.clientY }
+    }
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    return () => window.removeEventListener('pointermove', onPointerMove)
+  }, [])
+
   useEffect(() => {
     function handleWindowMouseUp() {
       if (isInteractingRef.current) {
         isInteractingRef.current = false
         commitPendingDateChange()
       }
+      dragOriginRef.current = null
+      setDragHint(null)
     }
     window.addEventListener('mouseup', handleWindowMouseUp)
     window.addEventListener('pointerup', handleWindowMouseUp)
@@ -720,7 +746,36 @@ export default function GanttView({
 
     function handleTimelineMouseDown(e: MouseEvent) {
       const target = e.target as HTMLElement | null
-      if (target?.closest('.bar-wrapper, .handle')) isInteractingRef.current = true
+      if (!target?.closest('.bar-wrapper, .handle')) return
+      isInteractingRef.current = true
+      // Tooltip de arraste: ao SEGURAR a ponta já mostra a data de início/fim
+      // da tarefa; durante o arraste o on_date_change mantém o valor ao vivo.
+      const bar = target.closest('.bar-wrapper[data-id]') as HTMLElement | null
+      const id = bar?.getAttribute('data-id') ?? ''
+      if (!id || id.startsWith('add-')) return
+      const task = tasksByIdRef.current.get(id)
+      if (!task) return
+      const handleEl = (target.classList.contains('handle')
+        ? target
+        : (target.closest('.handle') as HTMLElement | null)) as HTMLElement | null
+      const mode: DragHint['mode'] = handleEl?.classList.contains('left')
+        ? 'start'
+        : handleEl?.classList.contains('right')
+          ? 'due'
+          : 'move'
+      dragOriginRef.current = {
+        taskId: id,
+        mode,
+        start: task.start_date ?? null,
+        due: task.due_date ?? null,
+      }
+      setDragHint({
+        mode,
+        startIso: task.start_date ?? '',
+        dueIso: task.due_date ?? '',
+        x: e.clientX,
+        y: e.clientY,
+      })
     }
 
     function handleDoubleClick(event: MouseEvent) {
@@ -843,10 +898,15 @@ export default function GanttView({
       infinite_padding: false,
       readonly_progress: true,
       popup_on: 'hover',
-      popup: (gTask) => {
-        const task = tasksByIdRef.current.get(String(gTask.id))
-        if (!task) return ''
-        const undated = undatedByIdRef.current.get(String(gTask.id))
+      popup: (g) => {
+        // v1.2.2: o callback recebe um saco de opções {task, chart, ...} — a
+        // tarefa real está em g.task. (Antes: gTask.id era undefined, caía no
+        // return '' e TODO hover de barra abria um tooltip VAZIO. Com false a
+        // lib nem abre o popup.)
+        const ganttTaskId = String(g.task.id)
+        const task = tasksByIdRef.current.get(ganttTaskId)
+        if (!task) return false
+        const undated = undatedByIdRef.current.get(ganttTaskId)
         const todayValue = todayRef.current
         const statusLabel = STATUS_LABELS[task.status] || task.status
         const priorityLabel = PRIORITY_LABELS[task.priority] || task.priority
@@ -904,7 +964,26 @@ export default function GanttView({
         isInteractingRef.current = true
         const nextStart = formatLocalDate(start)
         const nextDue = addDaysLocal(formatLocalDate(end), -1)
-        pendingChangeRef.current = { taskId: String(gTask.id), start: nextStart, due: nextDue }
+        const taskId = String(gTask.id)
+        pendingChangeRef.current = { taskId, start: nextStart, due: nextDue }
+        // Tooltip ao vivo: compara com as datas ORIGINAIS (capturadas no
+        // mousedown) para saber qual ponta está se movendo e atualiza o
+        // valor em tempo real enquanto arrasta.
+        const origin = dragOriginRef.current
+        if (!origin || origin.taskId !== taskId) return
+        const startChanged = nextStart !== origin.start
+        const dueChanged = nextDue !== origin.due
+        const mode: DragHint['mode'] =
+          startChanged && dueChanged ? 'move'
+          : startChanged ? 'start'
+          : dueChanged ? 'due'
+          : origin.mode
+        setDragHint({
+          mode,
+          startIso: nextStart,
+          dueIso: nextDue,
+          ...lastPointerRef.current,
+        })
       },
     })
 
@@ -1575,6 +1654,38 @@ export default function GanttView({
             <button type="button" className="flex w-full items-center gap-2.5 px-3 py-2 text-xs text-destructive transition hover:bg-destructive/8" onClick={() => void handleDelete(contextMenu.task)}>
               <i className="fa-solid fa-trash w-3.5 text-center" /><span>Excluir</span>
             </button>
+          )}
+        </div>
+      )}
+
+      {/* Tooltip de datas durante o arraste da barra (ponta = início/fim) */}
+      {dragHint && (
+        <div
+          className="pointer-events-none fixed z-[300] flex items-center gap-1.5 rounded-lg border border-border bg-popover px-2.5 py-1.5 text-[11px] font-semibold text-foreground shadow-xl"
+          style={{
+            left: Math.min(dragHint.x + 14, window.innerWidth - 210),
+            top: Math.max(dragHint.y - 44, 8),
+          }}
+        >
+          {dragHint.mode === 'start' && (
+            <>
+              <i className="fa-solid fa-calendar-day text-primary" />
+              <span>Início: {dragHint.startIso ? formatDate(dragHint.startIso) : '— sem data —'}</span>
+            </>
+          )}
+          {dragHint.mode === 'due' && (
+            <>
+              <i className="fa-solid fa-flag-checkered text-emerald-600" />
+              <span>Fim: {dragHint.dueIso ? formatDate(dragHint.dueIso) : '— sem data —'}</span>
+            </>
+          )}
+          {dragHint.mode === 'move' && (
+            <>
+              <i className="fa-solid fa-arrows-left-right text-primary" />
+              <span>
+                {dragHint.startIso ? formatDate(dragHint.startIso) : '—'} → {dragHint.dueIso ? formatDate(dragHint.dueIso) : '—'}
+              </span>
+            </>
           )}
         </div>
       )}
