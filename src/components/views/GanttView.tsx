@@ -805,7 +805,15 @@ export default function GanttView({
     let refreshed = false
     if (ganttInstanceRef.current && lastZoomRef.current === currentZoom.name) {
       try {
+        // O refresh() re-renderiza e a lib volta o scroll horizontal para
+        // "hoje" (set_scroll_position com scroll_to='today') — sem isso,
+        // qualquer atualização de dados puxava a timeline de volta.
+        const ganttContainer = wrapper.querySelector('.gantt-container') as HTMLElement | null
+        const keepLeft = ganttContainer?.scrollLeft ?? 0
         ganttInstanceRef.current.refresh(ganttTasks)
+        if (ganttContainer && ganttContainer.scrollLeft !== keepLeft) {
+          ganttContainer.scrollLeft = keepLeft
+        }
         refreshed = true
       } catch { /* queda para reconstrução abaixo */ }
     }
@@ -825,6 +833,14 @@ export default function GanttView({
       upper_header_height: UPPER_HEADER_HEIGHT,
       lower_header_height: GANTT_LOWER_HEADER,
       today_button: false,
+      // Infinite padding OFF: com ele, a lib anexa um handler de
+      // "mousewheel" que dispara em QUALQUER scroll sobre a timeline (mesmo
+      // vertical!), estende o período e re-renderiza o SVG inteiro pulando o
+      // scrollLeft ~10 colunas — a coluna andava na horizontal junto com a
+      // vertical, flickando e "mudando o mês". Sem infinite padding, o range
+      // de datas é fixo (tarefas ± padding do view mode) e o wheel fica
+      // vertical puro (horizontal só com Shift, como antes).
+      infinite_padding: false,
       readonly_progress: true,
       popup_on: 'hover',
       popup: (gTask) => {
