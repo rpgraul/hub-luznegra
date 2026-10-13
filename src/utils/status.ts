@@ -6,6 +6,8 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'A Fazer',
   in_progress: 'Em Andamento',
   review: 'Revisão',
+  financing: 'Em Financiamento',
+  funded: 'Financiado',
   done: 'Concluído',
 }
 
@@ -15,6 +17,8 @@ export const STATUS_COLORS: Record<TaskStatus, string> = {
   todo: '#3B82F6',
   in_progress: '#D97706',
   review: '#8B5CF6',
+  financing: '#06B6D4',
+  funded: '#84CC16',
   done: '#10B981',
 }
 

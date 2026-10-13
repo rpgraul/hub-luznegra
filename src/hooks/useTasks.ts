@@ -20,6 +20,8 @@ export const TASK_STATUSES = [
   'todo',
   'in_progress',
   'review',
+  'financing',
+  'funded',
   'done',
 ] as const
 

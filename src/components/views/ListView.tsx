@@ -43,7 +43,9 @@ const STATUS_ORDER: Record<Task['status'], number> = {
   todo: 2,
   in_progress: 3,
   review: 4,
-  done: 5,
+  financing: 5,
+  funded: 6,
+  done: 7,
 }
 
 const PRIORITY_ORDER: Record<Task['priority'], number> = {

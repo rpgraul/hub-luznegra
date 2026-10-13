@@ -57,6 +57,8 @@ const STATUS_LABELS: Record<string, string> = {
   todo: 'A Fazer',
   in_progress: 'Em Andamento',
   review: 'Revisão',
+  financing: 'Em Financiamento',
+  funded: 'Financiado',
   done: 'Concluído',
 }
 
@@ -66,6 +68,8 @@ const STATUS_COLORS: Record<string, string> = {
   todo: '#38bdf8',
   in_progress: '#818cf8',
   review: '#fbbf24',
+  financing: '#22d3ee',
+  funded: '#a3e635',
   done: '#34d399',
 }
 

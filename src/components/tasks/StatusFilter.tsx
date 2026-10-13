@@ -15,6 +15,8 @@ const ICONS: Record<TaskStatus, string> = {
   todo: 'fa-circle',
   in_progress: 'fa-spinner',
   review: 'fa-magnifying-glass',
+  financing: 'fa-hand-holding-dollar',
+  funded: 'fa-sack-dollar',
   done: 'fa-circle-check',
 }
 
