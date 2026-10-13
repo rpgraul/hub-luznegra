@@ -110,9 +110,10 @@ export default function KanbanView({
             reorderTask({ id, orderIndex: index }),
           ),
         )
-    void (persist as Promise<unknown>).catch(() =>
-      toast.danger('Erro ao salvar a nova ordem.'),
-    )
+    void (persist as Promise<unknown>).catch((err) => {
+      console.error('[hub:reorder] falha ao persistir ordem:', err)
+      toast.danger('Erro ao salvar a nova ordem.')
+    })
   }
 
   function persistColumnOrder(ordered: Task[]) {

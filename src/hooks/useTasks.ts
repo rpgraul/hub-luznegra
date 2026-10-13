@@ -260,10 +260,20 @@ export function useTasks(showAll: boolean) {
     },
   })
 
+  // Snapshot pré-mutação do reorderMany: o mutationFn roda depois do onMutate
+  // (cache já otimista), então o diff de "o que mudou" usa este snapshot.
+  const preReorderOrder = useRef(new Map<string, number>())
+
   const reorderMany = useMutation({
     mutationFn: async (orderedIds: string[]) => {
+      // Só persiste linhas cuja ordem realmente mudou — evita UPDATEs em
+      // tarefas intocadas (incluindo linhas legadas com dados inconsistentes
+      // que derrubam o CHECK do banco mesmo sem mexer em datas).
+      const changed = orderedIds
+        .map((id, index) => ({ id, index }))
+        .filter(({ id, index }) => preReorderOrder.current.get(id) !== index)
       await Promise.all(
-        orderedIds.map((id, index) => updateTask(id, { order_index: index })),
+        changed.map(({ id, index }) => updateTask(id, { order_index: index })),
       )
     },
     onMutate: async (orderedIds: string[]) => {
@@ -271,6 +281,9 @@ export function useTasks(showAll: boolean) {
       // Cala o eco do Realtime durante o voo + margem (cobre o debounce).
       suppressRealtimeUntil.current = Date.now() + 2500
       const previous = queryClient.getQueryData<Task[]>(KEY)
+      preReorderOrder.current = new Map(
+        (previous ?? []).map((t) => [t.id, t.order_index]),
+      )
       const now = new Date().toISOString()
       const indexById = new Map(orderedIds.map((id, index) => [id, index]))
       setTasks((tasks) =>

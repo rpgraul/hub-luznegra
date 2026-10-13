@@ -1025,7 +1025,8 @@ export default function GanttView({
     // Arrastar é silencioso como no ClickUp/Trello: toast só em erro.
     void persist
       .then(() => setPendingOrder(null))
-      .catch(() => {
+      .catch((err) => {
+        console.error('[hub:reorder] falha ao persistir ordem:', err)
         setPendingOrder(null)
         toast.danger('Erro ao salvar a nova ordem.')
       })

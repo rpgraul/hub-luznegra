@@ -968,7 +968,10 @@ export default function ListView({
       ),
     )
       .then(() => toast.success('Ordem atualizada!'))
-      .catch(() => toast.danger('Erro ao salvar a nova ordem.'))
+      .catch((err) => {
+        console.error('[hub:reorder] falha ao persistir ordem:', err)
+        toast.danger('Erro ao salvar a nova ordem.')
+      })
   }
 
   const emptyMessage =
