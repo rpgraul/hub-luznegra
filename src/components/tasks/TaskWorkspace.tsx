@@ -495,6 +495,7 @@ export default function TaskWorkspace({
             deleteTask: tasksApi.deleteTask,
             moveTaskStatus: tasksApi.moveTaskStatus,
             childrenOf: tasksApi.childrenOf,
+            taskById: tasksApi.getTask,
             refreshTasks,
           }}
         />

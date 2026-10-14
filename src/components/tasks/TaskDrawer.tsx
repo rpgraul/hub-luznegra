@@ -58,6 +58,8 @@ interface TaskDrawerProps {
     deleteTask: (id: string) => Promise<unknown>
     moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
     childrenOf: (id: string) => Task[]
+    /** Tarefa pelo id — usada p/ achar o PAI de uma subtarefa aberta no drawer. */
+    taskById?: (id: string) => Task | undefined
     refreshTasks?: () => void
   }
 }
@@ -205,6 +207,16 @@ export default function TaskDrawer({
     start_date: string | null
     due_date: string | null
   } | null>(null)
+  // EDIÇÃO de datas de subtarefa existente aguardando decisão no modal:
+  // 'staged' = subtarefa aberta no drawer (salva com Salvar/Fechar);
+  // 'inline' = DateInput da lista de subtarefas do pai (salva na hora).
+  const pendingDateEditRef = useRef<{
+    taskId: string
+    parentId: string
+    apply: 'staged' | 'inline'
+    start: string | null
+    due: string | null
+  } | null>(null)
 
   // Badge nas listagens: abre o chat direto (o chat acompanha currentTask).
   useEffect(() => {
@@ -263,6 +275,7 @@ export default function TaskDrawer({
     clearDirty()
     // Conflito de datas não sobrevive à troca/fechamento do drawer.
     pendingSubtaskRef.current = null
+    pendingDateEditRef.current = null
     setDateConflict(null)
     setConflictBusy(false)
     setCurrentTask(initialTask ?? null)
@@ -458,6 +471,7 @@ export default function TaskDrawer({
     if (manualSaving || saving) return
     // Fechar descarta a decisão de conflito pendente (nada foi salvo).
     pendingSubtaskRef.current = null
+    pendingDateEditRef.current = null
     setDateConflict(null)
     void (async () => {
       const target = currentTaskRef.current
@@ -481,6 +495,17 @@ export default function TaskDrawer({
       toast.danger('A data de início deve ser anterior à data de conclusão.')
       return
     }
+    // Subtarefa? Fora da janela do pai decide no modal — antes de stagear.
+    if (
+      currentTask.parent_id &&
+      maybeOpenDateEditConflict({
+        subtaskId: currentTask.id,
+        parentId: currentTask.parent_id,
+        start: next,
+        due: currentTask.due_date ?? null,
+        apply: 'staged',
+      })
+    ) return
     commitTaskPatch({ start_date: next })
   }
 
@@ -491,6 +516,17 @@ export default function TaskDrawer({
       toast.danger('A data de conclusão deve ser posterior à data de início.')
       return
     }
+    // Subtarefa? Fora da janela do pai decide no modal — antes de stagear.
+    if (
+      currentTask.parent_id &&
+      maybeOpenDateEditConflict({
+        subtaskId: currentTask.id,
+        parentId: currentTask.parent_id,
+        start: currentTask.start_date ?? null,
+        due: next,
+        apply: 'staged',
+      })
+    ) return
     commitTaskPatch({ due_date: next })
   }
 
@@ -642,8 +678,126 @@ export default function TaskDrawer({
     }
   }
 
+  /**
+   * EDIÇÃO de subtarefa existente: checa a janela do pai antes de aplicar
+   * uma mudança de data. Retorna true quando há conflito e o modal de
+   * decisão foi aberto — o chamador NÃO deve aplicar a mudança.
+   */
+  function maybeOpenDateEditConflict(args: {
+    subtaskId: string
+    parentId: string
+    start: string | null
+    due: string | null
+    apply: 'staged' | 'inline'
+  }): boolean {
+    const parent = creator.taskById?.(args.parentId)
+    if (!parent) return false
+    const conflict = detectSubtaskConflict(
+      { start_date: parent.start_date, due_date: parent.due_date },
+      { start_date: args.start, due_date: args.due },
+    )
+    if (!conflict) return false
+    pendingDateEditRef.current = {
+      taskId: args.subtaskId,
+      parentId: args.parentId,
+      apply: args.apply,
+      start: args.start,
+      due: args.due,
+    }
+    setDateConflict(conflict)
+    return true
+  }
+
+  /** Aplica as datas resolvidas na subtarefa, no modelo de save do gatilho. */
+  function applyPendingEditDates(pending: {
+    taskId: string
+    apply: 'staged' | 'inline'
+    start: string | null
+    due: string | null
+  }) {
+    if (pending.apply === 'staged') {
+      // Subtarefa aberta no drawer: entra no rascunho e salva junto com
+      // Salvar/Fechar (modelo de save explícito do drawer).
+      if (currentTaskRef.current?.id === pending.taskId) {
+        commitTaskPatch({ start_date: pending.start, due_date: pending.due })
+      }
+    } else {
+      // DateInput inline da lista do pai: salva na hora.
+      handleUpdateSubtask(pending.taskId, {
+        start_date: pending.start,
+        due_date: pending.due,
+      })
+    }
+  }
+
+  /** Opção 1 (edição): estende o período do pai p/ caber as datas desejadas. */
+  async function extendParentForPendingEdit() {
+    const pending = pendingDateEditRef.current
+    if (!pending) return
+    const parent = creator.taskById?.(pending.parentId)
+    if (!parent) {
+      cancelConflict()
+      return
+    }
+    setConflictBusy(true)
+    try {
+      const nextParent = extendParentToFitSubtask(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start, due_date: pending.due },
+      )
+      if (nextParent.start_date !== parent.start_date || nextParent.due_date !== parent.due_date) {
+        await creator.updateTask({
+          id: parent.id,
+          patch: {
+            start_date: nextParent.start_date,
+            due_date: nextParent.due_date,
+          },
+        })
+        creator.refreshTasks?.()
+      }
+      pendingDateEditRef.current = null
+      setDateConflict(null)
+      applyPendingEditDates(pending)
+    } catch (error) {
+      toast.danger(
+        error instanceof Error ? error.message : 'Não foi possível ajustar a tarefa principal.',
+      )
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  /** Opção 2 (edição): move a subtarefa para dentro da janela do pai. */
+  async function fitPendingEditIntoParent() {
+    const pending = pendingDateEditRef.current
+    if (!pending) return
+    const parent = creator.taskById?.(pending.parentId)
+    if (!parent) {
+      cancelConflict()
+      return
+    }
+    setConflictBusy(true)
+    try {
+      const fitted = fitSubtaskIntoParent(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start, due_date: pending.due },
+      )
+      pendingDateEditRef.current = null
+      setDateConflict(null)
+      applyPendingEditDates({ ...pending, start: fitted.start_date, due: fitted.due_date })
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
   /** Opção 1 do modal: estende o período do pai para caber a subtarefa. */
   async function resolveConflictByParent() {
+    // Fluxo de EDIÇÃO (datas de subtarefa existente) tem prioridade
+    // sobre o fluxo de criação.
+    if (pendingDateEditRef.current) {
+      await extendParentForPendingEdit()
+      return
+    }
     const parent = currentTaskRef.current
     const pending = pendingSubtaskRef.current
     if (!parent?.id || !pending) return
@@ -683,6 +837,12 @@ export default function TaskDrawer({
 
   /** Opção 2 do modal: ajusta a subtarefa para a janela do pai. */
   async function resolveConflictBySubtask() {
+    // Fluxo de EDIÇÃO (datas de subtarefa existente) tem prioridade
+    // sobre o fluxo de criação.
+    if (pendingDateEditRef.current) {
+      await fitPendingEditIntoParent()
+      return
+    }
     const parent = currentTaskRef.current
     const pending = pendingSubtaskRef.current
     if (!parent || !pending) return
@@ -702,6 +862,7 @@ export default function TaskDrawer({
 
   function cancelConflict() {
     pendingSubtaskRef.current = null
+    pendingDateEditRef.current = null
     setDateConflict(null)
   }
 
@@ -1308,9 +1469,19 @@ export default function TaskDrawer({
                             <DateInput
                               value={subtask.due_date ?? ''}
                               onChange={(iso) => {
-                                handleUpdateSubtask(subtask.id, {
-                                  due_date: iso || null,
-                                })
+                                const nextDue = iso || null
+                                // Fora da janela da tarefa principal? Decide
+                                // no modal antes de salvar.
+                                if (
+                                  maybeOpenDateEditConflict({
+                                    subtaskId: subtask.id,
+                                    parentId: subtask.parent_id ?? currentTask.id,
+                                    start: subtask.start_date ?? null,
+                                    due: nextDue,
+                                    apply: 'inline',
+                                  })
+                                ) return
+                                handleUpdateSubtask(subtask.id, { due_date: nextDue })
                               }}
                               ariaLabel={`Conclusão de ${subtask.title}`}
                               className="rounded border border-border/60 bg-muted/20 px-1.5 py-0.5 text-[11px] text-foreground focus:border-[#7b68ee] focus:bg-background focus:outline-none"
@@ -1576,7 +1747,13 @@ export default function TaskDrawer({
 
       <SubtaskDateConflictModal
         conflict={dateConflict}
-        parentTitle={currentTask?.title ?? ''}
+        // No fluxo de EDIÇÃO a subtarefa é quem está aberta no drawer — o
+        // título certo é o do PAI dela. (Na criação, a tarefa aberta É o pai.)
+        parentTitle={
+          currentTask?.parent_id
+            ? (creator.taskById?.(currentTask.parent_id)?.title ?? currentTask.title)
+            : (currentTask?.title ?? '')
+        }
         busy={conflictBusy}
         onExtendParent={() => void resolveConflictByParent()}
         onFitSubtask={() => void resolveConflictBySubtask()}
