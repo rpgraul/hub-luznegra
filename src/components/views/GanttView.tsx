@@ -10,6 +10,7 @@ import '@/assets/frappe-gantt.css'
 import { toast, Button } from '@heroui/react'
 import DateInput from '@/components/ui/DateInput'
 import SubtaskModal from '@/components/tasks/SubtaskModal'
+import SubtaskDateConflictModal from '@/components/tasks/SubtaskDateConflictModal'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
 import StatusFilter from '@/components/tasks/StatusFilter'
@@ -19,6 +20,12 @@ import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { categoryColors, parseCategoriesText } from '@/utils/categories'
+import {
+  detectSubtaskConflict,
+  extendParentToFitSubtask,
+  fitSubtaskIntoParent,
+  type SubtaskDateConflict,
+} from '@/utils/subtaskDates'
 import { todayIso, formatDate } from '@/utils/format'
 import type { Project, Task, TaskPriority, TaskStatus } from '@/types/database'
 import type { NewTaskInput } from '@/lib/api/tasks'
@@ -248,6 +255,22 @@ export default function GanttView({
   const [dragHint, setDragHint] = useState<DragHint | null>(null)
   const dragOriginRef = useRef<{ taskId: string; mode: DragHint['mode']; start: string | null; due: string | null } | null>(null)
   const lastPointerRef = useRef({ x: 0, y: 0 })
+  // Conflito de datas (subtarefa fora da janela do pai) vindo do Gantt:
+  // edição nas colunas Início/Fim ou drag da barra na timeline. Antes o pai
+  // era estendido silenciosamente — agora as 3 opções decidem.
+  const [dateConflict, setDateConflict] = useState<SubtaskDateConflict | null>(null)
+  const [conflictBusy, setConflictBusy] = useState(false)
+  const [conflictParentTitle, setConflictParentTitle] = useState('')
+  const pendingConflictRef = useRef<{
+    taskId: string
+    parentId: string
+    start: string | null
+    due: string | null
+    /** 'input' = coluna Início/Fim | 'drag' = arraste da barra na timeline */
+    source: 'input' | 'drag'
+    /** Só no drag: delta a aplicar nas filhas da subtarefa movida */
+    deltaDays?: number
+  } | null>(null)
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([])
@@ -495,6 +518,32 @@ export default function GanttView({
     if (!task) return
     if (task.start_date === nextStart && task.due_date === nextDue) return
 
+    // SUBTAREFA fora da janela do pai? Modal com as 3 opções ANTES de
+    // qualquer save (as promises abaixo disparam na criação) — antes o
+    // pai era estendido silenciosamente.
+    if (task.parent_id) {
+      const parentTask = tasks.find((t) => t.id === task.parent_id)
+      if (parentTask) {
+        const conflict = detectSubtaskConflict(
+          { start_date: parentTask.start_date, due_date: parentTask.due_date },
+          { start_date: nextStart, due_date: nextDue },
+        )
+        if (conflict) {
+          pendingConflictRef.current = {
+            taskId: task.id,
+            parentId: task.parent_id,
+            start: nextStart,
+            due: nextDue,
+            source: 'drag',
+            deltaDays: diffDaysLocal(task.start_date ?? today, nextStart),
+          }
+          setConflictParentTitle(parentTask.title)
+          setDateConflict(conflict)
+          return
+        }
+      }
+    }
+
     const oldStart = task.start_date ?? today
     const deltaDays = diffDaysLocal(oldStart, nextStart)
 
@@ -509,22 +558,6 @@ export default function GanttView({
         if (child.start_date) childPatch.start_date = addDaysLocal(child.start_date, deltaDays)
         if (child.due_date) childPatch.due_date = addDaysLocal(child.due_date, deltaDays)
         if (Object.keys(childPatch).length > 0) promises.push(updateTask({ id: child.id, patch: childPatch }))
-      }
-    }
-
-    if (task.parent_id) {
-      const parentTask = tasks.find((t) => t.id === task.parent_id)
-      if (parentTask) {
-        let parentStart = parentTask.start_date
-        let parentDue = parentTask.due_date
-        let parentChanged = false
-
-        if (!parentStart || nextStart < parentStart) { parentStart = nextStart; parentChanged = true }
-        if (!parentDue || nextDue > parentDue) { parentDue = nextDue; parentChanged = true }
-
-        if (parentChanged) {
-          promises.push(updateTask({ id: parentTask.id, patch: { start_date: parentStart, due_date: parentDue } }))
-        }
       }
     }
 
@@ -1107,19 +1140,108 @@ export default function GanttView({
       toast.danger('A data de início não pode ser depois da conclusão.')
       return
     }
-    const promises: Promise<unknown>[] = [updateTask({ id: task.id, patch: { [field]: next } })]
-    if (task.parent_id && next) {
+    // SUBTAREFA fora da janela do pai? Modal com as 3 opções antes de
+    // salvar — antes o pai era estendido silenciosamente.
+    if (task.parent_id) {
       const parentTask = tasks.find((t) => t.id === task.parent_id)
       if (parentTask) {
-        let parentStart = parentTask.start_date
-        let parentDue = parentTask.due_date
-        let parentChanged = false
-        if (field === 'start_date' && (!parentStart || next < parentStart)) { parentStart = next; parentChanged = true }
-        if (field === 'due_date' && (!parentDue || next > parentDue)) { parentDue = next; parentChanged = true }
-        if (parentChanged) promises.push(updateTask({ id: parentTask.id, patch: { start_date: parentStart, due_date: parentDue } }))
+        const conflict = detectSubtaskConflict(
+          { start_date: parentTask.start_date, due_date: parentTask.due_date },
+          { start_date: nextStart, due_date: nextDue },
+        )
+        if (conflict) {
+          pendingConflictRef.current = {
+            taskId: task.id,
+            parentId: task.parent_id,
+            start: nextStart ?? null,
+            due: nextDue ?? null,
+            source: 'input',
+          }
+          setConflictParentTitle(parentTask.title)
+          setDateConflict(conflict)
+          return
+        }
       }
     }
+    const promises: Promise<unknown>[] = [updateTask({ id: task.id, patch: { [field]: next } })]
     void Promise.all(promises).then(() => toast.success('Data atualizada.')).catch(() => toast.danger('Não foi possível salvar a data.'))
+  }
+
+  /** Opção 1 do modal: estende o período do pai para caber a subtarefa. */
+  async function resolveConflictByParent() {
+    const pending = pendingConflictRef.current
+    if (!pending) return
+    const parent = tasks.find((t) => t.id === pending.parentId)
+    if (!parent) {
+      cancelDateConflict()
+      return
+    }
+    setConflictBusy(true)
+    try {
+      const nextParent = extendParentToFitSubtask(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start, due_date: pending.due },
+      )
+      const promises: Promise<unknown>[] = [
+        updateTask({ id: pending.taskId, patch: { start_date: pending.start, due_date: pending.due } }),
+      ]
+      // Drag da barra inteira: as filhas da subtarefa acompanham o delta.
+      if (pending.source === 'drag' && pending.deltaDays) {
+        for (const child of tasks.filter((t) => t.parent_id === pending.taskId)) {
+          const childPatch: Partial<Task> = {}
+          if (child.start_date) childPatch.start_date = addDaysLocal(child.start_date, pending.deltaDays)
+          if (child.due_date) childPatch.due_date = addDaysLocal(child.due_date, pending.deltaDays)
+          if (Object.keys(childPatch).length > 0) promises.push(updateTask({ id: child.id, patch: childPatch }))
+        }
+      }
+      if (nextParent.start_date !== parent.start_date || nextParent.due_date !== parent.due_date) {
+        promises.push(updateTask({ id: parent.id, patch: { start_date: nextParent.start_date, due_date: nextParent.due_date } }))
+      }
+      await Promise.all(promises)
+      toast.success('Período da tarefa principal ajustado para caber a subtarefa.')
+      pendingConflictRef.current = null
+      setDateConflict(null)
+    } catch {
+      toast.danger('Não foi possível salvar as alterações de prazo.')
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  /** Opção 2 do modal: move a subtarefa para dentro da janela do pai. */
+  async function resolveConflictBySubtask() {
+    const pending = pendingConflictRef.current
+    if (!pending) return
+    const parent = tasks.find((t) => t.id === pending.parentId)
+    if (!parent) {
+      cancelDateConflict()
+      return
+    }
+    setConflictBusy(true)
+    try {
+      const fitted = fitSubtaskIntoParent(
+        { start_date: parent.start_date, due_date: parent.due_date },
+        { start_date: pending.start, due_date: pending.due },
+      )
+      await updateTask({ id: pending.taskId, patch: { start_date: fitted.start_date, due_date: fitted.due_date } })
+      toast.success('Subtarefa movida para o período da tarefa principal.')
+      pendingConflictRef.current = null
+      setDateConflict(null)
+    } catch {
+      toast.danger('Não foi possível salvar as alterações de prazo.')
+    } finally {
+      setConflictBusy(false)
+    }
+  }
+
+  /** Opção 3: cancela e mantém como está (nada foi salvo). */
+  function cancelDateConflict() {
+    pendingConflictRef.current = null
+    setDateConflict(null)
+    // O drag moveu a barra visualmente; repõe na posição salva.
+    try {
+      ganttInstanceRef.current?.refresh(ganttTasksRef.current)
+    } catch { /* noop */ }
   }
 
   function handleCategoriesChange(task: Task, categories: string[]) {
@@ -1689,6 +1811,17 @@ export default function GanttView({
           )}
         </div>
       )}
+
+      {/* Conflito de datas: subtarefa fora da janela do pai (colunas Início/
+          Fim e drag da barra pedem decisão — nada é salvo antes dela). */}
+      <SubtaskDateConflictModal
+        conflict={dateConflict}
+        parentTitle={conflictParentTitle}
+        busy={conflictBusy}
+        onExtendParent={() => void resolveConflictByParent()}
+        onFitSubtask={() => void resolveConflictBySubtask()}
+        onCancel={cancelDateConflict}
+      />
 
       {/* Modal de nova subtarefa */}
       {createTask && (
