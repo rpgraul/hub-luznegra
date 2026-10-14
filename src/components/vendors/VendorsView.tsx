@@ -299,7 +299,7 @@ export default function VendorsView() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2">
             {filteredVendors.map((vendor) => {
               const kindColor = VENDOR_KIND_COLORS[vendor.kind] ?? '#6B7280'
               const links = [vendor.link1, vendor.link2, vendor.link3].filter(
@@ -376,7 +376,7 @@ export default function VendorsView() {
                     </div>
                   )}
 
-                  {/* Artes de referência (120x120) — TODAS visíveis; o clique
+                  {/* Artes de referência (240x240) — TODAS visíveis; o clique
                       abre o lightbox direto, não o modal do fornecedor. */}
                   {images.length > 0 && (
                     <div className="flex flex-wrap items-start gap-2">
@@ -390,7 +390,7 @@ export default function VendorsView() {
                             e.stopPropagation()
                             setLightbox({ images, index: i, title: vendor.name })
                           }}
-                          className="size-[120px] shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border/70 transition hover:border-primary/60"
+                          className="size-[240px] shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border/70 transition hover:border-primary/60"
                         >
                           <img src={url} alt="" className="h-full w-full object-cover" />
                         </button>
