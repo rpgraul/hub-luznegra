@@ -282,7 +282,11 @@ html[data-theme='dark'],
   text-shadow: none;
 }
 
-/* Resize Handles - Widen hit area and make visible on hover */
+/* Resize Handles - pontas maiores: fáceis de pegar e arrastar.
+   A lib desenha os rects com 3x12px — pequenos demais. width/height são
+   geometria SVG2 (CSS vence o atributo; mesmo mecanismo do rx/ry abaixo).
+   O rect nasce em [borda-1.5, borda+12.5] e y+6: o translate recentra
+   o handle EXATAMENTE na borda da barra (14x20 visíveis = área clicável). */
 .gantt .handle {
   fill: #ffffff;
   stroke: rgba(0, 0, 0, 0.3);
@@ -297,8 +301,9 @@ html[data-theme='dark'],
 
 .gantt .handle.left,
 .gantt .handle.right {
-  stroke-width: 10px !important;
-  stroke: transparent !important;
+  width: 14px;
+  height: 20px;
+  transform: translate(-5.5px, -2px);
   cursor: ew-resize !important;
 }
 
