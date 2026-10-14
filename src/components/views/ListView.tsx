@@ -27,6 +27,8 @@ interface ListViewProps {
   tasks: Task[]
   projects: Project[]
   grouped: boolean
+  /** Projeto ativo — trocar de projeto limpa o filtro de categoria. */
+  activeProjectId?: string | null
   onOpenTask: (task: Task) => void
   memberOf: (id: string | null) => ProjectMember | null
   moveTaskStatus: (args: { id: string; status: TaskStatus }) => Promise<unknown>
@@ -761,6 +763,7 @@ export default function ListView({
   tasks,
   projects,
   grouped,
+  activeProjectId,
   onOpenTask,
   memberOf,
   moveTaskStatus,
@@ -771,6 +774,13 @@ export default function ListView({
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const { counts: commentCounts } = useTaskCommentCounts()
+
+  // Trocar de projeto limpa o filtro de categoria: as categorias vêm das
+  // tarefas do projeto ativo — filtro herdado de outro projeto deixa a
+  // lista vazia E invisível (as chips nem renderizam pra desmarcar).
+  useEffect(() => {
+    setCategoryFilter([])
+  }, [activeProjectId])
 
   const availableCategories = useMemo(() => {
     const set = new Set<string>()

@@ -399,6 +399,7 @@ export default function TaskWorkspace({
             tasks={visibleTasks}
             projects={projects}
             grouped={!activeProjectId && !focusedTaskId}
+            activeProjectId={activeProjectId}
             onOpenTask={openTask}
             memberOf={memberOf}
             moveTaskStatus={tasksApi.moveTaskStatus}

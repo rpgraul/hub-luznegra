@@ -283,6 +283,13 @@ export default function GanttView({
   const [subtaskModalParent, setSubtaskModalParent] = useState<Task | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string[]>([])
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([])
+  // Trocar de projeto limpa o filtro de categoria: as categorias disponíveis
+  // vêm das tarefas do projeto ativo — um filtro herdado de outro projeto
+  // deixa a tela vazia E invisível (as chips nem renderizam pra poder
+  // desmarcar). Reset junto é o comportamento menos confuso.
+  useEffect(() => {
+    setCategoryFilter([])
+  }, [activeProjectId])
   // Ordem local aplicada no instante do drop: a tabela reflete o arrasto
   // imediatamente, sem esperar o cache/servidor (evita o snap-back do DnD).
   // Limpa no settled/erro da mutação.
