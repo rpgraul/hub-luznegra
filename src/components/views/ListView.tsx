@@ -14,6 +14,7 @@ import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
 import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { userColor } from '@/utils/colors'
 import { categoryColors } from '@/utils/categories'
+import { applyVisibleOrderToFull, filterTasksFamily } from '@/utils/taskFilter'
 import { formatDate, todayIso } from '@/utils/format'
 import {
   STATUS_LABELS,
@@ -782,7 +783,10 @@ export default function ListView({
   const filteredTasks = useMemo(() => {
     if (categoryFilter.length === 0) return tasks
     const selected = new Set(categoryFilter)
-    return tasks.filter((task) =>
+    // Family-wise: quem casa mantém ancestrais E descendentes — antes o
+    // filtro era plano: pai com a categoria escondia as subtarefas sem a
+    // categoria, e subtarefa que casava aparecia sem o pai.
+    return filterTasksFamily(tasks, (task) =>
       (task.categories ?? []).some((cat) => selected.has(cat)),
     )
   }, [tasks, categoryFilter])
@@ -939,6 +943,28 @@ export default function ListView({
     return section?.sectionTasks ?? []
   }
 
+  /** Lista COMPLETA (sem filtro) de topos do escopo do droppable, na ordem
+      global — base para permutar os slots dos topos visíveis no reorder. */
+  function fullTopTasksForDroppable(droppableId: string): Task[] {
+    let scope: Task[]
+    if (droppableId === UNGROUPED_DROPPABLE_ID) {
+      scope = tasks.filter((t) => !t.parent_id)
+    } else {
+      const section = sections.find(
+        (s) => droppableIdForSection(s.project?.id ?? null) === droppableId,
+      )
+      const projectId = section?.project?.id ?? null
+      scope = tasks.filter(
+        (t) => !t.parent_id && (t.project_id ?? null) === projectId,
+      )
+    }
+    return scope.sort(
+      (a, b) =>
+        a.order_index - b.order_index ||
+        (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
+    )
+  }
+
   function handleDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result
     if (!destination) return
@@ -949,15 +975,25 @@ export default function ListView({
     if (source.index === destination.index) return
     if (!updateTask) return
 
-    const list = rowsForDroppable(source.droppableId)
+    const visibleList = rowsForDroppable(source.droppableId)
       .filter((r) => r.depth === 0)
       .map((r) => r.task)
-    const movedIndex = list.findIndex((t) => t.id === draggableId)
+    const movedIndex = visibleList.findIndex((t) => t.id === draggableId)
     if (movedIndex === -1) return
-    const [moved] = list.splice(movedIndex, 1)
-    list.splice(destination.index, 0, moved)
+    const [moved] = visibleList.splice(movedIndex, 1)
+    visibleList.splice(destination.index, 0, moved)
 
-    const updates = list
+    // Reorder SOB filtro: permuta os slots globais dos topos visíveis na
+    // lista COMPLETA do escopo — as tarefas ocultas pelo filtro mantêm
+    // seus slots (antes renumerava 0..N a lista visível e corrompia os
+    // índices das ocultas).
+    const fullList = fullTopTasksForDroppable(source.droppableId)
+    const next =
+      fullList.length > 0
+        ? applyVisibleOrderToFull(fullList, visibleList)
+        : visibleList
+
+    const updates = next
       .map((task, index) => ({ task, index }))
       .filter(({ task, index }) => task.order_index !== index)
     if (updates.length === 0) return

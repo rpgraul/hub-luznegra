@@ -20,6 +20,7 @@ import { useProjectMembers } from '@/hooks/useProjectMembers'
 import { userColor } from '@/utils/colors'
 import { STATUS_COLORS, STATUS_LABELS } from '@/utils/status'
 import { categoryColors, parseCategoriesText } from '@/utils/categories'
+import { applyVisibleOrderToFull, filterTasksFamily } from '@/utils/taskFilter'
 import {
   detectSubtaskConflict,
   extendParentToFitSubtask,
@@ -62,6 +63,14 @@ const HEADER_HEIGHT = UPPER_HEADER_HEIGHT + LOWER_HEADER_HEIGHT
  * que continua 28 — visual do header não muda.)
  */
 const GANTT_LOWER_HEADER = LOWER_HEADER_HEIGHT - 10
+
+/** Ordem "global" padrão: order_index, com created_at como desempate. */
+function byOrderCreated(a: Task, b: Task): number {
+  return (
+    a.order_index - b.order_index ||
+    (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0)
+  )
+}
 
 interface ZoomConfig {
   name: string
@@ -303,14 +312,16 @@ export default function GanttView({
     return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [tasks])
 
-  // Contagem por status dentro do filtro de categorias (o usuário vê o que
-  // existe antes de escolher).
+  // Contagem por status sobre o que o filtro de categoria realmente exibe
+  // (family-wise) — antes era filtro plano e as contagens divergiam do
+  // que a tabela mostrava com o filtro ativo.
   const statusCounts = useMemo(() => {
-    const base = tasks.filter(
-      (t) =>
-        categoryFilter.length === 0 ||
-        (t.categories ?? []).some((cat) => categoryFilter.includes(cat)),
-    )
+    const base =
+      categoryFilter.length === 0
+        ? tasks
+        : filterTasksFamily(tasks, (t) =>
+            (t.categories ?? []).some((cat) => categoryFilter.includes(cat)),
+          )
     const counts: Record<string, number> = {}
     for (const t of base) counts[t.status] = (counts[t.status] ?? 0) + 1
     return counts
@@ -325,23 +336,10 @@ export default function GanttView({
     const byStatus = (t: Task) =>
       statusFilter.length === 0 || statusFilter.includes(t.status)
 
-    // Hierarquia é lei no Gantt: se uma subtarefa casa, os ancestrais dela
-    // também entram (senão a linha viraria raiz órfã).
-    const byId = new Map(tasks.map((t) => [t.id, t]))
-    const keep = new Set<string>()
-    for (const t of tasks) {
-      if (!byCategory(t) || !byStatus(t)) continue
-      keep.add(t.id)
-      let parentId = t.parent_id
-      let guard = 0
-      while (parentId && guard < 50) {
-        if (keep.has(parentId)) break
-        keep.add(parentId)
-        parentId = byId.get(parentId)?.parent_id ?? null
-        guard += 1
-      }
-    }
-    return tasks.filter((t) => keep.has(t.id))
+    // Family-wise: quem casa mantém ANCESTRAIS (subtarefa que casa mostra o
+    // pai — senão viraria raiz órfã) E DESCENDENTES (pai que casa continua
+    // mostrando as subtarefas — antes elas SUMIAM com o filtro ativo).
+    return filterTasksFamily(tasks, (t) => byCategory(t) && byStatus(t))
   }, [tasks, categoryFilter, statusFilter])
 
   // Build rows — respects expandedIds, sorted by order_index per level.
@@ -1281,26 +1279,24 @@ export default function GanttView({
       })
   }
 
-  // Reconstrói a ordem global (0..N-1 sobre as tarefas visíveis) preservando
-  // o agrupamento pai→filhos: a ordem relativa dentro de cada grupo é mantida
-  // e só o grupo movido muda.
+  // Reconstrói a ordem global (0..N-1 sobre a lista COMPLETA de tarefas —
+  // inclusive as ocultas pelo filtro) preservando o agrupamento pai→filhos:
+  // a ordem relativa dentro de cada grupo é mantida e só o grupo movido muda.
+  // Receber a lista completa (não a filtrada) é o que impede o filtro de
+  // corromper os índices das tarefas ocultas durante um reorder.
   function buildGlobalIds(
     topOrder: Task[],
     siblingOverride?: { parentId: string; siblings: Task[] },
   ): string[] {
     const byParent = new Map<string | null, Task[]>()
-    for (const t of filteredTasks) {
+    for (const t of tasks) {
       const key = t.parent_id ?? null
       const list = byParent.get(key) || []
       list.push(t)
       byParent.set(key, list)
     }
     for (const list of byParent.values()) {
-      list.sort(
-        (a, b) =>
-          a.order_index - b.order_index ||
-          (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0),
-      )
+      list.sort(byOrderCreated)
     }
     if (siblingOverride) {
       byParent.set(siblingOverride.parentId, siblingOverride.siblings)
@@ -1318,7 +1314,7 @@ export default function GanttView({
     }
     walk(null)
     // Inclui por segurança tarefas órfãs que não entraram no walk
-    for (const t of filteredTasks) {
+    for (const t of tasks) {
       if (!ids.includes(t.id)) ids.push(t.id)
     }
     return ids
@@ -1346,7 +1342,7 @@ export default function GanttView({
 
     if (draggedRow.depth === 0) {
       // Tarefa de topo: move entre os topos; filhos acompanham o pai no rebuild global
-      const topLevel = taskRows
+      const visibleTops = taskRows
         .filter((r) => r.depth === 0)
         .map((r) => r.task)
         .filter((t) => t.id !== dragged.id)
@@ -1357,9 +1353,14 @@ export default function GanttView({
         if (reducedTaskRows[i].depth === 0) destPos++
       }
       // Destino após o fim: anexa
-      destPos = Math.min(destPos, topLevel.length)
-      topLevel.splice(destPos, 0, dragged)
-      persistGlobalOrder(buildGlobalIds(topLevel))
+      destPos = Math.min(destPos, visibleTops.length)
+      visibleTops.splice(destPos, 0, dragged)
+      // Ordem GLOBAL: permuta os slots dos topos VISÍVEIS dentro da lista
+      // completa — as tarefas ocultas pelo filtro mantêm seus slots, então
+      // renumerar 0..N daqui não corrompe a ordem de ninguém.
+      const fullTops = tasks.filter((t) => !t.parent_id).sort(byOrderCreated)
+      const globalTopOrder = applyVisibleOrderToFull(fullTops, visibleTops)
+      persistGlobalOrder(buildGlobalIds(globalTopOrder))
       return
     }
 
@@ -1398,10 +1399,15 @@ export default function GanttView({
     // Drop no mesmo lugar: nada a salvar (evita criar ordem duplicada/escrita inútil).
     if (destPos === originPos) return
     siblings.splice(destPos, 0, dragged)
-    const topOrder = taskRows
-      .filter((r) => r.depth === 0)
-      .map((r) => r.task)
-    persistGlobalOrder(buildGlobalIds(topOrder, { parentId, siblings }))
+    // Ordem GLOBAL dos irmãos: permuta os slots dos irmãos VISÍVEIS dentro
+    // da lista completa de subtarefas do pai (ocultas pelo filtro ficam
+    // intactas) — e o rebuild usa os topos completos, não os visíveis.
+    const fullSiblings = tasks
+      .filter((t) => t.parent_id === parentId)
+      .sort(byOrderCreated)
+    const globalSiblings = applyVisibleOrderToFull(fullSiblings, siblings)
+    const topOrder = tasks.filter((t) => !t.parent_id).sort(byOrderCreated)
+    persistGlobalOrder(buildGlobalIds(topOrder, { parentId, siblings: globalSiblings }))
   }
 
   function handleStatusChange(task: Task, nextStatus: TaskStatus) {    if (task.status === nextStatus) return
