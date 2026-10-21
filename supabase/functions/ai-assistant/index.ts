@@ -28,6 +28,8 @@ interface AIAction {
     | 'list_overdue'
     | 'bulk_status_update'
     | 'create_project'
+    | 'delete_project'
+    | 'archive_project'
     | 'update_task'
     | 'update_tasks'
     | 'delete_task'
@@ -36,6 +38,7 @@ interface AIAction {
     | 'send_notification'
     | 'draft_email'
     | 'create_link'
+    | 'create_vendor'
     | 'none'
   params?: Record<string, unknown>
 }
@@ -83,10 +86,13 @@ Deno.serve(async (req) => {
       .maybeSingle()
     const isUserAdmin = requesterProfile?.role === 'admin'
 
-    const { data: projects } = await admin
+    const { data: allProjects } = await admin
       .from('projects')
-      .select('id, name, color')
-      .eq('archived', false)
+      .select('id, name, color, archived, created_at')
+      .order('name', { ascending: true })
+
+    const projects = (allProjects ?? []).filter((p) => !p.archived)
+    const archivedProjects = (allProjects ?? []).filter((p) => p.archived)
 
     // Lista de membros e e-mails (para envio de e-mails e menções/notificações)
     const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 })
@@ -124,7 +130,17 @@ Deno.serve(async (req) => {
       updated_at: string
     }> = (allRecentTasks as any) ?? []
 
-    // 1.1 Links e Documentos cadastrados no Hub
+    // Tarefas em aberto atribuídas ao usuário logado (para priorização pessoal, semana e prazos)
+    const { data: myTasksRaw } = await admin
+      .from('tasks')
+      .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, categories, created_at, updated_at')
+      .or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
+      .not('status', 'eq', 'done')
+      .order('due_date', { ascending: true, nullsFirst: false })
+
+    const myOpenTasks: typeof currentProjectTasks = (myTasksRaw as any) ?? []
+
+    // 1.1 Links, Documentos e Fornecedores/Colaboradores cadastrados no Hub
     const { data: hubLinks } = await admin
       .from('hub_links')
       .select('id, title, url, description, tags')
@@ -135,11 +151,20 @@ Deno.serve(async (req) => {
       .select('id, title, file_name, file_type, tags, file_url, extracted_text')
       .limit(30)
 
+    const { data: hubVendors } = await admin
+      .from('hub_vendors')
+      .select('id, name, kind, phone, email, link1, link2, link3, note, pix, created_at')
+      .order('name', { ascending: true })
+      .limit(60)
+
     const membersMap = membersWithEmail
       .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
       .join('\n')
     const projectsMap = (projects ?? []).map((p) => `"${p.name}" (id: ${p.id})`).join(', ')
-    const projectNameById = new Map((projects ?? []).map((p) => [p.id, p.name]))
+    const archivedProjectsMap = (archivedProjects ?? []).length > 0
+      ? (archivedProjects ?? []).map((p) => `- [ID: ${p.id}] "${p.name}" (Arquivado)`).join('\n')
+      : 'Nenhum projeto arquivado no momento.'
+    const projectNameById = new Map((allProjects ?? []).map((p) => [p.id, p.name]))
     const memberNameById = new Map(
       (members ?? []).map((m) => [m.id, `@${m.username} (${m.full_name || m.username})`])
     )
@@ -170,6 +195,8 @@ Deno.serve(async (req) => {
       todo: 'A Fazer',
       in_progress: 'Em Andamento',
       review: 'Revisão',
+      financing: 'Em Financiamento',
+      funded: 'Financiado',
       done: 'Concluído',
     }
 
@@ -248,20 +275,79 @@ Deno.serve(async (req) => {
     const now = new Date()
     const nowPtBr = now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'full', timeStyle: 'medium' })
     const nowIso = now.toISOString()
+    const todayIso = nowIso.slice(0, 10)
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const in7DaysIso = in7Days.toISOString().slice(0, 10)
+
+    // Agrupamento detalhado das tarefas em aberto do usuário logado
+    const myOverdueTasks: string[] = []
+    const myTodayTasks: string[] = []
+    const myThisWeekTasks: string[] = []
+    const myFutureTasks: string[] = []
+    const myNoDateTasks: string[] = []
+
+    for (const t of myOpenTasks) {
+      const projName = projectNameById.get(t.project_id) || 'Sem projeto'
+      const statusLabel = statusPtBr[t.status] || t.status
+      const priorityLabel = priorityPtBr[t.priority] || t.priority
+      const startStr = formatPtBrDate(t.start_date)
+      const dueStr = formatPtBrDate(t.due_date)
+      const isSub = !!t.parent_id
+      const itemDesc = `- [ID: ${t.id}] "${t.title}" (Projeto: "${projName}", Prioridade: ${priorityLabel} [${t.priority}], Status: ${statusLabel} [${t.status}], Início: ${startStr}, Prazo: ${dueStr}${isSub ? ', Subtarefa' : ''})`
+
+      if (!t.due_date) {
+        myNoDateTasks.push(itemDesc)
+      } else if (t.due_date < todayIso) {
+        myOverdueTasks.push(itemDesc + ` [ATRASADA - venceu em ${dueStr}]`)
+      } else if (t.due_date === todayIso) {
+        myTodayTasks.push(itemDesc + ` [VENCE HOJE]`)
+      } else if (t.due_date <= in7DaysIso) {
+        myThisWeekTasks.push(itemDesc + ` [Esta semana - ${dueStr}]`)
+      } else {
+        myFutureTasks.push(itemDesc)
+      }
+    }
+
+    const myTasksSnippet = [
+      `Total de tarefas em aberto de @${requesterProfile?.username || 'você'}: ${myOpenTasks.length} pendência(s).`,
+      myOverdueTasks.length > 0 ? `* TAREFAS ATRASADAS (${myOverdueTasks.length}):\n${myOverdueTasks.join('\n')}` : null,
+      myTodayTasks.length > 0 ? `* TAREFAS PARA HOJE (${myTodayTasks.length}):\n${myTodayTasks.join('\n')}` : null,
+      myThisWeekTasks.length > 0 ? `* TAREFAS DOS PRÓXIMOS 7 DIAS (${myThisWeekTasks.length}):\n${myThisWeekTasks.join('\n')}` : null,
+      myFutureTasks.length > 0 ? `* TAREFAS FUTURAS (${myFutureTasks.length}):\n${myFutureTasks.join('\n')}` : null,
+      myNoDateTasks.length > 0 ? `* TAREFAS SEM PRAZO DEFINIDO (${myNoDateTasks.length}):\n${myNoDateTasks.join('\n')}` : null,
+    ].filter(Boolean).join('\n\n')
+
+    const vendorsSnippet = (hubVendors ?? []).length > 0
+      ? (hubVendors ?? [])
+          .map((v) => {
+            const links = [v.link1, v.link2, v.link3].filter(Boolean).join(', ')
+            return `- [ID: ${v.id}] "${v.name}" (Tipo: ${v.kind || 'fornecedor'}, Email: ${v.email || 'N/A'}, Tel: ${v.phone || 'N/A'}, PIX: ${v.pix || 'N/A'}${links ? `, Portfólio/Links: ${links}` : ''}${v.note ? `, Obs: "${v.note}"` : ''})`
+          })
+          .join('\n')
+      : 'Nenhum fornecedor/colaborador cadastrado.'
 
     // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
 Data e hora atual (Horário de Brasília): ${nowPtBr} (ISO: ${nowIso}).
-Hoje: ${nowIso.slice(0, 10)}. Usuário logado: ${requesterProfile ? `@${requesterProfile.username} (${requesterProfile.full_name || requesterProfile.username})` : userId} (ID: ${userId}). Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
+Hoje: ${todayIso}. Usuário logado: ${requesterProfile ? `@${requesterProfile.username} (${requesterProfile.full_name || requesterProfile.username})` : userId} (ID: ${userId}). Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
 
-Projetos cadastrados:
+Projetos Ativos:
 ${projectsMap || 'Nenhum'}
+
+Projetos Arquivados:
+${archivedProjectsMap || 'Nenhum projeto arquivado.'}
 
 Membros da equipe (reconheça nomes, usernames e e-mails para atribuição, filtros e mensagens):
 ${membersMap || 'Nenhum'}
 
-Tarefas cadastradas no Hub (ordenadas pelas atualizações mais recentes; use os campos 'Última atualização' e 'Criada em' para responder com precisão sobre modificações recentes, mudanças de status, novos itens ou prazos):
+TAREFAS EM ABERTO ATRIBUÍDAS AO USUÁRIO LOGADO (@${requesterProfile?.username || 'você'}) - Use para planejamento pessoal, prioridades e semana:
+${myTasksSnippet || 'Nenhuma tarefa pendente atribuída ao usuário.'}
+
+Tarefas recentes de todos os projetos (ordenadas por modificações recentes):
 ${tasksSnippet || 'Nenhuma tarefa encontrada.'}
+
+Fornecedores e Colaboradores cadastrados (ilustradores, autores, parceiros):
+${vendorsSnippet}
 
 Links úteis cadastrados:
 ${linksSnippet || 'Nenhum link cadastrado.'}
@@ -273,32 +359,61 @@ DIRETRIZES DE RESPOSTA E PODERES:
 - Responda sempre em Português do Brasil de forma clara, prestativa e estruturada.
 - NÃO use emojis em nenhuma hipótese.
 
+- ORGANIZAÇÃO PESSOAL, PRIORIDADES E PLANEJAMENTO DA SEMANA:
+  Quando o usuário pedir para listar suas prioridades, planejar sua semana, ver o que tem para fazer hoje/na semana ou organizar suas tarefas:
+  1. Baseie-se DIRETAMENTE na seção "TAREFAS EM ABERTO ATRIBUÍDAS AO USUÁRIO LOGADO".
+  2. Apresente um plano de ação claro, objetivo e estruturado em tópicos:
+     - Tarefas Atrasadas / Urgentes (se houver, com o prazo original e dias de atraso)
+     - Tarefas para Hoje e Próximos 7 Dias (em ordem cronológica)
+     - Ordem de Execução Recomendada (uma sugestão lógica de foco para o usuário)
+     - Tarefas Sem Prazo ou Futuras (para quando houver tempo livre)
+  3. Indique sempre o Título da tarefa em negrito, o Projeto e a Prioridade.
+  4. Seja prestativo: ofereça proativamente atualizar status para concluído ou reagendar prazos se o usuário desejar.
+
+- CONSULTA A FORNECEDORES E PARCEIROS:
+  Quando o usuário perguntar sobre ilustradores, autores, fornecedores, parceiros, chaves PIX, telefones, e-mails, portfólios ou observações:
+  Consulte a seção "Fornecedores e Colaboradores cadastrados" e responda com precisão aos dados solicitados.
+
 - CONSULTAS, LISTAGENS E RELATÓRIOS SOBRE TAREFAS (action: { "type": "none" }):
   Quando o usuário fizer perguntas ou pedir listagens, relatórios, checagens sobre tarefas, status, prazos, membros ou atualizações recentes:
-  (Exemplos: "quais tarefas foram atualizadas ou criadas nos ultimos 2 dias?", "mudei o status de uma tarefa hoje mesmo", "pode checar os itens que tiveram status alterado?", "listar tarefas de todos os usuarios", "quais tarefas estão em andamento?", "quais tarefas foram criadas hoje?"):
+  (Exemplos: "quais tarefas foram atualizadas ou criadas nos ultimos 2 dias?", "mudei o status de uma tarefa hoje mesmo", "pode checar os itens que tiveram status alterado?", "listar tarefas de todos os usuarios", "quais tarefas estão em andamento?"):
   1. NÃO faça nenhuma ação de mutação no banco de dados. Retorne action: { "type": "none" }.
-  2. Analise atentamente os campos "Criada em" e "Última atualização" de TODAS as tarefas fornecidas no contexto, comparando com a "Data e hora atual" (${nowPtBr}).
-  3. Identifique com exatidão quais tarefas foram modificadas ou criadas no período solicitado pelo usuário (ou que foram alteradas recentemente/hoje).
-  4. Responda no campo "reply" com uma listagem detalhada e organizada em Markdown:
-     - Para cada tarefa encontrada:
-       - **Título da Tarefa** (Projeto: Nome do Projeto)
-         - Status atual: Status da tarefa (ex: Em Andamento, Concluído, etc.)
-         - Responsável(is): Nome/username dos responsáveis
-         - Última atualização: DD/MM/YYYY às HH:mm
-         - Criada em: DD/MM/YYYY às HH:mm
-         - Prazo: DD/MM/YYYY (se houver)
-  5. Se nenhuma tarefa atender ao critério, explique com clareza informando as datas consideradas e quando ocorreu a tarefa atualizada mais recente.
-  6. NUNCA responda apenas "Comando processado com sucesso." para perguntas, listagens, relatórios ou dúvidas!
+  2. Analise atentamente os campos "Criada em" e "Última atualização" de TODAS as tarefas fornecidas no contexto.
+  3. Identifique com exatidão quais tarefas foram modificadas ou criadas no período solicitado pelo usuário.
+  4. Responda no campo "reply" com uma listagem detalhada e organizada em Markdown.
+  5. NUNCA responda apenas "Comando processado com sucesso." para perguntas, listagens, relatórios ou dúvidas!
 
 - AÇÕES NO BANCO DE DADOS (apenas quando expressamente solicitado para criar, alterar ou excluir dados):
+  - EXCLUIR PROJETO ARQUIVADO (delete_project):
+    Quando o usuário pedir para deletar ou excluir um projeto arquivado (ou excluir projeto):
+    action: delete_project, params: {
+      "project_id"?: string,
+      "project_name"?: string
+    }
+  - ARQUIVAR OU DESARQUIVAR PROJETO (archive_project):
+    action: archive_project, params: {
+      "project_id"?: string,
+      "project_name"?: string,
+      "archive"?: boolean (true para arquivar, false para desarquivar/restaurar)
+    }
+  - CADASTRAR FORNECEDOR / COLABORADOR (create_vendor):
+    Quando o usuário pedir para cadastrar um ilustrador, autor, fornecedor ou parceiro:
+    action: create_vendor, params: {
+      "name": string,
+      "kind"?: "ilustrador" | "fornecedor" | "autor" | "colaborador" | "outro",
+      "phone"?: string,
+      "email"?: string,
+      "pix"?: string,
+      "note"?: string,
+      "link1"?: string
+    }
   - ATRIBUIR / ALTERAR RESPONSÁVEL OU ATUALIZAR TAREFA (update_task):
-    Quando o usuário pedir para atribuir, trocar responsável, delegar, alterar status, prioridade ou prazos:
-    (Exemplos: "Adicione Raul como responsável da tarefa Revisão", "Atribua a tarefa Diagramação para o Diego", "Coloque Diego na tarefa X", "Passe a tarefa Y para @diego", "Mude o status de X para in_progress", "Coloque prioridade alta na tarefa Y"):
+    Quando o usuário pedir para atribuir, trocar responsável, delegar, alterar status, prioridade ou prazos de uma tarefa ou subtarefa:
     action: update_task, params: {
       "task_id"?: string (ID real da tarefa se identificado),
       "task_title"?: string (título da tarefa para localização),
-      "assigned_to"?: string (username, nome, ou @username do responsável, ex: "diego", "raul", "@diego"),
-      "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
+      "assigned_to"?: string (username, nome, ou @username do responsável),
+      "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "financing" | "funded" | "done",
       "priority"?: "urgent" | "high" | "medium" | "low",
       "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
@@ -312,7 +427,7 @@ DIRETRIZES DE RESPOSTA E PODERES:
           "task_id"?: string,
           "task_title"?: string,
           "assigned_to"?: string,
-          "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "done",
+          "status"?: "uncertain" | "backlog" | "todo" | "in_progress" | "review" | "financing" | "funded" | "done",
           "priority"?: "urgent" | "high" | "medium" | "low",
           "categories"?: string[],
           "start_date"?: "YYYY-MM-DD",
@@ -333,11 +448,13 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "email_recipient"?: string (username, e-mail ou nome de quem deve receber o e-mail; padrão é o assigned_to)
     }
     REGRA CRÍTICA PARA E-MAIL NA CRIAÇÃO: Se o usuário pedir para criar a tarefa E enviar e-mail (ex: "crie a tarefa X e me mande por e-mail"), NUNCA divida em dois turnos nem diga que só faz uma ação por vez! Utilize a ação "create_task" com "send_email": true. O sistema criará a tarefa e enviará o e-mail automaticamente na mesma execução.
-    LIMITE: no máximo 20 subtarefas por resposta. Se o usuário pedir mais,
-    crie a tarefa com as 20 primeiras e avise no "reply" que o restante
-    ficou pendente, pedindo confirmação para continuar. Nunca invente
-    subtarefas além do pedido e nunca retorne JSON incompleto: se não
-    couber, corte a lista de subtarefas (não o fechamento do JSON).
+    LIMITE: no máximo 20 subtarefas por resposta.
+  - EXCLUIR TAREFA OU SUBTAREFA (delete_task):
+    Quando o usuário pedir para deletar ou excluir uma tarefa ou subtarefa:
+    action: delete_task, params: {
+      "task_id"?: string,
+      "task_title"?: string
+    }
   - CONSULTA A DOCUMENTOS E CONTRATOS:
     Quando o usuário perguntar sobre contratos, documentos, planilhas ou relatórios da Editora Luz Negra (ex: partes envolvidas, contratante, contratado, valores totais, parcelas, prazos de entrega, envio à gráfica, cláusulas contratuais), CONSULTE ATENTAMENTE a seção "Conteúdo Integral Extraído" dos documentos e responda com precisão aos dados solicitados, citando os valores (ex: R$), datas, nomes das partes e itens do documento.
     OBRIGATÓRIO: Sempre que responder sobre um documento ou contrato, inclua no final da resposta o botão/link interativo no formato exato: [Abrir: Nome do Documento](doc:ID_DO_DOCUMENTO) para que o usuário possa clicar e conferir o arquivo no modal com 1 clique.
@@ -375,7 +492,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
 {
   "reply": "Texto de resposta detalhado, relatório ou explicação sobre o que foi executado.",
   "action": {
-    "type": "update_task" | "update_tasks" | "create_task" | "create_project" | "create_link" | "send_email" | "send_notification" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "none",
+    "type": "update_task" | "update_tasks" | "create_task" | "create_project" | "delete_project" | "archive_project" | "create_link" | "create_vendor" | "send_email" | "send_notification" | "delete_task" | "duplicate_task" | "break_down_subtasks" | "none",
     "params": { ... }
   }
 }`
@@ -782,6 +899,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
         review: 'review',
         'revisão': 'review',
         revisao: 'review',
+        financing: 'financing',
+        'em financiamento': 'financing',
+        financiamento: 'financing',
+        funded: 'funded',
+        financiado: 'funded',
         done: 'done',
         'concluído': 'done',
         concluido: 'done',
@@ -1376,6 +1498,97 @@ FORMATO OBRIGATÓRIO (JSON puro):
         } else {
           actionResult = { success: true, link: createdLink }
         }
+      } else if (type === 'delete_project') {
+        let projectId = (params.project_id || params.id) as string | undefined
+        const searchName = String(params.project_name || params.name || '').trim().toLowerCase()
+
+        if (!projectId && searchName) {
+          const match = (allProjects ?? []).find(
+            (p) => p.name.toLowerCase() === searchName ||
+                   p.name.toLowerCase().includes(searchName) ||
+                   searchName.includes(p.name.toLowerCase())
+          )
+          if (match) projectId = match.id
+        }
+
+        if (projectId) {
+          const targetProj = (allProjects ?? []).find((p) => p.id === projectId)
+          if (!targetProj) {
+            return json({
+              reply: `Não encontrei nenhum projeto com o ID ou nome informado para excluir.`,
+              action: { type: 'none' },
+            })
+          }
+
+          // Exclui projeto (as tarefas vinculadas cascateiam via ON DELETE CASCADE no banco)
+          const { error: delErr } = await admin.from('projects').delete().eq('id', projectId)
+          if (delErr) {
+            return json({
+              reply: `Erro ao excluir o projeto "${targetProj.name}": ${delErr.message}`,
+              action: { type: 'none' },
+            })
+          }
+
+          actionResult = {
+            success: true,
+            deletedProjectId: projectId,
+            projectName: targetProj.name,
+            wasArchived: targetProj.archived,
+          }
+        } else {
+          return json({
+            reply: `Não identifiquei qual projeto você deseja excluir. Informe o nome ou ID do projeto arquivado.`,
+            action: { type: 'none' },
+          })
+        }
+      } else if (type === 'archive_project') {
+        let projectId = (params.project_id || params.id) as string | undefined
+        const searchName = String(params.project_name || params.name || '').trim().toLowerCase()
+        if (!projectId && searchName) {
+          const match = (allProjects ?? []).find(
+            (p) => p.name.toLowerCase() === searchName ||
+                   p.name.toLowerCase().includes(searchName) ||
+                   searchName.includes(p.name.toLowerCase())
+          )
+          if (match) projectId = match.id
+        }
+
+        if (projectId) {
+          const targetProj = (allProjects ?? []).find((p) => p.id === projectId)
+          const shouldArchive = params.archive !== undefined ? Boolean(params.archive) : true
+          const { error: archErr } = await admin.from('projects').update({ archived: shouldArchive }).eq('id', projectId)
+          if (archErr) {
+            return json({ reply: `Erro ao alterar status do projeto: ${archErr.message}`, action: { type: 'none' } })
+          }
+          actionResult = {
+            success: true,
+            projectId,
+            projectName: targetProj?.name || projectId,
+            archived: shouldArchive,
+          }
+        } else {
+          return json({ reply: `Não identifiquei o projeto para arquivar.`, action: { type: 'none' } })
+        }
+      } else if (type === 'create_vendor') {
+        const name = String(params.name || '').trim()
+        if (!name) {
+          return json({ reply: 'Informe o nome do fornecedor ou colaborador.', action: { type: 'none' } })
+        }
+        const { data: createdVendor, error: vendorErr } = await admin.from('hub_vendors').insert({
+          name,
+          kind: (params.kind as string) || 'fornecedor',
+          phone: (params.phone as string) || null,
+          email: (params.email as string) || null,
+          pix: (params.pix as string) || null,
+          note: (params.note as string) || null,
+          link1: (params.link1 as string) || (params.link as string) || null,
+          created_by: userId,
+        }).select().single()
+
+        if (vendorErr) {
+          return json({ reply: `Erro ao cadastrar fornecedor: ${vendorErr.message}`, action: { type: 'none' } })
+        }
+        actionResult = { success: true, vendor: createdVendor }
       } else if (type === 'duplicate_task') {
         const sourceTitle = params.source_task_title as string
         if (sourceTitle) {
@@ -1751,6 +1964,14 @@ FORMATO OBRIGATÓRIO (JSON puro):
           ? 'Notificação enviada com sucesso.'
           : aiParsed.action?.type === 'create_project'
             ? 'Projeto criado com sucesso.'
+            : aiParsed.action?.type === 'delete_project'
+              ? 'Projeto excluído com sucesso.'
+              : aiParsed.action?.type === 'archive_project'
+                ? 'Status do projeto atualizado com sucesso.'
+                : aiParsed.action?.type === 'create_vendor'
+                  ? 'Fornecedor/colaborador cadastrado com sucesso.'
+                  : aiParsed.action?.type === 'create_link'
+                    ? 'Link útil salvo com sucesso.'
             : aiParsed.action?.type === 'create_task'
               ? 'Tarefa criada com sucesso.'
               : aiParsed.action?.type === 'create_user'

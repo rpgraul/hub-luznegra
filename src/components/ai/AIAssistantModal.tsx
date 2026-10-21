@@ -384,15 +384,21 @@ export default function AIAssistantModal({
           ? response.reply
           : response?.action?.type === 'create_project'
             ? 'Projeto criado com sucesso.'
-            : response?.action?.type === 'create_task'
-              ? 'Tarefa criada com sucesso.'
-              : response?.action?.type === 'update_task' || response?.action?.type === 'update_tasks'
-                ? 'Prazos/tarefas atualizados com sucesso.'
-                : response?.action?.type === 'delete_task'
-                  ? 'Tarefa excluída com sucesso.'
-                  : response?.action?.type === 'create_user'
-                    ? 'Usuário criado com sucesso.'
-                    : 'Não foi possível encontrar as tarefas ou parâmetros informados para executar a ação.'
+            : response?.action?.type === 'delete_project'
+              ? 'Projeto excluído com sucesso.'
+              : response?.action?.type === 'archive_project'
+                ? 'Status do projeto atualizado com sucesso.'
+                : response?.action?.type === 'create_vendor'
+                  ? 'Fornecedor/colaborador cadastrado com sucesso.'
+                  : response?.action?.type === 'create_task'
+                    ? 'Tarefa criada com sucesso.'
+                    : response?.action?.type === 'update_task' || response?.action?.type === 'update_tasks'
+                      ? 'Prazos/tarefas atualizados com sucesso.'
+                      : response?.action?.type === 'delete_task'
+                        ? 'Tarefa excluída com sucesso.'
+                        : response?.action?.type === 'create_user'
+                          ? 'Usuário criado com sucesso.'
+                          : 'Não foi possível encontrar as tarefas ou parâmetros informados para executar a ação.'
 
       const assistantMsg: AIMessage = {
         id: `ai-${Date.now()}`,
@@ -409,6 +415,11 @@ export default function AIAssistantModal({
         void queryClient.invalidateQueries({ queryKey: ['tasks'] })
         void queryClient.invalidateQueries({ queryKey: ['projects'] })
         void queryClient.invalidateQueries({ queryKey: ['notifications'] })
+        void queryClient.invalidateQueries({ queryKey: ['links'] })
+        void queryClient.invalidateQueries({ queryKey: ['hub_links'] })
+        void queryClient.invalidateQueries({ queryKey: ['hub_documents'] })
+        void queryClient.invalidateQueries({ queryKey: ['hub_vendors'] })
+        void queryClient.invalidateQueries({ queryKey: ['vendors'] })
         const assessment = assessAction(response)
         // Log estruturado para diagnosticar falsos positivos/negativos.
         console.debug('[ai-assistant] action:', response.action.type, 'result:', response.actionResult)
