@@ -304,7 +304,20 @@ export default function AIAssistantModal({
   const [selectedDoc, setSelectedDoc] = useState<HubDocument | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const scrollToBottom = (instant = false) => {
+    if (messagesContainerRef.current) {
+      if (instant) {
+        messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      }
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: instant ? 'auto' : 'smooth' })
+    }
+  }
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -318,13 +331,25 @@ export default function AIAssistantModal({
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 150)
+      // Rola diretamente para o final da conversa ao abrir
+      scrollToBottom(true)
+      const t1 = setTimeout(() => scrollToBottom(true), 50)
+      const t2 = setTimeout(() => {
+        scrollToBottom(true)
+        inputRef.current?.focus()
+      }, 150)
+      return () => {
+        clearTimeout(t1)
+        clearTimeout(t2)
+      }
     }
   }, [open])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+    if (open) {
+      scrollToBottom(false)
+    }
+  }, [messages, loading, open])
 
   if (!open && !drawerOpen) return null
 
@@ -515,7 +540,7 @@ export default function AIAssistantModal({
           </div>
 
           {/* Messages Feed */}
-          <div className="flex-1 space-y-3 overflow-y-auto p-4 text-xs">
+          <div ref={messagesContainerRef} className="flex-1 space-y-3 overflow-y-auto p-4 text-xs">
             {messages.map((msg) => (
               <div
                 key={msg.id}
