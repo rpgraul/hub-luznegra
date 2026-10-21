@@ -11,6 +11,7 @@ interface SidebarProps {
   onCreateProject: () => void
   onEditProject?: (project: Project) => void
   onOpenArchivedProjects?: () => void
+  onOpenTrash?: () => void
   showAllTasks: boolean
   onShowAllChange: (show: boolean) => void
   hideDoneTasks?: boolean
@@ -28,6 +29,7 @@ export default function Sidebar({
   onCreateProject,
   onEditProject,
   onOpenArchivedProjects,
+  onOpenTrash,
   showAllTasks,
   onShowAllChange,
   hideDoneTasks = false,
@@ -184,6 +186,17 @@ export default function Sidebar({
                 <i className="fa-solid fa-user-group text-xs" />
               </button>
             </>
+          )}
+
+          {onOpenTrash && (
+            <button
+              type="button"
+              onClick={onOpenTrash}
+              title="Lixeira de Tarefas"
+              className="flex size-8 items-center justify-center rounded-lg text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition cursor-pointer"
+            >
+              <i className="fa-solid fa-trash-can text-xs" />
+            </button>
           )}
 
           <div className="my-1 h-px w-8 bg-border" />
@@ -424,6 +437,18 @@ export default function Sidebar({
             >
               <i className="fa-solid fa-box-archive text-xs" />
               <span>Projetos arquivados</span>
+            </button>
+          )}
+
+          {/* Lixeira de Tarefas */}
+          {onOpenTrash && (
+            <button
+              type="button"
+              onClick={onOpenTrash}
+              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground/80 transition hover:bg-muted hover:text-foreground cursor-pointer"
+            >
+              <i className="fa-solid fa-trash-can text-xs" />
+              <span>Lixeira</span>
             </button>
           )}
         </div>

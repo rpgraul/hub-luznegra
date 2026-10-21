@@ -30,6 +30,7 @@ import NewTaskModal, { type NewTaskInput } from '@/components/tasks/NewTaskModal
 import UserManagementDrawer from '@/components/admin/UserManagementDrawer'
 import ProfileDrawer from '@/components/profile/ProfileDrawer'
 import ArchivedProjectsModal from '@/components/projects/ArchivedProjectsModal'
+import TrashModal from '@/components/tasks/TrashModal'
 import { toast } from '@heroui/react'
 import type { Json } from '@/types/database'
 
@@ -51,6 +52,7 @@ export default function DashboardLayout({
   const queryClient = useQueryClient()
   const [projectModalOpen, setProjectModalOpen] = useState(false)
   const [archivedModalOpen, setArchivedModalOpen] = useState(false)
+  const [trashModalOpen, setTrashModalOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
@@ -252,6 +254,7 @@ export default function DashboardLayout({
           if (isCollaborator) return
           setArchivedModalOpen(true)
         }}
+        onOpenTrash={() => setTrashModalOpen(true)}
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
         hideDoneTasks={preferences?.hide_done_tasks ?? false}
@@ -320,6 +323,12 @@ export default function DashboardLayout({
         onRestored={(p) => {
           setProject(p.id)
         }}
+      />
+
+      <TrashModal
+        open={trashModalOpen}
+        onOpenChange={setTrashModalOpen}
+        projects={projects}
       />
 
       <NewTaskModal

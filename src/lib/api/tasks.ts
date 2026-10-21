@@ -40,6 +40,7 @@ export async function fetchTasks(
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
+    .is('deleted_at', null)
     .order('order_index', { ascending: true })
 
   if (error) {
@@ -176,11 +177,102 @@ export async function deleteTask(
     idsToDelete.push(...frontier)
   }
 
-  // 2) Deleta filhos + pai numa chamada só
+  // 2) Mover para a lixeira (soft delete)
+  const nowIso = new Date().toISOString()
+  const { error } = await supabase
+    .from('tasks')
+    .update({ deleted_at: nowIso })
+    .in('id', idsToDelete)
+
+  return { error: error ? error.message : null }
+}
+
+/**
+ * Restaura uma tarefa e suas subtarefas da lixeira.
+ */
+export async function restoreTask(
+  taskId: string
+): Promise<{ error: string | null }> {
+  const idsToRestore: string[] = [taskId]
+  let frontier: string[] = [taskId]
+
+  while (frontier.length > 0) {
+    const { data, error: fetchError } = await supabase
+      .from('tasks')
+      .select('id')
+      .in('parent_id', frontier)
+      .returns<{ id: string }[]>()
+
+    if (fetchError) return { error: fetchError.message }
+
+    frontier = (data ?? []).map((row) => row.id)
+    idsToRestore.push(...frontier)
+  }
+
+  const { error } = await supabase
+    .from('tasks')
+    .update({ deleted_at: null })
+    .in('id', idsToRestore)
+
+  return { error: error ? error.message : null }
+}
+
+/**
+ * Exclui definitivamente do banco de dados (sem recuperação).
+ */
+export async function hardDeleteTask(
+  taskId: string
+): Promise<{ error: string | null }> {
+  const idsToDelete: string[] = [taskId]
+  let frontier: string[] = [taskId]
+
+  while (frontier.length > 0) {
+    const { data, error: fetchError } = await supabase
+      .from('tasks')
+      .select('id')
+      .in('parent_id', frontier)
+      .returns<{ id: string }[]>()
+
+    if (fetchError) return { error: fetchError.message }
+
+    frontier = (data ?? []).map((row) => row.id)
+    idsToDelete.push(...frontier)
+  }
+
   const { error } = await supabase
     .from('tasks')
     .delete()
     .in('id', idsToDelete)
+
+  return { error: error ? error.message : null }
+}
+
+/**
+ * Lista tarefas que estão na lixeira.
+ */
+export async function listTrashTasks(): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('*')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false })
+
+  if (error) {
+    console.error('listTrashTasks error:', error)
+    return []
+  }
+
+  return (data as Task[]) ?? []
+}
+
+/**
+ * Esvazia a lixeira permanentemente para o usuário.
+ */
+export async function emptyTrash(): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .not('deleted_at', 'is', null)
 
   return { error: error ? error.message : null }
 }

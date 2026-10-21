@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
       const { data: userTaskProjects } = await admin
         .from('tasks')
         .select('project_id')
+        .is('deleted_at', null)
         .or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
 
       for (const t of userTaskProjects ?? []) {
@@ -137,6 +138,7 @@ Deno.serve(async (req) => {
     const { data: allRecentTasks } = await admin
       .from('tasks')
       .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, categories, created_at, updated_at')
+      .is('deleted_at', null)
       .order('updated_at', { ascending: false })
       .limit(160)
 
@@ -162,6 +164,7 @@ Deno.serve(async (req) => {
     const { data: myTasksRaw } = await admin
       .from('tasks')
       .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, categories, created_at, updated_at')
+      .is('deleted_at', null)
       .or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
       .not('status', 'eq', 'done')
       .order('due_date', { ascending: true, nullsFirst: false })
@@ -1520,6 +1523,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
         const { data: parentTasks } = await admin
           .from('tasks')
           .select('id, project_id, assigned_to')
+          .is('deleted_at', null)
           .ilike('title', `%${params.parent_task_title}%`)
           .limit(1)
 
@@ -1758,6 +1762,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           const { data: found } = await admin
             .from('tasks')
             .select('*')
+            .is('deleted_at', null)
             .ilike('title', `%${sourceTitle}%`)
             .limit(1)
 
@@ -1819,6 +1824,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           const { data: found } = await admin
             .from('tasks')
             .select('id, title')
+            .is('deleted_at', null)
             .ilike('title', `%${cleanSearch}%`)
             .limit(1)
           taskId = found?.[0]?.id
@@ -1909,6 +1915,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
             const { data: found } = await admin
               .from('tasks')
               .select('id, title')
+              .is('deleted_at', null)
               .ilike('title', `%${cleanSearch}%`)
               .limit(1)
             taskId = found?.[0]?.id
@@ -1981,6 +1988,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
           const { data: found } = await admin
             .from('tasks')
             .select('id')
+            .is('deleted_at', null)
             .ilike('title', `%${params.task_title}%`)
             .limit(1)
           taskId = found?.[0]?.id
@@ -2001,8 +2009,26 @@ FORMATO OBRIGATÓRIO (JSON puro):
             }
           }
 
-          await admin.from('tasks').delete().eq('id', taskId)
-          actionResult = { success: true, deletedTaskId: taskId }
+          // Soft delete da tarefa e de todas as suas subtarefas recursivamente
+          const nowIso = new Date().toISOString()
+          const idsToDelete: string[] = [taskId]
+          let parentIds = [taskId]
+          while (parentIds.length > 0) {
+            const { data: children } = await admin
+              .from('tasks')
+              .select('id')
+              .in('parent_id', parentIds)
+            if (children && children.length > 0) {
+              const childIds = children.map((c: { id: string }) => c.id)
+              idsToDelete.push(...childIds)
+              parentIds = childIds
+            } else {
+              parentIds = []
+            }
+          }
+
+          await admin.from('tasks').update({ deleted_at: nowIso }).in('id', idsToDelete)
+          actionResult = { success: true, deletedTaskId: taskId, count: idsToDelete.length }
         } else {
           return json({
             reply: `Não encontrei a tarefa "${(params.task_title as string) || 'informada'}" para excluir.`,
