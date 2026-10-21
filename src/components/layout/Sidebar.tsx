@@ -39,6 +39,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const isCollaborator = user?.role === 'collaborator'
   const [collapsed, setCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -155,31 +156,35 @@ export default function Sidebar({
             <i className="fa-solid fa-link text-xs" />
           </button>
 
-          <button
-            type="button"
-            onClick={() => onSelectTab?.('documents')}
-            title="Central de Documentos"
-            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
-              activeTab === 'documents'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <i className="fa-solid fa-folder-open text-xs" />
-          </button>
+          {!isCollaborator && (
+            <>
+              <button
+                type="button"
+                onClick={() => onSelectTab?.('documents')}
+                title="Central de Documentos"
+                className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+                  activeTab === 'documents'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <i className="fa-solid fa-folder-open text-xs" />
+              </button>
 
-          <button
-            type="button"
-            onClick={() => onSelectTab?.('vendors')}
-            title="Fornecedores / Colaboradores"
-            className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
-              activeTab === 'vendors'
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <i className="fa-solid fa-user-group text-xs" />
-          </button>
+              <button
+                type="button"
+                onClick={() => onSelectTab?.('vendors')}
+                title="Fornecedores / Colaboradores"
+                className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
+                  activeTab === 'vendors'
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <i className="fa-solid fa-user-group text-xs" />
+              </button>
+            </>
+          )}
 
           <div className="my-1 h-px w-8 bg-border" />
 
@@ -312,14 +317,16 @@ export default function Sidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2">
         <div className="flex items-center justify-between px-1 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <span>Espaços / Projetos</span>
-          <button
-            type="button"
-            onClick={onCreateProject}
-            title="Novo Projeto"
-            className="flex size-5 items-center justify-center rounded hover:bg-muted hover:text-foreground"
-          >
-            <i className="fa-solid fa-plus text-xs" />
-          </button>
+          {!isCollaborator && (
+            <button
+              type="button"
+              onClick={onCreateProject}
+              title="Novo Projeto"
+              className="flex size-5 items-center justify-center rounded hover:bg-muted hover:text-foreground"
+            >
+              <i className="fa-solid fa-plus text-xs" />
+            </button>
+          )}
         </div>
 
         <div className="flex-1 space-y-0.5 overflow-y-auto py-1 text-xs">
@@ -456,35 +463,39 @@ export default function Sidebar({
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => onSelectTab?.('documents')}
-          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
-            activeTab === 'documents'
-              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          <span className="flex items-center gap-2">
-            <i className="fa-solid fa-folder-open text-xs" />
-            <span>Documentos</span>
-          </span>
-        </button>
+        {!isCollaborator && (
+          <>
+            <button
+              type="button"
+              onClick={() => onSelectTab?.('documents')}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+                activeTab === 'documents'
+                  ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <i className="fa-solid fa-folder-open text-xs" />
+                <span>Documentos</span>
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => onSelectTab?.('vendors')}
-          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
-            activeTab === 'vendors'
-              ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-          }`}
-        >
-          <span className="flex items-center gap-2">
-            <i className="fa-solid fa-user-group text-xs" />
-            <span>Fornecedores</span>
-          </span>
-        </button>
+            <button
+              type="button"
+              onClick={() => onSelectTab?.('vendors')}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer ${
+                activeTab === 'vendors'
+                  ? 'bg-primary/15 font-semibold text-primary shadow-2xs'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <i className="fa-solid fa-user-group text-xs" />
+                <span>Fornecedores</span>
+              </span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* AI Assistant Button right above user name */}

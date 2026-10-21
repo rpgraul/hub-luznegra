@@ -185,6 +185,10 @@ export default function UserManagement() {
                         <span className="rounded-md bg-primary/10 border border-primary/20 px-2 py-0.5 text-[11px] font-bold text-primary">
                           Admin
                         </span>
+                      ) : u.role === 'collaborator' ? (
+                        <span className="rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-600">
+                          Colaborador
+                        </span>
                       ) : (
                         <span className="rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground border border-border/60">
                           Membro

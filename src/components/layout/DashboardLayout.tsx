@@ -72,11 +72,21 @@ export default function DashboardLayout({
     currentTab,
   )
 
+  const isCollaborator = user?.role === 'collaborator'
+
   useEffect(() => {
-    setActiveTab(currentTab)
-  }, [currentTab])
+    if (isCollaborator && (currentTab === 'documents' || currentTab === 'vendors')) {
+      navigate('/dashboard', { replace: true })
+      setActiveTab('tasks')
+    } else {
+      setActiveTab(currentTab)
+    }
+  }, [currentTab, isCollaborator, navigate])
 
   function handleSelectTab(tab: 'tasks' | 'links' | 'documents' | 'vendors') {
+    if (isCollaborator && (tab === 'documents' || tab === 'vendors')) {
+      return
+    }
     setActiveTab(tab)
     if (tab === 'tasks') {
       navigate('/dashboard')
@@ -231,10 +241,12 @@ export default function DashboardLayout({
         activeProjectId={preferences?.active_project_id ?? null}
         onProjectChange={handleProjectChange}
         onCreateProject={() => {
+          if (isCollaborator) return
           setEditingProject(null)
           setProjectModalOpen(true)
         }}
         onEditProject={(p) => {
+          if (isCollaborator) return
           setEditingProject(p)
           setProjectModalOpen(true)
         }}

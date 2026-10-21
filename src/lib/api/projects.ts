@@ -91,3 +91,43 @@ export async function unarchiveProject(id: string): Promise<void> {
 
   if (error) throw new Error(error.message)
 }
+
+export async function getProjectMemberIds(projectId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('project_members')
+    .select('user_id')
+    .eq('project_id', projectId)
+
+  if (error) {
+    console.error('Erro ao buscar membros do projeto:', error)
+    return []
+  }
+  return (data ?? []).map((row) => row.user_id)
+}
+
+export async function setProjectMembers(projectId: string, userIds: string[]): Promise<void> {
+  // Remove membros atuais
+  const { error: delError } = await supabase
+    .from('project_members')
+    .delete()
+    .eq('project_id', projectId)
+
+  if (delError) {
+    console.error('Erro ao limpar membros do projeto:', delError)
+  }
+
+  if (userIds.length === 0) return
+
+  const rows = userIds.map((userId) => ({
+    project_id: projectId,
+    user_id: userId,
+  }))
+
+  const { error: insError } = await supabase
+    .from('project_members')
+    .insert(rows)
+
+  if (insError) {
+    console.error('Erro ao associar membros ao projeto:', insError)
+  }
+}

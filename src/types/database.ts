@@ -8,7 +8,7 @@ export type Json =
 
 export type TaskStatus = 'uncertain' | 'backlog' | 'todo' | 'in_progress' | 'review' | 'financing' | 'funded' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
-export type UserRole = 'admin' | 'member'
+export type UserRole = 'admin' | 'member' | 'collaborator'
 export type NotificationType = 'task_assigned' | 'due_date_reminder' | 'mention'
 export type DefaultView = 'gantt' | 'kanban' | 'lista' | 'calendario'
 
@@ -39,6 +39,13 @@ export type Project = {
   color: string
   owner_id: string | null
   archived: boolean
+  created_at: string
+}
+
+export type ProjectMember = {
+  id: string
+  project_id: string
+  user_id: string
   created_at: string
 }
 
@@ -231,6 +238,22 @@ export interface Database {
           color?: string
           owner_id?: string | null
           archived?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      project_members: {
+        Row: ProjectMember
+        Insert: {
+          id?: string
+          project_id: string
+          user_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          project_id?: string
+          user_id?: string
           created_at?: string
         }
         Relationships: []

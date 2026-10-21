@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { toast } from '@heroui/react'
-import { createUser } from '@/lib/supabaseClient'
+import { createUser, type UserRoleName } from '@/lib/supabaseClient'
 import { userColor } from '@/utils/colors'
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,}$/
@@ -20,6 +20,7 @@ export default function CreateUserModal({
   const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
+  const [role, setRole] = useState<UserRoleName>('member')
   const [password, setPassword] = useState('')
   const [sendPasswordEmail, setSendPasswordEmail] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,6 +33,7 @@ export default function CreateUserModal({
     setEmail('')
     setFullName('')
     setAvatarUrl('')
+    setRole('member')
     setPassword('')
     setSendPasswordEmail(true)
     setError(null)
@@ -67,6 +69,7 @@ export default function CreateUserModal({
       email: email.trim(),
       full_name: fullName.trim() || undefined,
       password,
+      role,
     })
 
     setSubmitting(false)
@@ -179,6 +182,20 @@ export default function CreateUserModal({
               placeholder="usuario@editoraluznegra.com.br"
               className="mt-1 w-full rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground placeholder:text-muted-foreground/60 focus:border-primary focus:outline-none shadow-2xs"
             />
+          </div>
+
+          {/* Papel no Sistema */}
+          <div>
+            <label className="text-xs font-bold text-foreground">Papel no Sistema</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value as UserRoleName)}
+              className="mt-1 w-full rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none shadow-2xs cursor-pointer"
+            >
+              <option value="member">Membro (Equipe interna - acesso a projetos, docs e fornecedores)</option>
+              <option value="collaborator">Colaborador (Autor, Ilustrador, Redator - apenas projetos designados)</option>
+              <option value="admin">Administrador (Acesso total e gestão de usuários)</option>
+            </select>
           </div>
 
           {/* Senha */}

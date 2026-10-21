@@ -30,7 +30,7 @@ export function clearPersistedSession(): void {
 // `admin-users` (supabase/functions/admin-users). O frontend só invoca.
 // ============================================================
 
-export type UserRoleName = 'admin' | 'member'
+export type UserRoleName = 'admin' | 'member' | 'collaborator'
 
 export interface AdminUser {
   id: string
@@ -49,6 +49,7 @@ export interface CreateUserInput {
   password: string
   username: string
   full_name?: string
+  role?: UserRoleName
 }
 
 export interface UpdateUserInput {

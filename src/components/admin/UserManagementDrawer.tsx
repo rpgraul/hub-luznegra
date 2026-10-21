@@ -223,10 +223,12 @@ export default function UserManagementDrawer({
                             className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
                               u.role === 'admin'
                                 ? 'bg-primary/10 text-primary border border-primary/20'
-                                : 'bg-muted text-muted-foreground'
+                                : u.role === 'collaborator'
+                                ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                                : 'bg-muted text-muted-foreground border border-border/60'
                             }`}
                           >
-                            {u.role === 'admin' ? 'Admin' : 'Membro'}
+                            {u.role === 'admin' ? 'Admin' : u.role === 'collaborator' ? 'Colaborador' : 'Membro'}
                           </span>
                         </td>
                         <td className="px-4 py-3">

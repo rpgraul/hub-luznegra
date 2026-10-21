@@ -164,7 +164,8 @@ export default function EditUserModal({
               onChange={(e) => setRole(e.target.value as UserRoleName)}
               className="mt-1 w-full rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none shadow-2xs cursor-pointer"
             >
-              <option value="member">Membro (Visualiza e edita projetos atribuídos)</option>
+              <option value="member">Membro (Equipe interna - acesso a projetos, docs e fornecedores)</option>
+              <option value="collaborator">Colaborador (Autor, Ilustrador, Redator - apenas projetos designados)</option>
               <option value="admin">Administrador (Acesso total e gestão de usuários)</option>
             </select>
           </div>

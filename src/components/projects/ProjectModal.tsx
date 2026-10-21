@@ -1,7 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Check } from 'lucide-react'
 import { toast, Button } from '@heroui/react'
-import { createProject, updateProject, archiveProject } from '@/lib/api/projects'
+import {
+  createProject,
+  updateProject,
+  archiveProject,
+  getProjectMemberIds,
+  setProjectMembers,
+} from '@/lib/api/projects'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { userColor } from '@/utils/colors'
 import type { Project } from '@/types/database'
 
 const PROJECT_COLORS = [
@@ -33,9 +41,11 @@ export default function ProjectModal({
   onDeleted,
 }: ProjectModalProps) {
   const isEditing = !!project
+  const { members: allUsers } = useProjectMembers(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [color, setColor] = useState(PROJECT_COLORS[0])
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -46,16 +56,24 @@ export default function ProjectModal({
         setName(project.name)
         setDescription(project.description ?? '')
         setColor(project.color || PROJECT_COLORS[0])
+        getProjectMemberIds(project.id).then(setSelectedMembers).catch(() => setSelectedMembers([]))
       } else {
         setName('')
         setDescription('')
         setColor(PROJECT_COLORS[0])
+        setSelectedMembers([])
       }
       setConfirmArchive(false)
     }
   }, [open, project])
 
   if (!open) return null
+
+  function toggleMember(userId: string) {
+    setSelectedMembers((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+    )
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -70,6 +88,7 @@ export default function ProjectModal({
           description: description.trim() || null,
           color,
         })
+        await setProjectMembers(project.id, selectedMembers)
         toast.success('Projeto atualizado com sucesso!')
         onOpenChange(false)
         onSaved(updated)
@@ -79,6 +98,7 @@ export default function ProjectModal({
           description: description.trim() || null,
           color,
         })
+        await setProjectMembers(created.id, selectedMembers)
         toast.success('Projeto criado com sucesso!')
         onOpenChange(false)
         onSaved(created)
@@ -186,6 +206,52 @@ export default function ProjectModal({
                     {color === c && <Check className="size-4 text-white" />}
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* Membros e Colaboradores Designados */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground">
+                  Membros e Colaboradores Designados
+                </label>
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedMembers.length} selecionado(s)
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Colaboradores (autores, ilustradores, redatores) só têm acesso aos projetos em que são explicitamente designados ou têm tarefas atribuídas.
+              </p>
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 rounded-lg border border-border/80 bg-background/50">
+                {allUsers.length === 0 ? (
+                  <span className="text-[11px] text-muted-foreground">Carregando usuários...</span>
+                ) : (
+                  allUsers.map((u) => {
+                    const isSelected = selectedMembers.includes(u.id)
+                    const name = u.full_name || u.username
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => toggleMember(u.id)}
+                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
+                            : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                      >
+                        <span
+                          className="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                          style={{ backgroundColor: userColor(u.id) }}
+                        >
+                          {name.charAt(0).toUpperCase()}
+                        </span>
+                        <span>{name}</span>
+                        {isSelected && <Check className="size-3 stroke-[3]" />}
+                      </button>
+                    )
+                  })
+                )}
               </div>
             </div>
 

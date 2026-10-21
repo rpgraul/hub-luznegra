@@ -12,7 +12,7 @@ interface AdminUserPayload {
   password?: string
   username?: string
   full_name?: string
-  role?: 'admin' | 'member'
+  role?: 'admin' | 'member' | 'collaborator'
   user_id?: string
   redirect_to?: string
 }
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
       }
 
       case 'create': {
-        const { email, password, username, full_name } = body
+        const { email, password, username, full_name, role } = body
         if (!email || !password || !username) {
           return json({ error: 'E-mail, senha e username são obrigatórios.' }, 400)
         }
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
           id: created.user.id,
           username,
           full_name: full_name ?? null,
-          role: 'member',
+          role: role ?? 'member',
         })
 
         if (profileError) {

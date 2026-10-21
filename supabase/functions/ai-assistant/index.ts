@@ -84,15 +84,41 @@ Deno.serve(async (req) => {
       .select('id, username, full_name, role')
       .eq('id', userId)
       .maybeSingle()
-    const isUserAdmin = requesterProfile?.role === 'admin'
+    const userRole = requesterProfile?.role || 'member'
+    const isUserAdmin = userRole === 'admin'
+    const isCollaborator = userRole === 'collaborator'
 
     const { data: allProjects } = await admin
       .from('projects')
-      .select('id, name, color, archived, created_at')
+      .select('id, name, color, owner_id, archived, created_at')
       .order('name', { ascending: true })
 
-    const projects = (allProjects ?? []).filter((p) => !p.archived)
-    const archivedProjects = (allProjects ?? []).filter((p) => p.archived)
+    let accessibleProjects = allProjects ?? []
+    if (isCollaborator) {
+      const { data: userProjectMemberships } = await admin
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', userId)
+
+      const memberProjectIds = new Set((userProjectMemberships ?? []).map((m) => m.project_id))
+
+      const { data: userTaskProjects } = await admin
+        .from('tasks')
+        .select('project_id')
+        .or(`assigned_to.eq.${userId},assignees.cs.{${userId}}`)
+
+      for (const t of userTaskProjects ?? []) {
+        if (t.project_id) memberProjectIds.add(t.project_id)
+      }
+
+      accessibleProjects = (allProjects ?? []).filter(
+        (p) => memberProjectIds.has(p.id) || p.owner_id === userId,
+      )
+    }
+
+    const accessibleProjectIds = new Set(accessibleProjects.map((p) => p.id))
+    const projects = accessibleProjects.filter((p) => !p.archived)
+    const archivedProjects = isCollaborator ? [] : accessibleProjects.filter((p) => p.archived)
 
     // Lista de membros e e-mails (para envio de e-mails e menções/notificações)
     const { data: authUsers } = await admin.auth.admin.listUsers({ perPage: 1000 })
@@ -107,7 +133,7 @@ Deno.serve(async (req) => {
       email: emailByUser.get(m.id) || null,
     }))
 
-    // Buscar tarefas recentes de todos os projetos ordenadas por última modificação (updated_at DESC)
+    // Buscar tarefas recentes de todos os projetos acessíveis ordenadas por última modificação (updated_at DESC)
     const { data: allRecentTasks } = await admin
       .from('tasks')
       .select('id, title, status, priority, due_date, start_date, assigned_to, assignees, parent_id, project_id, categories, created_at, updated_at')
@@ -128,7 +154,9 @@ Deno.serve(async (req) => {
       project_id: string
       created_at: string
       updated_at: string
-    }> = (allRecentTasks as any) ?? []
+    }> = ((allRecentTasks as any) ?? []).filter(
+      (t: { project_id: string }) => !isCollaborator || accessibleProjectIds.has(t.project_id),
+    )
 
     // Tarefas em aberto atribuídas ao usuário logado (para priorização pessoal, semana e prazos)
     const { data: myTasksRaw } = await admin
@@ -146,16 +174,44 @@ Deno.serve(async (req) => {
       .select('id, title, url, description, tags')
       .limit(40)
 
-    const { data: hubDocs } = await admin
-      .from('hub_documents')
-      .select('id, title, file_name, file_type, tags, file_url, extracted_text')
-      .limit(30)
+    let hubDocs: Array<{
+      id: string
+      title: string
+      file_name: string
+      file_type: string
+      tags: string[]
+      file_url: string
+      extracted_text: string | null
+    }> = []
 
-    const { data: hubVendors } = await admin
-      .from('hub_vendors')
-      .select('id, name, kind, phone, email, link1, link2, link3, note, pix, created_at')
-      .order('name', { ascending: true })
-      .limit(60)
+    let hubVendors: Array<{
+      id: string
+      name: string
+      kind: string
+      phone: string | null
+      email: string | null
+      link1: string | null
+      link2: string | null
+      link3: string | null
+      note: string | null
+      pix: string | null
+      created_at: string
+    }> = []
+
+    if (!isCollaborator) {
+      const { data: rawDocs } = await admin
+        .from('hub_documents')
+        .select('id, title, file_name, file_type, tags, file_url, extracted_text')
+        .limit(30)
+      hubDocs = (rawDocs as any) ?? []
+
+      const { data: rawVendors } = await admin
+        .from('hub_vendors')
+        .select('id, name, kind, phone, email, link1, link2, link3, note, pix, created_at')
+        .order('name', { ascending: true })
+        .limit(60)
+      hubVendors = (rawVendors as any) ?? []
+    }
 
     const membersMap = membersWithEmail
       .map((m) => `@${m.username} (${m.full_name || m.username}, email: ${m.email || 'não cadastrado'}, id: ${m.id})`)
@@ -240,7 +296,9 @@ Deno.serve(async (req) => {
 
     const lastUserMsg = (message || '').toLowerCase()
 
-    const docsSnippet = (() => {
+    const docsSnippet = isCollaborator
+      ? 'Acesso restrito: o usuário possui perfil de Colaborador e não tem acesso à Central de Documentos da editora.'
+      : (() => {
       // Orçamento total de contexto dos documentos: evita estourar a janela
       // do modelo (que truncaria o JSON de saída) quando há muitos docs.
       const TOTAL_BUDGET = 60000
@@ -317,20 +375,40 @@ Deno.serve(async (req) => {
       myNoDateTasks.length > 0 ? `* TAREFAS SEM PRAZO DEFINIDO (${myNoDateTasks.length}):\n${myNoDateTasks.join('\n')}` : null,
     ].filter(Boolean).join('\n\n')
 
-    const vendorsSnippet = (hubVendors ?? []).length > 0
-      ? (hubVendors ?? [])
-          .map((v) => {
-            const links = [v.link1, v.link2, v.link3].filter(Boolean).join(', ')
-            return `- [ID: ${v.id}] "${v.name}" (Tipo: ${v.kind || 'fornecedor'}, Email: ${v.email || 'N/A'}, Tel: ${v.phone || 'N/A'}, PIX: ${v.pix || 'N/A'}${links ? `, Portfólio/Links: ${links}` : ''}${v.note ? `, Obs: "${v.note}"` : ''})`
-          })
-          .join('\n')
-      : 'Nenhum fornecedor/colaborador cadastrado.'
+    const vendorsSnippet = isCollaborator
+      ? 'Acesso restrito: o usuário possui perfil de Colaborador e não tem acesso à lista de Fornecedores da editora.'
+      : (hubVendors ?? []).length > 0
+          ? (hubVendors ?? [])
+              .map((v) => {
+                const links = [v.link1, v.link2, v.link3].filter(Boolean).join(', ')
+                return `- [ID: ${v.id}] "${v.name}" (Tipo: ${v.kind || 'fornecedor'}, Email: ${v.email || 'N/A'}, Tel: ${v.phone || 'N/A'}, PIX: ${v.pix || 'N/A'}${links ? `, Portfólio/Links: ${links}` : ''}${v.note ? `, Obs: "${v.note}"` : ''})`
+              })
+              .join('\n')
+          : 'Nenhum fornecedor/colaborador cadastrado.'
+
+    const userRoleDesc = isUserAdmin
+      ? 'Administrador (Acesso total)'
+      : isCollaborator
+      ? 'Colaborador (Autor, Ilustrador, Redator - Acesso restrito apenas aos projetos designados)'
+      : 'Membro da Equipe (Acesso operacional normal)'
+
+    const collaboratorRules = isCollaborator
+      ? `
+REGRAS E LIMITAÇÕES DO PERFIL DESTE USUÁRIO (COLABORADOR):
+- O usuário possui perfil de COLABORADOR (autor, ilustrador ou redator).
+- Ele tem acesso estritamente aos projetos designados a ele (${projects.map((p) => `"${p.name}"`).join(', ') || 'Nenhum projeto no momento'}).
+- Ele NÃO tem acesso à Central de Documentos nem a Fornecedores da editora.
+- Ele NÃO tem permissão para criar, arquivar ou deletar projetos.
+- Ele NÃO tem permissão para cadastrar fornecedores nem criar contas de usuários.
+- Se ele pedir qualquer uma dessas ações ou informações de documentos/fornecedores/outros projetos, recuse cordialmente explicando que o perfil de colaborador possui acesso direcionado ao cronograma das tarefas em que atua e não tem permissão para essa ação.
+`
+      : ''
 
     // 2. Monta o system prompt completo
     const systemPrompt = `Você é o Lorde Camarão, assistente de IA do Hub da Editora Luz Negra.
 Data e hora atual (Horário de Brasília): ${nowPtBr} (ISO: ${nowIso}).
-Hoje: ${todayIso}. Usuário logado: ${requesterProfile ? `@${requesterProfile.username} (${requesterProfile.full_name || requesterProfile.username})` : userId} (ID: ${userId}). Admin: ${isUserAdmin ? 'Sim' : 'Não'}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
-
+Hoje: ${todayIso}. Usuário logado: ${requesterProfile ? `@${requesterProfile.username} (${requesterProfile.full_name || requesterProfile.username})` : userId} (ID: ${userId}). Papel: ${userRoleDesc}. Projeto ativo ID: ${context.projectId || 'Nenhum'}.
+${collaboratorRules}
 Projetos Ativos:
 ${projectsMap || 'Nenhum'}
 
@@ -1186,6 +1264,21 @@ FORMATO OBRIGATÓRIO (JSON puro):
     if (aiParsed.action && aiParsed.action.type !== 'none') {
       const { type, params = {} } = aiParsed.action
 
+      if (isCollaborator) {
+        if (
+          type === 'create_project' ||
+          type === 'delete_project' ||
+          type === 'archive_project' ||
+          type === 'create_vendor' ||
+          type === 'create_user'
+        ) {
+          return json({
+            reply: 'Seu perfil de Colaborador não possui permissão para executar esta ação no Hub (restrita a administradores e membros da equipe).',
+            action: { type: 'none' },
+          })
+        }
+      }
+
       // Insere subtarefas em lotes para não estourar limites de payload,
       // retornando quantas foram criadas e quais falharam.
       async function insertSubtasks(
@@ -1238,6 +1331,12 @@ FORMATO OBRIGATÓRIO (JSON puro):
         if (!projectIdToUse) {
           return json({
             reply: 'Não encontrei nenhum projeto para criar a tarefa. Peça para criar um projeto primeiro.',
+            action: { type: 'none' },
+          })
+        }
+        if (isCollaborator && !accessibleProjectIds.has(projectIdToUse)) {
+          return json({
+            reply: 'Você não possui permissão para criar tarefas neste projeto, pois ele não foi designado a você.',
             action: { type: 'none' },
           })
         }
@@ -1370,6 +1469,12 @@ FORMATO OBRIGATÓRIO (JSON puro):
         if (!parent) {
           return json({
             reply: `Não encontrei a tarefa "${params.parent_task_title}". Verifique o título e tente de novo.`,
+            action: { type: 'none' },
+          })
+        }
+        if (isCollaborator && !accessibleProjectIds.has(parent.project_id)) {
+          return json({
+            reply: `Você não possui permissão para modificar tarefas deste projeto, pois ele não foi designado a você.`,
             action: { type: 'none' },
           })
         }
@@ -1662,6 +1767,20 @@ FORMATO OBRIGATÓRIO (JSON puro):
         }
 
         if (taskId) {
+          if (isCollaborator) {
+            const { data: targetTask } = await admin
+              .from('tasks')
+              .select('id, project_id')
+              .eq('id', taskId)
+              .maybeSingle()
+            if (!targetTask || !accessibleProjectIds.has(targetTask.project_id)) {
+              return json({
+                reply: 'Você não possui permissão para modificar esta tarefa, pois ela não pertence aos seus projetos designados.',
+                action: { type: 'none' },
+              })
+            }
+          }
+
           const patch: Record<string, unknown> = {}
           const normStatus = normalizeStatus(params.status)
           if (normStatus) patch.status = normStatus
@@ -1738,6 +1857,17 @@ FORMATO OBRIGATÓRIO (JSON puro):
           }
 
           if (taskId) {
+            if (isCollaborator) {
+              const { data: targetTask } = await admin
+                .from('tasks')
+                .select('id, project_id')
+                .eq('id', taskId)
+                .maybeSingle()
+              if (!targetTask || !accessibleProjectIds.has(targetTask.project_id)) {
+                continue
+              }
+            }
+
             const patch: Record<string, unknown> = {}
             const normItemStatus = normalizeStatus(item.status)
             if (normItemStatus) patch.status = normItemStatus
@@ -1799,6 +1929,20 @@ FORMATO OBRIGATÓRIO (JSON puro):
         }
 
         if (taskId) {
+          if (isCollaborator) {
+            const { data: targetTask } = await admin
+              .from('tasks')
+              .select('id, project_id')
+              .eq('id', taskId)
+              .maybeSingle()
+            if (!targetTask || !accessibleProjectIds.has(targetTask.project_id)) {
+              return json({
+                reply: 'Você não possui permissão para excluir esta tarefa.',
+                action: { type: 'none' },
+              })
+            }
+          }
+
           await admin.from('tasks').delete().eq('id', taskId)
           actionResult = { success: true, deletedTaskId: taskId }
         } else {
@@ -1850,7 +1994,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
             id: createdAuth.user.id,
             username: cleanUsername,
             full_name: (params.full_name as string) || cleanUsername,
-            role: (params.role as 'admin' | 'member') || 'member',
+            role: (params.role as 'admin' | 'member' | 'collaborator') || 'member',
           })
           actionResult = {
             success: true,
