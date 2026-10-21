@@ -5,6 +5,7 @@ export interface ProjectMember {
   username: string
   full_name: string | null
   avatar_url?: string | null
+  role?: 'admin' | 'member' | 'collaborator'
 }
 
 export async function listProjectMembers(

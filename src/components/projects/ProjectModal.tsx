@@ -212,48 +212,52 @@ export default function ProjectModal({
               </div>
             </div>
 
-            {/* Membros e Colaboradores Designados */}
+            {/* Colaboradores Designados */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-foreground">
-                  Membros e Colaboradores Designados
+                  Colaboradores Designados
                 </label>
                 <span className="text-[10px] text-muted-foreground">
-                  {selectedMembers.length} selecionado(s)
+                  {selectedMembers.filter((id) => allUsers.find((u) => u.id === id)?.role === 'collaborator').length} selecionado(s)
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Colaboradores (autores, ilustradores, redatores) só têm acesso aos projetos em que são explicitamente designados ou têm tarefas atribuídas.
+                Selecione os colaboradores (autores, ilustradores, redatores) que terão acesso a este projeto. Membros da equipe e administradores já têm acesso total a todos os projetos por padrão.
               </p>
               <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 rounded-lg border border-border/80 bg-background/50">
-                {allUsers.length === 0 ? (
-                  <span className="text-[11px] text-muted-foreground">Carregando usuários...</span>
+                {allUsers.filter((u) => u.role === 'collaborator').length === 0 ? (
+                  <span className="text-[11px] text-muted-foreground p-1">
+                    Nenhum colaborador cadastrado ainda no sistema. Novos colaboradores podem ser criados na aba de Usuários com o papel &quot;Colaborador&quot;.
+                  </span>
                 ) : (
-                  allUsers.map((u) => {
-                    const isSelected = selectedMembers.includes(u.id)
-                    const name = u.full_name || u.username
-                    return (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => toggleMember(u.id)}
-                        className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
-                            : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
-                        }`}
-                      >
-                        <span
-                          className="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
-                          style={{ backgroundColor: userColor(u.id) }}
+                  allUsers
+                    .filter((u) => u.role === 'collaborator')
+                    .map((u) => {
+                      const isSelected = selectedMembers.includes(u.id)
+                      const name = u.full_name || u.username
+                      return (
+                        <button
+                          key={u.id}
+                          type="button"
+                          onClick={() => toggleMember(u.id)}
+                          className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition cursor-pointer ${
+                            isSelected
+                              ? 'bg-primary text-primary-foreground shadow-2xs font-semibold'
+                              : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
                         >
-                          {name.charAt(0).toUpperCase()}
-                        </span>
-                        <span>{name}</span>
-                        {isSelected && <Check className="size-3 stroke-[3]" />}
-                      </button>
-                    )
-                  })
+                          <span
+                            className="flex size-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                            style={{ backgroundColor: userColor(u.id) }}
+                          >
+                            {name.charAt(0).toUpperCase()}
+                          </span>
+                          <span>{name}</span>
+                          {isSelected && <Check className="size-3 stroke-[3]" />}
+                        </button>
+                      )
+                    })
                 )}
               </div>
             </div>
