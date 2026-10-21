@@ -4,7 +4,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { json, handleOptions } from '../_shared/cors.ts'
 
-const FROM = 'no-reply@hub.luznegra.com.br'
+const FROM = 'Hub - Editora Luz Negra <no-reply@hub.luznegra.com.br>'
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 Deno.serve(async (req) => {
@@ -46,13 +46,15 @@ Deno.serve(async (req) => {
       return json({ success: false, error: 'A mensagem é obrigatória.' }, 400)
     }
 
+    const text = html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, '').trim()
+
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ from: FROM, to, subject, html }),
+      body: JSON.stringify({ from: FROM, to, subject, html, text }),
     })
 
     const data = (await res.json()) as { id?: string; message?: string }

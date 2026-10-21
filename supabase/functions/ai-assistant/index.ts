@@ -1016,6 +1016,20 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
       if (resendApiKey) {
         try {
+          const plainText = [
+            `Olá, ${recipientName}!`,
+            '',
+            finalTaskTitle ? `Tarefa: ${finalTaskTitle}` : '',
+            finalDueDate ? `Prazo final: ${finalDueDate}` : '',
+            '',
+            formattedBody.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+(>|$)/g, '').trim(),
+            '',
+            taskLink ? `Abrir tarefa no Hub: ${taskLink}` : '',
+            '',
+            '--',
+            'Editora Luz Negra • Hub',
+          ].filter((line) => line !== undefined && line !== null).join('\n')
+
           const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
@@ -1023,10 +1037,11 @@ FORMATO OBRIGATÓRIO (JSON puro):
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: 'no-reply@hub.luznegra.com.br',
+              from: 'Hub - Editora Luz Negra <no-reply@hub.luznegra.com.br>',
               to: targetEmail,
               subject,
               html: styledTemplate,
+              text: plainText,
             }),
           })
           if (res.ok) {
