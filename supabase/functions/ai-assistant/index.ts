@@ -326,8 +326,11 @@ DIRETRIZES DE RESPOSTA E PODERES:
       "categories"?: string[] (ex: ["ig", "rpg"]),
       "due_date"?: "YYYY-MM-DD",
       "start_date"?: "YYYY-MM-DD",
-      "subtasks"?: string[]
+      "subtasks"?: string[],
+      "send_email"?: boolean (coloque true se o usuário pedir para enviar e-mail com os detalhes da tarefa ou avisar por e-mail),
+      "email_recipient"?: string (username, e-mail ou nome de quem deve receber o e-mail; padrão é o assigned_to)
     }
+    REGRA CRÍTICA PARA E-MAIL NA CRIAÇÃO: Se o usuário pedir para criar a tarefa E enviar e-mail (ex: "crie a tarefa X e me mande por e-mail"), NUNCA divida em dois turnos nem diga que só faz uma ação por vez! Utilize a ação "create_task" com "send_email": true. O sistema criará a tarefa e enviará o e-mail automaticamente na mesma execução.
     LIMITE: no máximo 20 subtarefas por resposta. Se o usuário pedir mais,
     crie a tarefa com as 20 primeiras e avise no "reply" que o restante
     ficou pendente, pedindo confirmação para continuar. Nunca invente
@@ -869,6 +872,188 @@ FORMATO OBRIGATÓRIO (JSON puro):
       }
     }
 
+    // Converte datas ISO para DD/MM/AAAA para exibição amigável
+    function formatPtBrDate(dateStr: string | null | undefined): string {
+      if (!dateStr) return 'Não definido'
+      const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (m) return `${m[3]}/${m[2]}/${m[1]}`
+      const m2 = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
+      if (m2) return dateStr
+      return dateStr
+    }
+
+    // Dispara e-mail de notificação profissional via Resend
+    async function dispatchEmailNotification({
+      recipient,
+      subject,
+      bodyHtml,
+      taskId,
+      taskTitle,
+      taskDueDate,
+    }: {
+      recipient: string
+      subject: string
+      bodyHtml: string
+      taskId?: string | null
+      taskTitle?: string | null
+      taskDueDate?: string | null
+    }): Promise<{ success: boolean; direct: boolean; targetEmail?: string; error?: string }> {
+      const cleanRecipient = String(recipient || '').trim()
+      let targetEmail: string | null = null
+      const targetUser = membersWithEmail.find(
+        (m) =>
+          m.email?.toLowerCase() === cleanRecipient.toLowerCase() ||
+          m.username.toLowerCase() === cleanRecipient.replace(/^@/, '').toLowerCase() ||
+          m.id === cleanRecipient ||
+          (m.full_name && m.full_name.toLowerCase().includes(cleanRecipient.toLowerCase()))
+      )
+
+      if (targetUser?.email) {
+        targetEmail = targetUser.email
+      } else if (cleanRecipient.includes('@') && cleanRecipient.includes('.')) {
+        targetEmail = cleanRecipient
+      }
+
+      if (!targetEmail) {
+        return { success: false, direct: false, error: `Não foi possível encontrar o e-mail para "${cleanRecipient}".` }
+      }
+
+      const formattedBody = bodyHtml.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')
+      const recipientName = targetUser?.full_name || targetUser?.username || cleanRecipient.replace(/^@/, '')
+      const finalTaskTitle = taskTitle || ''
+      const taskLink = taskId ? `https://hub.luznegra.com.br/task/${taskId}` : ''
+      const finalDueDate = taskDueDate ? formatPtBrDate(taskDueDate) : null
+
+      const styledTemplate = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 32px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
+          <tr>
+            <td style="padding: 24px 32px; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-bottom: 1px solid #4338ca;">
+              <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td>
+                    <div style="font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">
+                      HUB <span style="font-size: 13px; font-weight: 500; color: #a5b4fc; margin-left: 6px;">Editora Luz Negra</span>
+                    </div>
+                  </td>
+                  <td align="right">
+                    <span style="font-size: 11px; font-weight: 600; color: #c7d2fe; background-color: rgba(99, 102, 241, 0.3); border: 1px solid rgba(165, 180, 252, 0.2); padding: 4px 10px; border-radius: 20px;">Notificação</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 32px; font-size: 14px; line-height: 1.6; color: #e2e8f0;">
+              <p style="margin-top: 0; margin-bottom: 20px; font-size: 15px; color: #f8fafc;">
+                Olá, <strong>${recipientName}</strong>,
+              </p>
+              ${
+                finalTaskTitle
+                  ? `<div style="margin: 20px 0; padding: 16px 20px; background-color: #0f172a; border-left: 4px solid #7b68ee; border-radius: 6px; border: 1px solid #334155;">
+                      <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px;">Tarefa</div>
+                      <div style="font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: ${finalDueDate ? '8px' : '0'};">
+                        ${finalTaskTitle}
+                      </div>
+                      ${
+                        finalDueDate
+                          ? `<div style="font-size: 13px; color: #cbd5e1;">
+                              <span style="color: #94a3b8;">Prazo final:</span> <strong style="color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px;">${finalDueDate}</strong>
+                            </div>`
+                          : ''
+                      }
+                    </div>`
+                  : ''
+              }
+              <div style="margin: 20px 0; color: #cbd5e1;">
+                ${
+                  formattedBody.includes('<p>') || formattedBody.includes('<div>')
+                    ? formattedBody
+                    : `<p style="margin: 0;">${formattedBody.replace(/\n/g, '<br/>')}</p>`
+                }
+              </div>
+              ${
+                taskLink
+                  ? `<div style="margin: 32px 0 20px; text-align: center;">
+                      <a href="${taskLink}" target="_blank" style="display: inline-block; background-color: #7b68ee; color: #ffffff; padding: 12px 28px; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(123, 104, 238, 0.35);">
+                        Abrir Tarefa no Hub &rarr;
+                      </a>
+                    </div>
+                    <p style="margin-top: 12px; font-size: 11px; color: #64748b; text-align: center;">
+                      Ou cole este link no navegador: <br/>
+                      <a href="${taskLink}" style="color: #818cf8; text-decoration: underline; word-break: break-all;">${taskLink}</a>
+                    </p>`
+                  : ''
+              }
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0f172a; border-top: 1px solid #334155; font-size: 12px; color: #64748b; text-align: center;">
+              <p style="margin: 0 0 4px;">Mensagem enviada automaticamente pelo <strong>Lorde Camarão</strong>.</p>
+              <p style="margin: 0;">© ${new Date().getFullYear()} Editora Luz Negra • Hub</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim()
+
+      const resendApiKey = Deno.env.get('RESEND_API_KEY')
+      let emailSentDirectly = false
+
+      if (resendApiKey) {
+        try {
+          const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'no-reply@hub.luznegra.com.br',
+              to: targetEmail,
+              subject,
+              html: styledTemplate,
+            }),
+          })
+          if (res.ok) {
+            emailSentDirectly = true
+          } else {
+            console.warn('Resend direct send failed, queuing instead:', await res.text())
+          }
+        } catch (resendErr) {
+          console.warn('Resend direct fetch error, fallback to queue:', resendErr)
+        }
+      }
+
+      try {
+        await admin.from('email_queue').insert({
+          to_email: targetEmail,
+          subject,
+          html: styledTemplate,
+          task_id: taskId || null,
+          status: emailSentDirectly ? 'sent' : 'pending',
+        })
+      } catch {
+        // ignora
+      }
+
+      return { success: true, direct: emailSentDirectly, targetEmail }
+    }
+
     if (aiParsed.action && aiParsed.action.type !== 'none') {
       const { type, params = {} } = aiParsed.action
 
@@ -1016,6 +1201,23 @@ FORMATO OBRIGATÓRIO (JSON puro):
             aiParsed.reply = `${aiParsed.reply || 'Tarefa criada.'} Atenção: ${parts.join('; ')}. Peça "continue criando as subtarefas restantes".`
           }
 
+          let emailInfo: { sent: boolean; direct?: boolean; recipient?: string } | undefined
+          if (createdTasks.length > 0 && (params.send_email || params.notify_email || params.email_recipient)) {
+            const firstTask = createdTasks[0] as { id: string; title: string; due_date: string | null; start_date: string | null; assigned_to: string | null }
+            const emailRecipient = (params.email_recipient as string) || (params.assigned_to as string) || firstTask.assigned_to || userId
+            const emailSubject = (params.email_subject as string) || `Nova tarefa criada: ${firstTask.title}`
+            const emailBody = (params.email_body as string) || `A tarefa <strong>${firstTask.title}</strong> foi criada com sucesso no Hub.`
+            const emailRes = await dispatchEmailNotification({
+              recipient: String(emailRecipient),
+              subject: emailSubject,
+              bodyHtml: emailBody,
+              taskId: firstTask.id,
+              taskTitle: firstTask.title,
+              taskDueDate: firstTask.due_date,
+            })
+            emailInfo = { sent: emailRes.success, direct: emailRes.direct, recipient: emailRes.targetEmail }
+          }
+
           actionResult = {
             success: subtasksFailed === 0,
             count: createdTasks.length,
@@ -1024,6 +1226,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
             subtasksFailed,
             errors: insertErrors,
             truncated: truncatedOutput,
+            email: emailInfo,
           }
         }
       } else if (type === 'break_down_subtasks' && params.parent_task_title && Array.isArray(params.subtasks)) {
@@ -1439,203 +1642,41 @@ FORMATO OBRIGATÓRIO (JSON puro):
       } else if (type === 'send_email') {
         const recipient = String(params.recipient || '').trim()
         const subject = String(params.subject || 'Notificação do Hub - Editora Luz Negra').trim()
-        let bodyHtml = String(params.body || '').trim()
+        const bodyHtml = String(params.body || '').trim()
         const taskId = (params.task_id as string) || null
 
-        // Descobre o e-mail do destinatário
-        let targetEmail: string | null = null
-        let targetUser = membersWithEmail.find(
-          (m) =>
-            m.email?.toLowerCase() === recipient.toLowerCase() ||
-            m.username.toLowerCase() === recipient.replace(/^@/, '').toLowerCase() ||
-            m.id === recipient ||
-            (m.full_name && m.full_name.toLowerCase().includes(recipient.toLowerCase()))
-        )
-
-        if (targetUser?.email) {
-          targetEmail = targetUser.email
-        } else if (recipient.includes('@') && recipient.includes('.')) {
-          targetEmail = recipient
-        }
-
-        if (!targetEmail) {
-          return json({
-            reply: `Não foi possível encontrar o e-mail para o usuário "${recipient}".`,
-            action: { type: 'none' },
-          })
-        }
-
         // Busca dados completos da tarefa caso taskId esteja presente
-        let taskData: { title: string; due_date: string | null; start_date: string | null; status: string; priority: string; project_id: string } | null = null
+        let taskData: { title: string; due_date: string | null } | null = null
         if (taskId) {
           const { data: t } = await admin
             .from('tasks')
-            .select('title, due_date, start_date, status, priority, project_id')
+            .select('title, due_date')
             .eq('id', taskId)
             .maybeSingle()
           if (t) taskData = t
         }
 
-        function formatPtBrDate(dateStr: string | null | undefined): string {
-          if (!dateStr) return 'Não definido'
-          const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
-          if (m) return `${m[3]}/${m[2]}/${m[1]}`
-          const m2 = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})/)
-          if (m2) return dateStr
-          return dateStr
-        }
+        const emailResult = await dispatchEmailNotification({
+          recipient,
+          subject,
+          bodyHtml,
+          taskId,
+          taskTitle: taskData?.title || null,
+          taskDueDate: taskData?.due_date || null,
+        })
 
-        // Converte datas no formato ISO dentro do texto do e-mail para DD/MM/YYYY
-        bodyHtml = bodyHtml.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, '$3/$2/$1')
-
-        const recipientName = targetUser?.full_name || targetUser?.username || recipient.replace(/^@/, '')
-        const taskTitle = taskData?.title || ''
-        const taskLink = taskId ? `https://hub.luznegra.com.br/task/${taskId}` : ''
-        const taskDueDate = taskData?.due_date ? formatPtBrDate(taskData.due_date) : null
-
-        // Monta template HTML profissional com identidade visual Hub / Editora Luz Negra
-        const styledTemplate = `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${subject}</title>
-</head>
-<body style="margin: 0; padding: 0; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f8fafc;">
-  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 32px 16px;">
-    <tr>
-      <td align="center">
-        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; background-color: #1e293b; border: 1px solid #334155; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);">
-          <!-- Header -->
-          <tr>
-            <td style="padding: 24px 32px; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-bottom: 1px solid #4338ca;">
-              <table width="100%" border="0" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td>
-                    <div style="font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: #ffffff;">
-                      HUB <span style="font-size: 13px; font-weight: 500; color: #a5b4fc; margin-left: 6px;">Editora Luz Negra</span>
-                    </div>
-                  </td>
-                  <td align="right">
-                    <span style="font-size: 11px; font-weight: 600; color: #c7d2fe; background-color: rgba(99, 102, 241, 0.3); border: 1px solid rgba(165, 180, 252, 0.2); padding: 4px 10px; border-radius: 20px;">Notificação</span>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Body Content -->
-          <tr>
-            <td style="padding: 32px; font-size: 14px; line-height: 1.6; color: #e2e8f0;">
-              <p style="margin-top: 0; margin-bottom: 20px; font-size: 15px; color: #f8fafc;">
-                Olá, <strong>${recipientName}</strong>,
-              </p>
-
-              ${
-                taskTitle
-                  ? `<div style="margin: 20px 0; padding: 16px 20px; background-color: #0f172a; border-left: 4px solid #7b68ee; border-radius: 6px; border: 1px solid #334155;">
-                      <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #94a3b8; letter-spacing: 0.5px; margin-bottom: 4px;">Tarefa</div>
-                      <div style="font-size: 16px; font-weight: 700; color: #ffffff; margin-bottom: ${taskDueDate ? '8px' : '0'};">
-                        ${taskTitle}
-                      </div>
-                      ${
-                        taskDueDate
-                          ? `<div style="font-size: 13px; color: #cbd5e1;">
-                              <span style="color: #94a3b8;">Prazo final:</span> <strong style="color: #f59e0b; background: rgba(245, 158, 11, 0.15); padding: 2px 6px; border-radius: 4px;">${taskDueDate}</strong>
-                            </div>`
-                          : ''
-                      }
-                    </div>`
-                  : ''
-              }
-
-              <div style="margin: 20px 0; color: #cbd5e1;">
-                ${
-                  bodyHtml.includes('<p>') || bodyHtml.includes('<div>')
-                    ? bodyHtml
-                    : `<p style="margin: 0;">${bodyHtml.replace(/\n/g, '<br/>')}</p>`
-                }
-              </div>
-
-              ${
-                taskLink
-                  ? `<div style="margin: 32px 0 20px; text-align: center;">
-                      <a href="${taskLink}" target="_blank" style="display: inline-block; background-color: #7b68ee; color: #ffffff; padding: 12px 28px; font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 12px rgba(123, 104, 238, 0.35);">
-                        Abrir Tarefa no Hub &rarr;
-                      </a>
-                    </div>
-                    <p style="margin-top: 12px; font-size: 11px; color: #64748b; text-align: center;">
-                      Ou cole este link no navegador: <br/>
-                      <a href="${taskLink}" style="color: #818cf8; text-decoration: underline; word-break: break-all;">${taskLink}</a>
-                    </p>`
-                  : ''
-              }
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 20px 32px; background-color: #0f172a; border-top: 1px solid #334155; font-size: 12px; color: #64748b; text-align: center;">
-              <p style="margin: 0 0 4px;">Mensagem enviada automaticamente pelo <strong>Lorde Camarão</strong>.</p>
-              <p style="margin: 0;">© ${new Date().getFullYear()} Editora Luz Negra • Hub</p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-        `.trim()
-
-        // Envia via Resend diretamente se a chave estiver presente
-        const resendApiKey = Deno.env.get('RESEND_API_KEY')
-        let emailSentDirectly = false
-
-        if (resendApiKey) {
-          try {
-            const res = await fetch('https://api.resend.com/emails', {
-              method: 'POST',
-              headers: {
-                Authorization: `Bearer ${resendApiKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                from: 'no-reply@hub.luznegra.com.br',
-                to: targetEmail,
-                subject,
-                html: styledTemplate,
-              }),
-            })
-            if (res.ok) {
-              emailSentDirectly = true
-            } else {
-              console.warn('Resend direct send failed, queuing instead:', await res.text())
-            }
-          } catch (resendErr) {
-            console.warn('Resend direct fetch error, fallback to queue:', resendErr)
-          }
-        }
-
-        // Se houver tabela email_queue, registra como log
-        try {
-          await admin.from('email_queue').insert({
-            to_email: targetEmail,
-            subject,
-            html: styledTemplate,
-            task_id: taskId,
-            status: emailSentDirectly ? 'sent' : 'pending',
+        if (!emailResult.success) {
+          return json({
+            reply: emailResult.error || `Não foi possível encontrar o e-mail para o usuário "${recipient}".`,
+            action: { type: 'none' },
           })
-        } catch {
-          // ignora caso a tabela email_queue seja opcional
         }
 
         actionResult = {
           success: true,
-          recipient: targetEmail,
+          recipient: emailResult.targetEmail,
           subject,
-          direct: emailSentDirectly,
+          direct: emailResult.direct,
         }
       } else if (type === 'send_notification') {
         const recipient = String(params.recipient || '').trim()
