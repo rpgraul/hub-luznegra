@@ -212,23 +212,23 @@ export default function ProjectModal({
               </div>
             </div>
 
-            {/* Colaboradores Designados */}
+            {/* Membros com acesso */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-semibold text-foreground">
-                  Colaboradores Designados
+                  Membros com acesso
                 </label>
                 <span className="text-[10px] text-muted-foreground">
                   {selectedMembers.filter((id) => allUsers.find((u) => u.id === id)?.role === 'collaborator').length} selecionado(s)
                 </span>
               </div>
               <p className="text-[11px] text-muted-foreground">
-                Selecione os colaboradores (autores, ilustradores, redatores) que terão acesso a este projeto. Membros da equipe e administradores já têm acesso total a todos os projetos por padrão.
+                A equipe da Luz Negra tem acesso a tudo. Selecione abaixo os membros que terão acesso a este projeto.
               </p>
               <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-1.5 rounded-lg border border-border/80 bg-background/50">
                 {allUsers.filter((u) => u.role === 'collaborator').length === 0 ? (
                   <span className="text-[11px] text-muted-foreground p-1">
-                    Nenhum colaborador cadastrado ainda no sistema. Novos colaboradores podem ser criados na aba de Usuários com o papel &quot;Colaborador&quot;.
+                    Nenhum membro cadastrado para acesso específico no momento.
                   </span>
                 ) : (
                   allUsers
