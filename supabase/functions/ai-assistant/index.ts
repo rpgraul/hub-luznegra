@@ -375,9 +375,13 @@ FORMATO OBRIGATÓRIO (JSON puro):
   }
 }`
 
-    // 3. Chamada ao DeepSeek / OpenAI
-    const rawKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
-    const deepseekApiKey = rawKey.trim().replace(/^["']|["']$/g, '')
+    // 3. Chamada à IA (Groq como principal, DeepSeek / OpenAI como fallback)
+    const rawGroqKey = Deno.env.get('GROQ_API_KEY') || ''
+    const groqApiKey = rawGroqKey.trim().replace(/^["']|["']$/g, '')
+
+    const rawDeepseekKey = Deno.env.get('DEEPSEEK_API_KEY') || Deno.env.get('OPENAI_API_KEY') || ''
+    const deepseekApiKey = rawDeepseekKey.trim().replace(/^["']|["']$/g, '')
+
     let aiParsed: AIResponseStructure = {
       reply: 'Não foi possível interpretar o comando.',
       action: { type: 'none' },
@@ -409,62 +413,111 @@ FORMATO OBRIGATÓRIO (JSON puro):
       return depth > 0 || inStr
     }
 
-    if (deepseekApiKey) {
-      const endpoint = Deno.env.get('DEEPSEEK_API_KEY')
-        ? 'https://api.deepseek.com/chat/completions'
-        : 'https://api.openai.com/v1/chat/completions'
-
-      const model =
-        Deno.env.get('DEEPSEEK_MODEL') ||
-        (Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-chat' : 'gpt-4o-mini')
-
+    if (groqApiKey || deepseekApiKey) {
       const apiMessages = [
         { role: 'system', content: systemPrompt },
         ...history.slice(-4).map((h) => ({ role: h.role, content: h.content })),
         { role: 'user', content: message },
       ]
 
-      const maxTokens = parseInt(Deno.env.get('DEEPSEEK_MAX_TOKENS') || '8000', 10) || 8000
-      const aiResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${deepseekApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: apiMessages,
-          response_format: { type: 'json_object' },
-          temperature: 0.1,
-          max_tokens: maxTokens,
-        }),
-      })
-
-      if (!aiResponse.ok) {
-        const errorText = await aiResponse.text()
-        console.error('DeepSeek API Error:', aiResponse.status, errorText)
-        let errorMsg = `Erro na API DeepSeek (${aiResponse.status})`
+      async function callProvider(
+        providerName: 'Groq' | 'DeepSeek',
+        apiKey: string,
+        endpoint: string,
+        model: string,
+        maxTokens: number,
+      ): Promise<{ ok: true; content: string } | { ok: false; status: number; error: string }> {
         try {
-          const errJson = JSON.parse(errorText)
-          if (errJson.error?.message) {
-            errorMsg = errJson.error.message
+          const resp = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model,
+              messages: apiMessages,
+              response_format: { type: 'json_object' },
+              temperature: 0.1,
+              max_tokens: maxTokens,
+            }),
+          })
+
+          if (!resp.ok) {
+            const errorText = await resp.text()
+            console.error(`${providerName} API Error:`, resp.status, errorText)
+            let errorMsg = `Erro na API ${providerName} (${resp.status})`
+            try {
+              const errJson = JSON.parse(errorText)
+              if (errJson.error?.message) {
+                errorMsg = errJson.error.message
+              }
+            } catch {
+              errorMsg = errorText || errorMsg
+            }
+
+            if (resp.status === 402 || errorMsg.toLowerCase().includes('balance')) {
+              errorMsg = `Saldo insuficiente na conta da ${providerName}.`
+            } else if (resp.status === 429) {
+              errorMsg = `Limite de requisições excedido na ${providerName} (Rate Limit).`
+            }
+
+            return { ok: false, status: resp.status, error: errorMsg }
           }
-        } catch {
-          errorMsg = errorText || errorMsg
-        }
 
-        if (aiResponse.status === 402 || errorMsg.toLowerCase().includes('balance')) {
-          errorMsg = 'Saldo insuficiente na conta da DeepSeek. É necessário recarregar créditos no portal platform.deepseek.com.'
+          const data = await resp.json()
+          const rawContent = data.choices?.[0]?.message?.content || '{}'
+          return { ok: true, content: rawContent }
+        } catch (err: unknown) {
+          const errorMsg = err instanceof Error ? err.message : String(err)
+          console.error(`Falha de conexão com ${providerName}:`, errorMsg)
+          return { ok: false, status: 500, error: `Falha de conexão com ${providerName}: ${errorMsg}` }
         }
+      }
 
+      let rawContent = ''
+      let lastError = ''
+
+      // 1. Tenta Groq (principal) se a chave estiver configurada
+      if (groqApiKey) {
+        const groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions'
+        const groqModel = Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile'
+        const groqMaxTokens = parseInt(Deno.env.get('GROQ_MAX_TOKENS') || '8000', 10) || 8000
+
+        const res = await callProvider('Groq', groqApiKey, groqEndpoint, groqModel, groqMaxTokens)
+        if (res.ok) {
+          rawContent = res.content
+        } else {
+          lastError = res.error
+          console.warn(`Groq falhou (${res.error}). Tentando fallback...`)
+        }
+      }
+
+      // 2. Se Groq não retornou ou não está configurada, tenta DeepSeek (fallback)
+      if (!rawContent && deepseekApiKey) {
+        const dsEndpoint = Deno.env.get('DEEPSEEK_API_KEY')
+          ? 'https://api.deepseek.com/chat/completions'
+          : 'https://api.openai.com/v1/chat/completions'
+        const dsModel =
+          Deno.env.get('DEEPSEEK_MODEL') ||
+          (Deno.env.get('DEEPSEEK_API_KEY') ? 'deepseek-chat' : 'gpt-4o-mini')
+        const dsMaxTokens = parseInt(Deno.env.get('DEEPSEEK_MAX_TOKENS') || '8000', 10) || 8000
+
+        const res = await callProvider('DeepSeek', deepseekApiKey, dsEndpoint, dsModel, dsMaxTokens)
+        if (res.ok) {
+          rawContent = res.content
+        } else {
+          lastError = res.error
+        }
+      }
+
+      if (!rawContent) {
         return json({
-          reply: `⚠️ **Aviso da IA**: ${errorMsg}`,
+          reply: `⚠️ **Aviso da IA**: ${lastError || 'Não foi possível obter resposta dos provedores de IA configurados.'}`,
           action: { type: 'none' },
         })
       }
 
-      const data = await aiResponse.json()
-      const rawContent = data.choices?.[0]?.message?.content || '{}'
       const cleanContent = rawContent
         .replace(/^```json\s*/i, '')
         .replace(/^```\s*/i, '')
