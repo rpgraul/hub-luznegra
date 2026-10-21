@@ -25,14 +25,14 @@ export const TASK_STATUSES = [
   'done',
 ] as const
 
-function tasksKey(showAll: boolean): (string | boolean)[] {
-  return ['tasks', showAll]
+function tasksKey(userId: string | undefined, showAll: boolean): (string | boolean | undefined)[] {
+  return ['tasks', userId, showAll]
 }
 
 export function useTasks(showAll: boolean) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const KEY = useMemo(() => tasksKey(showAll), [showAll])
+  const KEY = useMemo(() => tasksKey(user?.id, showAll), [user?.id, showAll])
 
   const query = useQuery({
     queryKey: KEY,
