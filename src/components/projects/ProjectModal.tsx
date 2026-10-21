@@ -9,6 +9,7 @@ import {
   setProjectMembers,
 } from '@/lib/api/projects'
 import { useProjectMembers } from '@/hooks/useProjectMembers'
+import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import type { Project } from '@/types/database'
 
@@ -40,6 +41,8 @@ export default function ProjectModal({
   onSaved,
   onDeleted,
 }: ProjectModalProps) {
+  const { user } = useAuth()
+  const isCollaborator = user?.role === 'collaborator'
   const isEditing = !!project
   const { members: allUsers } = useProjectMembers(null)
   const [name, setName] = useState('')
@@ -257,7 +260,7 @@ export default function ProjectModal({
 
             {/* Footer */}
             <div className="flex items-center justify-between pt-3 border-t border-border">
-              {isEditing ? (
+              {isEditing && !isCollaborator ? (
                 <button
                   type="button"
                   onClick={() => setConfirmArchive(true)}

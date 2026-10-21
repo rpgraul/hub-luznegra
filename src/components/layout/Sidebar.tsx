@@ -317,16 +317,14 @@ export default function Sidebar({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-2">
         <div className="flex items-center justify-between px-1 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <span>Espaços / Projetos</span>
-          {!isCollaborator && (
-            <button
-              type="button"
-              onClick={onCreateProject}
-              title="Novo Projeto"
-              className="flex size-5 items-center justify-center rounded hover:bg-muted hover:text-foreground"
-            >
-              <i className="fa-solid fa-plus text-xs" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onCreateProject}
+            title="Novo Projeto"
+            className="flex size-5 items-center justify-center rounded hover:bg-muted hover:text-foreground cursor-pointer"
+          >
+            <i className="fa-solid fa-plus text-xs" />
+          </button>
         </div>
 
         <div className="flex-1 space-y-0.5 overflow-y-auto py-1 text-xs">
@@ -417,8 +415,8 @@ export default function Sidebar({
             <span>Novo projeto...</span>
           </button>
 
-          {/* Archived Projects Button */}
-          {onOpenArchivedProjects && (
+          {/* Archived Projects Button (apenas membros internos e admin) */}
+          {!isCollaborator && onOpenArchivedProjects && (
             <button
               type="button"
               onClick={onOpenArchivedProjects}

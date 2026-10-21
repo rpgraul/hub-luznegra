@@ -8,6 +8,7 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, clearPersistedSession } from '@/lib/supabaseClient'
+import { queryClient } from '@/lib/queryClient'
 import type { Profile } from '@/types/database'
 
 export interface SignInResult {
@@ -40,6 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      // Limpa caches de dados do usuário anterior imediatamente
+      queryClient.clear()
       setSession(newSession)
     })
 
@@ -116,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
+    queryClient.clear()
     await supabase.auth.signOut()
   }, [])
 

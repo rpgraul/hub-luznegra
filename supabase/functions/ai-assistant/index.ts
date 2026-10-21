@@ -394,13 +394,14 @@ Deno.serve(async (req) => {
 
     const collaboratorRules = isCollaborator
       ? `
-REGRAS E LIMITAÇÕES DO PERFIL DESTE USUÁRIO (COLABORADOR):
+REGRAS E PERMISSÕES DO PERFIL DESTE USUÁRIO (COLABORADOR):
 - O usuário possui perfil de COLABORADOR (autor, ilustrador ou redator).
-- Ele tem acesso estritamente aos projetos designados a ele (${projects.map((p) => `"${p.name}"`).join(', ') || 'Nenhum projeto no momento'}).
+- Ele PODE criar novos projetos e gerenciar tarefas e subtarefas dentro dos projetos aos quais tem acesso.
+- Projetos atualmente acessíveis a ele: ${projects.map((p) => `"${p.name}" (ID: ${p.id})`).join(', ') || 'Nenhum projeto no momento'}.
 - Ele NÃO tem acesso à Central de Documentos nem a Fornecedores da editora.
-- Ele NÃO tem permissão para criar, arquivar ou deletar projetos.
+- Ele NÃO tem acesso a projetos arquivados, e NÃO tem permissão para arquivar ou deletar projetos.
 - Ele NÃO tem permissão para cadastrar fornecedores nem criar contas de usuários.
-- Se ele pedir qualquer uma dessas ações ou informações de documentos/fornecedores/outros projetos, recuse cordialmente explicando que o perfil de colaborador possui acesso direcionado ao cronograma das tarefas em que atua e não tem permissão para essa ação.
+- Se ele pedir qualquer uma dessas ações restritas (documentos, fornecedores, arquivar ou deletar projetos), recuse cordialmente explicando que o perfil de colaborador não tem permissão para essa ação.
 `
       : ''
 
@@ -794,10 +795,29 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
       const parsedObj = tryParseJson(cleanContent)
       if (parsedObj) {
-        aiParsed = parsedObj as unknown as AIResponseStructure
+        const rawReply =
+          parsedObj.reply ??
+          parsedObj.response ??
+          parsedObj.message ??
+          parsedObj.text ??
+          parsedObj.content ??
+          parsedObj.resposta ??
+          parsedObj.mensagem ??
+          parsedObj.explanation ??
+          ''
+
+        let actionObj = (parsedObj.action ?? parsedObj.acao) as AIAction | undefined
+        if (!actionObj || typeof actionObj !== 'object') {
+          actionObj = { type: 'none' }
+        }
+
+        aiParsed = {
+          reply: typeof rawReply === 'string' ? rawReply.trim() : String(rawReply || ''),
+          action: actionObj,
+        }
       } else {
         // Se mesmo assim não parsear, extrai texto se houver
-        const replyMatch = cleanContent.match(/"reply"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/)
+        const replyMatch = cleanContent.match(/"(?:reply|response|message|text|content|resposta|mensagem)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/)
         aiParsed = {
           reply: replyMatch ? replyMatch[1].replace(/\\"/g, '"') : cleanContent,
           action: { type: 'none' },
@@ -1266,7 +1286,6 @@ FORMATO OBRIGATÓRIO (JSON puro):
 
       if (isCollaborator) {
         if (
-          type === 'create_project' ||
           type === 'delete_project' ||
           type === 'archive_project' ||
           type === 'create_vendor' ||
@@ -1327,10 +1346,49 @@ FORMATO OBRIGATÓRIO (JSON puro):
       }
 
       if (type === 'create_task' || type === 'create_tasks') {
-        const projectIdToUse = (params.project_id as string) || context.projectId || projects?.[0]?.id
+        let projectIdToUse = (params.project_id as string) || (params.projectId as string)
+        const projNameParam = String(params.project_name || params.project || '').trim().toLowerCase()
+
+        // 1. Busca por nome se passado nos parâmetros
+        if (projNameParam) {
+          const match = (projects ?? []).find(
+            (p) =>
+              p.name.toLowerCase() === projNameParam ||
+              p.name.toLowerCase().includes(projNameParam) ||
+              projNameParam.includes(p.name.toLowerCase()),
+          )
+          if (match) projectIdToUse = match.id
+        }
+
+        // 2. Se projectIdToUse não for um UUID válido em accessibleProjectIds, tenta achar por nome
+        if (projectIdToUse && !accessibleProjectIds.has(projectIdToUse)) {
+          const match = (projects ?? []).find(
+            (p) =>
+              p.name.toLowerCase() === projectIdToUse.toLowerCase() ||
+              p.name.toLowerCase().includes(projectIdToUse.toLowerCase()),
+          )
+          if (match) projectIdToUse = match.id
+        }
+
+        // 3. Procura menção aos nomes dos projetos no texto da mensagem do usuário
+        if (!projectIdToUse) {
+          const match = (projects ?? []).find((p) =>
+            message.toLowerCase().includes(p.name.toLowerCase()),
+          )
+          if (match) projectIdToUse = match.id
+        }
+
+        // 4. Fallback para projeto ativo no contexto ou primeiro projeto acessível
+        if (!projectIdToUse) {
+          projectIdToUse =
+            context.projectId && accessibleProjectIds.has(context.projectId)
+              ? context.projectId
+              : projects?.[0]?.id
+        }
+
         if (!projectIdToUse) {
           return json({
-            reply: 'Não encontrei nenhum projeto para criar a tarefa. Peça para criar um projeto primeiro.',
+            reply: 'Não encontrei nenhum projeto acessível para criar a tarefa. Você pode criar um projeto primeiro dizendo "Crie o projeto NomeDoProjeto".',
             action: { type: 'none' },
           })
         }
@@ -2127,7 +2185,7 @@ FORMATO OBRIGATÓRIO (JSON puro):
                     : aiParsed.action?.type === 'duplicate_task'
                       ? 'Tarefa duplicada com sucesso.'
                       : aiParsed.action?.type === 'none'
-                        ? 'Não identifiquei nenhuma tarefa ou ação para os parâmetros informados.'
+                        ? 'Não identifiquei nenhuma ação direta para executar. Se deseja criar uma tarefa ou projeto, especifique o título ou detalhes.'
                         : 'Comando processado com sucesso.')
 
     return json({

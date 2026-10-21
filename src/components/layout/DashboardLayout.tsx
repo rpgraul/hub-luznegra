@@ -241,16 +241,17 @@ export default function DashboardLayout({
         activeProjectId={preferences?.active_project_id ?? null}
         onProjectChange={handleProjectChange}
         onCreateProject={() => {
-          if (isCollaborator) return
           setEditingProject(null)
           setProjectModalOpen(true)
         }}
         onEditProject={(p) => {
-          if (isCollaborator) return
           setEditingProject(p)
           setProjectModalOpen(true)
         }}
-        onOpenArchivedProjects={() => setArchivedModalOpen(true)}
+        onOpenArchivedProjects={() => {
+          if (isCollaborator) return
+          setArchivedModalOpen(true)
+        }}
         showAllTasks={preferences?.show_all_tasks ?? false}
         onShowAllChange={setShowAll}
         hideDoneTasks={preferences?.hide_done_tasks ?? false}

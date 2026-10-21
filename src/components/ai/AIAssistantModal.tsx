@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button, toast } from '@heroui/react'
+import { useAuth } from '@/hooks/useAuth'
 import { sendAIMessage, type AIMessage } from '@/lib/api/ai'
 import { supabase } from '@/lib/supabaseClient'
 import type { HubDocument } from '@/types/database'
@@ -286,10 +287,14 @@ export default function AIAssistantModal({
   projectId,
   projectName,
 }: AIAssistantModalProps) {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
+  const storageKey = user ? `hub_ai_chat_history_${user.id}` : CHAT_STORAGE_KEY
+
   const [messages, setMessages] = useState<AIMessage[]>(() => {
     try {
-      const saved = localStorage.getItem(CHAT_STORAGE_KEY)
+      const activeKey = user ? `hub_ai_chat_history_${user.id}` : CHAT_STORAGE_KEY
+      const saved = localStorage.getItem(activeKey)
       if (saved) {
         const parsed = JSON.parse(saved)
         if (Array.isArray(parsed) && parsed.length > 0) return parsed
@@ -299,6 +304,24 @@ export default function AIAssistantModal({
     }
     return [WELCOME_MSG]
   })
+
+  // Recarrega o histórico do chat correto ao trocar de usuário
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed)
+          return
+        }
+      }
+    } catch {
+      // ignore
+    }
+    setMessages([WELCOME_MSG])
+  }, [storageKey])
+
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<HubDocument | null>(null)
@@ -322,12 +345,12 @@ export default function AIAssistantModal({
   useEffect(() => {
     if (messages.length > 0) {
       try {
-        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages))
+        localStorage.setItem(storageKey, JSON.stringify(messages))
       } catch {
         // ignore
       }
     }
-  }, [messages])
+  }, [messages, storageKey])
 
   useEffect(() => {
     if (open) {
@@ -475,7 +498,7 @@ export default function AIAssistantModal({
 
   function handleClear() {
     try {
-      localStorage.removeItem(CHAT_STORAGE_KEY)
+      localStorage.removeItem(storageKey)
     } catch {
       // ignore
     }
