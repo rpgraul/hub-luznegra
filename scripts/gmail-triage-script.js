@@ -6,10 +6,15 @@
  * Modelo de IA: Groq (openai/gpt-oss-120b com fallbacks) com JSON Mode
  * Destino: Supabase Database (REST API /rest/v1/tasks)
  *
- * RECURSOS IMPLEMENTADOS:
- * - Filtro anti-backlog: analisa apenas mensagens recentes (newer_than:2d).
+ * TRAVAS DE SEGURANÇA E RECURSOS:
+ * - Travas anti-estouro de cota:
+ *   1. Limite diário estrito (circuit breaker): máximo 250 chamadas Groq/dia.
+ *   2. Pré-filtro local heurístico: descarta newsletters, redes sociais e marketing sem gastar API.
+ *   3. Lote reduzido por execução: máx 5 threads por rodada.
+ *   4. Janela de busca: analisa apenas mensagens dos últimos 2 dias (newer_than:2d).
+ * - Data de início real (start_date): preenchida com o dia em que o e-mail foi RECEBIDO.
+ * - Prazos automáticos (due_date): calculados a partir da data de chegada do e-mail.
  * - Roteamento inteligente: e-mails de desenvolvimento/site/servidor/segurança vão para @rpgraul.
- * - Prazos automáticos (due_date): entre 3 e 10 dias úteis conforme a urgência.
  * - Follow-up inteligente: mensagens adicionais do mesmo cliente elevam a prioridade e inserem comentário.
  * - Idempotência completa via label "Processado-IA" e índice único por gmail_thread_id.
  * ============================================================================
@@ -41,8 +46,11 @@ const CONFIG = {
   // Janela de busca para ignorar e-mails antigos esquecidos na Inbox (ex: "2d" = últimos 2 dias)
   JANELA_BUSCA: "newer_than:2d",
 
-  // Limite de threads analisadas por execução (evita timeout do GAS)
-  MAX_THREADS_POR_EXECUCAO: 15,
+  // Trava de segurança 1: Limite máximo de threads por execução (evita loops e timeouts)
+  MAX_THREADS_POR_EXECUCAO: 5,
+
+  // Trava de segurança 2: Teto diário de chamadas à Groq (evita estourar o limite de 1K/dia)
+  LIMITE_DIARIO_CHAMADAS_GROQ: 250,
 
   // Intervalo do gatilho automático de tempo em minutos
   INTERVALO_MINUTOS_GATILHO: 15,
@@ -78,7 +86,7 @@ function triagemEmailsPosVenda() {
   const threads = GmailApp.search(query, 0, CONFIG.MAX_THREADS_POR_EXECUCAO);
 
   Logger.log(`Query de busca: "${query}"`);
-  Logger.log(`Encontradas ${threads.length} thread(s) pendente(s) de avaliação.`);
+  Logger.log(`Encontradas ${threads.length} thread(s) pendente(s) nesta rodada.`);
   if (threads.length === 0) {
     Logger.log("Nenhum e-mail novo na janela de busca.");
     return;
@@ -87,6 +95,7 @@ function triagemEmailsPosVenda() {
   let tarefasCriadas = 0;
   let followUpsAtualizados = 0;
   let emailsIgnorados = 0;
+  let ignoradosPreFiltro = 0;
   let erros = 0;
 
   for (let i = 0; i < threads.length; i++) {
@@ -100,14 +109,31 @@ function triagemEmailsPosVenda() {
       const remetenteRaw = lastMessage.getFrom();
       const remetenteEmail = extrairEmailPuro(remetenteRaw);
       const assunto = thread.getFirstMessageSubject() || "(Sem assunto)";
-      const dataMsg = lastMessage.getDate();
+      const dataMsg = lastMessage.getDate(); // Data real de recebimento da mensagem
+
+      Logger.log(`\n[${i + 1}/${threads.length}] Avaliando: "${assunto}" | De: ${remetenteRaw} | Data: ${dataMsg.toLocaleString("pt-BR")}`);
+
+      // 3. TRAVA DE SEGURANÇA 1: Pré-filtro heurístico local (Sem gastar API da Groq)
+      const filtroLocal = checarPreFiltroLocal(remetenteRaw, remetenteEmail, assunto);
+      if (filtroLocal.ignorar) {
+        Logger.log(`[PRÉ-FILTRO LOCAL] Ignorado sem chamar IA: ${filtroLocal.motivo}`);
+        thread.addLabel(labelProcessado);
+        ignoradosPreFiltro++;
+        continue;
+      }
+
+      // 4. TRAVA DE SEGURANÇA 2: Circuit Breaker diário da Groq
+      if (!podeChamarGroqHoje()) {
+        Logger.log(`[CIRCUIT BREAKER] Limite diário da Groq atingido. Marcando thread para evitar reprocessamento ou interrompendo.`);
+        // Não consome mais chamadas nesta execução
+        break;
+      }
 
       // Monta corpo textual concatenado (últimas mensagens com limite de caracteres)
       const corpoTexto = extrairCorpoMensagens(messages);
 
-      Logger.log(`\n[${i + 1}/${threads.length}] Analisando: "${assunto}" | De: ${remetenteRaw}`);
-
-      // 3. Chamar a IA Groq para triagem e classificação
+      // 5. Chamar a IA Groq para triagem e classificação
+      registrarChamadaGroq();
       const analise = analisarComGroq({
         remetente: remetenteRaw,
         assunto: assunto,
@@ -117,9 +143,9 @@ function triagemEmailsPosVenda() {
 
       Logger.log(`Decisão da IA: ignorar=${analise.ignorar} | Categoria: ${analise.categoria || 'N/A'} | Urgência: ${analise.urgencia || 'N/A'} | Motivo: ${analise.motivo_decisao}`);
 
-      // 4. Se a IA indicar que exige ação humana
+      // 6. Se a IA indicar que exige ação humana
       if (!analise.ignorar) {
-        // 4.1 Verificar se já existe uma tarefa aberta para esse caso (Follow-up)
+        // 6.1 Verificar se já existe uma tarefa aberta para esse caso (Follow-up)
         const tarefaAberta = buscarTarefaAbertaExistente({
           threadId: threadId,
           remetenteEmail: remetenteEmail,
@@ -132,17 +158,19 @@ function triagemEmailsPosVenda() {
             remetente: remetenteRaw,
             assunto: assunto,
             corpo: corpoTexto,
+            dataMsg: dataMsg,
             analise: analise
           });
           followUpsAtualizados++;
         } else {
-          // Criar nova tarefa no Supabase
+          // Criar nova tarefa no Supabase com data de início = dia de recebimento do e-mail
           const tarefaPayload = montarPayloadTarefa({
             threadId: threadId,
             remetente: remetenteRaw,
             remetenteEmail: remetenteEmail,
             assunto: assunto,
             corpo: corpoTexto,
+            dataMsg: dataMsg,
             analise: analise
           });
 
@@ -158,7 +186,7 @@ function triagemEmailsPosVenda() {
         emailsIgnorados++;
       }
 
-      // 5. Idempotência: marcar a thread com a label Processado-IA
+      // 7. Idempotência: marcar a thread com a label Processado-IA
       thread.addLabel(labelProcessado);
 
     } catch (err) {
@@ -174,11 +202,146 @@ function triagemEmailsPosVenda() {
   }
 
   Logger.log("\n=== RESUMO DA EXECUÇÃO ===");
-  Logger.log(`Total avaliado: ${threads.length}`);
+  Logger.log(`Total de threads avaliadas: ${threads.length}`);
+  Logger.log(`Descartadas no pré-filtro (0 custo de IA): ${ignoradosPreFiltro}`);
+  Logger.log(`Descartadas pela IA: ${emailsIgnorados}`);
   Logger.log(`Novas tarefas criadas no HUB: ${tarefasCriadas}`);
-  Logger.log(`Follow-ups atualizados (prioridade elevada): ${followUpsAtualizados}`);
-  Logger.log(`E-mails ignorados (transacionais/spam): ${emailsIgnorados}`);
+  Logger.log(`Follow-ups atualizados: ${followUpsAtualizados}`);
   Logger.log(`Erros: ${erros}`);
+  Logger.log(`Chamadas Groq hoje: ${obterContagemGroqHoje()}/${CONFIG.LIMITE_DIARIO_CHAMADAS_GROQ}`);
+}
+
+/**
+ * TRAVA DE SEGURANÇA HEURÍSTICA:
+ * Filtra e-mails de marketing óbvios, redes sociais e notificações triviais sem chamar a IA.
+ * NUNCA filtra provedores críticos de infraestrutura (Mercado Pago, Cloudflare, etc.) se houver alerta técnico.
+ */
+function checarPreFiltroLocal(remetenteRaw, remetenteEmail, assunto) {
+  const remetenteLower = (remetenteRaw + " " + remetenteEmail).toLowerCase();
+  const assuntoLower = (assunto || "").toLowerCase();
+
+  // EXCEÇÃO CRÍTICA: Se for infraestrutura ou palavras de segurança técnica, NÃO filtrar localmente!
+  const isInfraOuSeguranca =
+    remetenteLower.includes("mercadopago") ||
+    remetenteLower.includes("cloudflare") ||
+    remetenteLower.includes("hostgator") ||
+    remetenteLower.includes("supabase") ||
+    remetenteLower.includes("github") ||
+    assuntoLower.includes("ação necessária") ||
+    assuntoLower.includes("acao necessaria") ||
+    assuntoLower.includes("vulnerabilidade") ||
+    assuntoLower.includes("segurança") ||
+    assuntoLower.includes("security") ||
+    assuntoLower.includes("correios") ||
+    assuntoLower.includes("catarse") ||
+    assuntoLower.includes("apoia.se");
+
+  if (isInfraOuSeguranca) {
+    return { ignorar: false };
+  }
+
+  // 1. Domínios de redes sociais e plataformas de consumo que nunca geram chamados para a editora
+  const dominiosDescartaveis = [
+    "@linkedin.com",
+    "@instagram.com",
+    "@facebookmail.com",
+    "@twitter.com",
+    "@x.com",
+    "@tiktok.com",
+    "@spotify.com",
+    "@uber.com",
+    "@ifood.com.br",
+    "@99app.com",
+    "@steampowered.com",
+    "@epicgames.com",
+    "@netflix.com",
+    "@aliexpress.com",
+    "@shopee.com.br"
+  ];
+
+  for (const dom of dominiosDescartaveis) {
+    if (remetenteLower.includes(dom)) {
+      return { ignorar: true, motivo: `Remetente de entretenimento/rede social (${dom})` };
+    }
+  }
+
+  // 2. Subdomínios e prefixos típicos de marketing e mailing em massa
+  const prefixosMarketing = [
+    "news@",
+    "newsletter@",
+    "promo@",
+    "promocoes@",
+    "marketing@",
+    "mkt@",
+    "mailing@",
+    "ofertas@",
+    "comunicacao@"
+  ];
+
+  for (const pfx of prefixosMarketing) {
+    if (remetenteLower.includes(pfx)) {
+      return { ignorar: true, motivo: `Endereço de mailing/newsletter em massa (${pfx})` };
+    }
+  }
+
+  // 3. Assuntos típicos de marketing, promoções ou códigos de verificação 2FA
+  const termosAssuntoDescarte = [
+    "cupom de desconto",
+    "oferta exclusiva",
+    "frete grátis",
+    "black friday",
+    "seu código de verificação",
+    "seu código de segurança",
+    "código de confirmação",
+    "confirmacao de login",
+    "novo login detectado",
+    "dispositivo não reconhecido",
+    "extrato mensal",
+    "informe de rendimentos"
+  ];
+
+  for (const termo of termosAssuntoDescarte) {
+    if (assuntoLower.includes(termo)) {
+      return { ignorar: true, motivo: `Assunto de marketing/2FA transacional ("${termo}")` };
+    }
+  }
+
+  return { ignorar: false };
+}
+
+/**
+ * TRAVA DE SEGURANÇA: CONTADOR DIÁRIO DA GROQ (CIRCUIT BREAKER)
+ */
+function podeChamarGroqHoje() {
+  const props = PropertiesService.getScriptProperties();
+  const hojeStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "GMT-3", "yyyy-MM-dd");
+  const dataSalva = props.getProperty("GROQ_DATA_CONTADOR") || "";
+  let contagem = parseInt(props.getProperty("GROQ_CONTAGEM_HOJE") || "0", 10);
+
+  if (dataSalva !== hojeStr) {
+    contagem = 0;
+    props.setProperty("GROQ_DATA_CONTADOR", hojeStr);
+    props.setProperty("GROQ_CONTAGEM_HOJE", "0");
+  }
+
+  return contagem < (CONFIG.LIMITE_DIARIO_CHAMADAS_GROQ || 250);
+}
+
+function registrarChamadaGroq() {
+  const props = PropertiesService.getScriptProperties();
+  const hojeStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "GMT-3", "yyyy-MM-dd");
+  let contagem = parseInt(props.getProperty("GROQ_CONTAGEM_HOJE") || "0", 10);
+  contagem++;
+  props.setProperty("GROQ_DATA_CONTADOR", hojeStr);
+  props.setProperty("GROQ_CONTAGEM_HOJE", contagem.toString());
+}
+
+function obterContagemGroqHoje() {
+  const props = PropertiesService.getScriptProperties();
+  const hojeStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "GMT-3", "yyyy-MM-dd");
+  const dataSalva = props.getProperty("GROQ_DATA_CONTADOR") || "";
+  if (dataSalva !== hojeStr) return 0;
+  return parseInt(props.getProperty("GROQ_CONTAGEM_HOJE") || "0", 10);
 }
 
 /**
@@ -389,8 +552,9 @@ function elevarPrioridadeTarefa(tarefaExistente, params) {
   });
 
   // 2. Inserir comentário na tarefa com o follow-up
+  const dataFormatada = params.dataMsg ? params.dataMsg.toLocaleString("pt-BR") : new Date().toLocaleString("pt-BR");
   const comentarioConteudo = `[NOVA MENSAGEM / FOLLOW-UP DO CLIENTE]
-Recebido em: ${new Date().toLocaleString("pt-BR")}
+Recebido em: ${dataFormatada}
 Assunto: ${params.assunto}
 Resumo da IA: ${params.analise.resumo_ia}
 Prioridade elevada para: ${novaPrioridade.toUpperCase()}
@@ -452,11 +616,17 @@ function criarTarefaNoSupabase(tarefaPayload) {
 
 /**
  * Monta o payload completo da tarefa compatível com o schema do HUB.
+ * Define start_date como a data real de recebimento do e-mail.
  */
 function montarPayloadTarefa(params) {
   const analise = params.analise;
+  const timeZone = Session.getScriptTimeZone() || "GMT-3";
 
-  // 1. Determinar prioridade nativa
+  // 1. Data de Início: DIA EM QUE O E-MAIL FOI RECEBIDO
+  const dataRecebimento = params.dataMsg instanceof Date ? params.dataMsg : new Date();
+  const startDateIso = Utilities.formatDate(dataRecebimento, timeZone, "yyyy-MM-dd");
+
+  // 2. Determinar prioridade nativa
   let priority = "medium";
   if (analise.urgencia === "alta") {
     priority = (analise.precisa_abrir_pi_correios || analise.categoria === "desenvolvimento") ? "urgent" : "high";
@@ -464,18 +634,24 @@ function montarPayloadTarefa(params) {
     priority = "low";
   }
 
-  // 2. Calcular prazo (due_date) entre 3 e 10 dias
+  // 3. Calcular prazo (due_date) a partir da data de recebimento do e-mail (3 a 10 dias)
   let diasPrazo = 5;
   if (priority === "urgent" || priority === "high") {
     diasPrazo = 3;
   } else if (priority === "low") {
     diasPrazo = 10;
   }
-  const dataPrazo = new Date();
-  dataPrazo.setDate(dataPrazo.getDate() + diasPrazo);
-  const dueDateIso = dataPrazo.toISOString().split("T")[0];
 
-  // 3. Roteamento: se for desenvolvimento/técnico/site, atribui para @rpgraul
+  const dataPrazo = new Date(dataRecebimento.getTime());
+  dataPrazo.setDate(dataPrazo.getDate() + diasPrazo);
+
+  // Se o e-mail chegou atrasado e a data de prazo calculada já passou no tempo,
+  // ajusta o due_date para a data atual para indicar que vence imediatamente hoje
+  const hoje = new Date();
+  const dataPrazoFinal = dataPrazo < hoje ? hoje : dataPrazo;
+  const dueDateIso = Utilities.formatDate(dataPrazoFinal, timeZone, "yyyy-MM-dd");
+
+  // 4. Roteamento: se for desenvolvimento/técnico/site, atribui para @rpgraul
   let assignedTo = null;
   let assignees = null;
   const tags = ["pos-venda"];
@@ -488,7 +664,7 @@ function montarPayloadTarefa(params) {
     categories.push("Desenvolvimento");
   }
 
-  // 4. Descrição Lexical formatada
+  // 5. Descrição Lexical formatada
   const lexicalDesc = construirDescricaoLexical({
     resumo: analise.resumo_ia,
     remetente: params.remetente,
@@ -506,7 +682,7 @@ function montarPayloadTarefa(params) {
     priority: priority,
     assigned_to: assignedTo,
     assignees: assignees,
-    start_date: new Date().toISOString().split("T")[0],
+    start_date: startDateIso,
     due_date: dueDateIso,
     email_remetente: params.remetente,
     assunto_email: params.assunto,
@@ -711,9 +887,30 @@ function removerGatilhos() {
 }
 
 /**
+ * Consulta a contagem de chamadas feitas à Groq no dia de hoje.
+ */
+function consultarConsumoGroqHoje() {
+  const chamadas = obterContagemGroqHoje();
+  Logger.log(`=== CONSUMO GROQ HOJE ===`);
+  Logger.log(`Chamadas efetuadas: ${chamadas} / ${CONFIG.LIMITE_DIARIO_CHAMADAS_GROQ}`);
+  Logger.log(`Restante permitido hoje: ${Math.max(0, CONFIG.LIMITE_DIARIO_CHAMADAS_GROQ - chamadas)}`);
+}
+
+/**
+ * Zera o contador diário de chamadas manualmente, se necessário.
+ */
+function zerarContadorGroq() {
+  const props = PropertiesService.getScriptProperties();
+  const hojeStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "GMT-3", "yyyy-MM-dd");
+  props.setProperty("GROQ_DATA_CONTADOR", hojeStr);
+  props.setProperty("GROQ_CONTAGEM_HOJE", "0");
+  Logger.log("Contador de chamadas da Groq zerado com sucesso!");
+}
+
+/**
  * Utilitário: marca todos os e-mails antigos na Inbox com a label "Processado-IA".
  * Execute esta função UMA VEZ se você quiser zerar o passado e processar apenas
- * os novos e-mails que chegarem a partir de agora.
+ * os novos e-mails que chegarem a partir de agora. Não gasta nenhuma cota da Groq.
  */
 function marcarHistoricoComoProcessado() {
   const label = obterOuCriarLabel(CONFIG.LABEL_PROCESSADO);
@@ -728,8 +925,8 @@ function marcarHistoricoComoProcessado() {
       totalMarcadas++;
     }
     Logger.log(`Progresso: ${totalMarcadas} threads marcadas...`);
-    Utilities.sleep(1000);
-  } while (batch.length === 50 && totalMarcadas < 300);
+    Utilities.sleep(500);
+  } while (batch.length === 50 && totalMarcadas < 500);
 
   Logger.log(`Concluído! ${totalMarcadas} thread(s) antigas foram marcadas com "${CONFIG.LABEL_PROCESSADO}".`);
 }
