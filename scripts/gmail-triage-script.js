@@ -289,8 +289,16 @@ function checarPreFiltroLocal(remetenteRaw, remetenteEmail, assunto) {
     }
   }
 
-  // 3. Assuntos típicos de marketing, promoções ou códigos de verificação 2FA
+  // 3. Assuntos típicos de marketing, promoções ou códigos de verificação 2FA e transacionais de conta
   const termosAssuntoDescarte = [
+    "registro de novo usuário",
+    "novo usuário registrado",
+    "novo usuario registrado",
+    "criação de nova conta",
+    "cadastro de nova conta",
+    "redefinição de senha",
+    "redefinicao de senha",
+    "recuperação de senha",
     "cupom de desconto",
     "oferta exclusiva",
     "frete grátis",
