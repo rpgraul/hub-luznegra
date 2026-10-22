@@ -227,6 +227,11 @@ function checarPreFiltroLocal(remetenteRaw, remetenteEmail, assunto) {
     remetenteLower.includes("hostgator") ||
     remetenteLower.includes("supabase") ||
     remetenteLower.includes("github") ||
+    remetenteLower.includes("google") ||
+    remetenteLower.includes("resend") ||
+    assuntoLower.includes("oauth") ||
+    assuntoLower.includes("compliance") ||
+    assuntoLower.includes("branding") ||
     assuntoLower.includes("ação necessária") ||
     assuntoLower.includes("acao necessaria") ||
     assuntoLower.includes("vulnerabilidade") ||
@@ -363,7 +368,7 @@ REGRAS DE CLASSIFICAÇÃO:
 
 2. DEFINIR "ignorar: false" (CRIAR TAREFA) EXCLUSIVAMENTE PARA:
 - DESENVOLVIMENTO / SITE / SERVIDOR / SEGURANÇA:
-  E-mails de provedores de infraestrutura ou plataformas técnicas (Mercado Pago, Cloudflare, HostGator, GitHub, Supabase, etc.) contendo "AÇÃO NECESSÁRIA", vulnerabilidade crítica de segurança (ex: falhas de PHP, injeção de código, servidores desatualizados), certificados SSL expirando, erros críticos de integração da loja/WooCommerce ou problemas no servidor.
+  E-mails de provedores de infraestrutura ou plataformas técnicas (Mercado Pago, Cloudflare, HostGator, GitHub, Supabase, Google Cloud, Google Auth Platform, Resend, etc.) contendo "AÇÃO NECESSÁRIA", avisos de conformidade técnica/OAuth/branding, vulnerabilidade crítica de segurança (ex: falhas de PHP, injeção de código, servidores desatualizados), certificados SSL expirando, erros críticos de integração da loja/WooCommerce ou problemas no servidor.
   -> categoria: "desenvolvimento"
   -> urgencia: "alta"
 - EXTRAVIO: pacote sumido, roubado, devolvido indevidamente ou parado nos Correios há muito tempo.
