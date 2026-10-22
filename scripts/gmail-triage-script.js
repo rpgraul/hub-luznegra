@@ -42,8 +42,11 @@ const CONFIG = {
   // Limite de threads analisadas por execução (evita estourar timeout do GAS e rate limits)
   MAX_THREADS_POR_EXECUCAO: 15,
 
-  // Modelo da Groq utilizado
-  GROQ_MODEL: "llama-3.3-70b-versatile"
+  // Modelo da Groq utilizado (openai/gpt-oss-120b ou qwen/qwen3.8-27b)
+  GROQ_MODEL: "openai/gpt-oss-120b",
+
+  // Modelos alternativos caso o modelo principal não esteja disponível na sua conta da Groq
+  GROQ_FALLBACK_MODELS: ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
 };
 
 /**
@@ -206,38 +209,53 @@ CONTEÚDO DO E-MAIL:
 ${dadosEmail.corpo}
 `;
 
-  const payload = {
-    model: CONFIG.GROQ_MODEL,
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userContent }
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 800
-  };
+  const candidateModels = Array.from(new Set([CONFIG.GROQ_MODEL, ...(CONFIG.GROQ_FALLBACK_MODELS || [])]));
+  let lastError = null;
 
-  const options = {
-    method: "post",
-    contentType: "application/json",
-    headers: {
-      Authorization: `Bearer ${CONFIG.GROQ_API_KEY}`
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
+  for (const modelToTry of candidateModels) {
+    const payload = {
+      model: modelToTry,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 800
+    };
 
-  const response = UrlFetchApp.fetch(url, options);
-  const statusCode = response.getResponseCode();
-  const responseText = response.getContentText();
+    const options = {
+      method: "post",
+      contentType: "application/json",
+      headers: {
+        Authorization: `Bearer ${CONFIG.GROQ_API_KEY}`
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    };
 
-  if (statusCode !== 200) {
-    throw new Error(`Erro na API da Groq (HTTP ${statusCode}): ${responseText}`);
+    const response = UrlFetchApp.fetch(url, options);
+    const statusCode = response.getResponseCode();
+    const responseText = response.getContentText();
+
+    if (statusCode === 200) {
+      const json = JSON.parse(responseText);
+      const rawContent = json.choices[0].message.content;
+      return JSON.parse(rawContent);
+    }
+
+    lastError = `HTTP ${statusCode}: ${responseText}`;
+    // Se o modelo não foi encontrado (404), tenta o próximo modelo da lista
+    if (statusCode === 404 && responseText.includes("model_not_found")) {
+      Logger.log(`Aviso: Modelo "${modelToTry}" não disponível na conta Groq. Tentando próximo modelo...`);
+      continue;
+    }
+
+    // Se for outro erro (ex: 401 autenticação ou 429 quota), interrompe
+    throw new Error(`Erro na API da Groq (${lastError})`);
   }
 
-  const json = JSON.parse(responseText);
-  const rawContent = json.choices[0].message.content;
-  return JSON.parse(rawContent);
+  throw new Error(`Nenhum modelo da Groq respondeu com sucesso. Último erro: ${lastError}`);
 }
 
 /**

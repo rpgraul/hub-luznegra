@@ -685,15 +685,24 @@ FORMATO OBRIGATÓRIO (JSON puro):
       // 1. Tenta Groq (principal) se a chave estiver configurada
       if (groqApiKey) {
         const groqEndpoint = 'https://api.groq.com/openai/v1/chat/completions'
-        const groqModel = Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile'
+        const candidateModels = [
+          Deno.env.get('GROQ_MODEL'),
+          'openai/gpt-oss-120b',
+          'openai/gpt-oss-20b',
+          'qwen/qwen3.8-27b',
+          'llama-3.3-70b-versatile',
+        ].filter(Boolean) as string[]
         const groqMaxTokens = parseInt(Deno.env.get('GROQ_MAX_TOKENS') || '8000', 10) || 8000
 
-        const res = await callProvider('Groq', groqApiKey, groqEndpoint, groqModel, groqMaxTokens)
-        if (res.ok) {
-          rawContent = res.content
-        } else {
-          lastError = res.error
-          console.warn(`Groq falhou (${res.error}). Tentando fallback...`)
+        for (const modelToTry of candidateModels) {
+          const res = await callProvider('Groq', groqApiKey, groqEndpoint, modelToTry, groqMaxTokens)
+          if (res.ok) {
+            rawContent = res.content
+            break
+          } else {
+            lastError = res.error
+            console.warn(`Groq com modelo ${modelToTry} falhou (${res.error}). Tentando próximo...`)
+          }
         }
       }
 
