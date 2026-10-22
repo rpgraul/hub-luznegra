@@ -496,7 +496,7 @@ function obterOuCriarLabel(nomeLabel) {
 // ============================================================================
 
 /**
- * Instala o gatilho automático de tempo para rodar a cada 10 minutos.
+ * Instala o gatilho automático de tempo para rodar a cada 15 minutos.
  * Execute esta função uma vez no editor do Apps Script.
  */
 function instalarGatilhoAutomatico() {
@@ -504,10 +504,10 @@ function instalarGatilhoAutomatico() {
 
   ScriptApp.newTrigger("triagemEmailsPosVenda")
     .timeBased()
-    .everyMinutes(10)
+    .everyMinutes(15)
     .create();
 
-  Logger.log("Gatilho automático configurado com sucesso! O script rodará a cada 10 minutos.");
+  Logger.log("Gatilho automático configurado com sucesso! O script rodará a cada 15 minutos.");
 }
 
 /**
