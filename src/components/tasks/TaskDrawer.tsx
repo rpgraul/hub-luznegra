@@ -975,42 +975,46 @@ export default function TaskDrawer({
     <>
       {/* Backdrop: todo fechar salva */}
       <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in"
         onClick={handleCloseWithSave}
       />
 
-      {/* Slide-over Drawer strictly on the RIGHT side */}
-      <div className="fixed inset-y-0 right-0 z-50 flex h-full w-full max-w-[620px] flex-col border-l border-border bg-card shadow-2xl animate-in slide-in-from-right duration-250 select-text">
-        {/* Drawer Header */}
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/95 px-5 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <i className="fa-regular fa-rectangle-list text-[#7b68ee] text-sm" />
-            <h2 className="text-sm font-bold text-foreground">
-              {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
-            </h2>
-            {saving && (
-              <span className="text-[10px] text-muted-foreground animate-pulse font-medium">
-                Salvando...
-              </span>
-            )}
-            {isDirty && !saving && (
-              <span className="text-[10px] font-medium text-amber-600">
-                Alterações não salvas
-              </span>
-            )}
+      {/* Modal Centralizado de Detalhes da Tarefa */}
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 md:p-8 pointer-events-none">
+        <div
+          className="pointer-events-auto flex flex-col w-full max-w-4xl max-h-[92vh] rounded-2xl border border-border bg-card shadow-2xl animate-in zoom-in-95 duration-200 select-text overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Modal Header */}
+          <div className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/95 px-6 backdrop-blur">
+            <div className="flex items-center gap-2">
+              <i className="fa-regular fa-rectangle-list text-[#7b68ee] text-sm" />
+              <h2 className="text-sm font-bold text-foreground">
+                {isNew ? 'Nova Tarefa' : 'Detalhes da Tarefa'}
+              </h2>
+              {saving && (
+                <span className="text-[10px] text-muted-foreground animate-pulse font-medium">
+                  Salvando...
+                </span>
+              )}
+              {isDirty && !saving && (
+                <span className="text-[10px] font-medium text-amber-600">
+                  Alterações não salvas
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleCloseWithSave}
+              aria-label="Fechar modal"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground shadow-2xs"
+            >
+              <i className="fa-solid fa-xmark text-sm" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={handleCloseWithSave}
-            aria-label="Fechar painel"
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          >
-            <i className="fa-solid fa-xmark text-sm" />
-          </button>
-        </div>
 
-        {/* Drawer Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* Modal Scrollable Body */}
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
           {isNew ? (
             <div className="space-y-3">
               <div className="space-y-1.5">
@@ -1695,6 +1699,7 @@ export default function TaskDrawer({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Chat de comentários em modal */}
