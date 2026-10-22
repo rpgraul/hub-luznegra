@@ -12,6 +12,7 @@ import LexicalEditor from '@/components/tasks/LexicalEditor'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import TaskCommentsModal from '@/components/tasks/TaskCommentsModal'
 import SubtaskDateConflictModal from '@/components/tasks/SubtaskDateConflictModal'
+import PosVendaDrawerSection from '@/components/tasks/PosVendaDrawerSection'
 import {
   detectSubtaskConflict,
   extendParentToFitSubtask,
@@ -1078,6 +1079,12 @@ export default function TaskDrawer({
             </div>
           ) : currentTask && (
             <div className="space-y-4">
+              {/* Painel de Triagem de Pós-Venda (se aplicável) */}
+              <PosVendaDrawerSection
+                task={currentTask}
+                onPatch={commitTaskPatch}
+              />
+
               {/* Title Input with highlighted border */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-foreground">Título da Tarefa</Label>

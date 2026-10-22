@@ -8,6 +8,9 @@ export type Json =
 
 export type TaskStatus = 'uncertain' | 'backlog' | 'todo' | 'in_progress' | 'review' | 'financing' | 'funded' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type PosVendaCategoria = 'extravio' | 'avaria' | 'atraso' | 'duvida' | 'outro'
+export type PosVendaUrgencia = 'baixa' | 'media' | 'alta'
+export type StatusCorreios = 'pendente' | 'chamado_aberto' | 'resolvido'
 export type UserRole = 'admin' | 'member' | 'collaborator'
 export type NotificationType = 'task_assigned' | 'due_date_reminder' | 'mention'
 export type DefaultView = 'gantt' | 'kanban' | 'lista' | 'calendario'
@@ -67,6 +70,16 @@ export type Task = {
   created_by: string | null
   tags?: string[] | null
   categories?: string[] | null
+  email_remetente?: string | null
+  assunto_email?: string | null
+  categoria?: PosVendaCategoria | null
+  codigo_rastreio?: string | null
+  codigo_pedido?: string | null
+  urgencia?: PosVendaUrgencia | null
+  precisa_abrir_pi_correios?: boolean
+  status_correios?: StatusCorreios | null
+  resumo_ia?: string | null
+  gmail_thread_id?: string | null
   deleted_at?: string | null
   created_at: string
   updated_at: string
@@ -279,6 +292,16 @@ export interface Database {
           created_by?: string | null
           tags?: string[] | null
           categories?: string[] | null
+          email_remetente?: string | null
+          assunto_email?: string | null
+          categoria?: PosVendaCategoria | null
+          codigo_rastreio?: string | null
+          codigo_pedido?: string | null
+          urgencia?: PosVendaUrgencia | null
+          precisa_abrir_pi_correios?: boolean
+          status_correios?: StatusCorreios | null
+          resumo_ia?: string | null
+          gmail_thread_id?: string | null
           deleted_at?: string | null
           created_at?: string
           updated_at?: string
@@ -301,6 +324,16 @@ export interface Database {
           created_by?: string | null
           tags?: string[] | null
           categories?: string[] | null
+          email_remetente?: string | null
+          assunto_email?: string | null
+          categoria?: PosVendaCategoria | null
+          codigo_rastreio?: string | null
+          codigo_pedido?: string | null
+          urgencia?: PosVendaUrgencia | null
+          precisa_abrir_pi_correios?: boolean
+          status_correios?: StatusCorreios | null
+          resumo_ia?: string | null
+          gmail_thread_id?: string | null
           deleted_at?: string | null
           created_at?: string
           updated_at?: string

@@ -53,11 +53,16 @@ export async function fetchTasks(
     return allTasks
   }
 
-  // Filtra com segurança em memória para garantir compatibilidade
+  // Filtra com segurança em memória para garantir compatibilidade.
+  // Chamados de pós-venda recém-triados ainda sem responsável também ficam visíveis
+  // para que a equipe veja os novos tickets imediatamente mesmo no modo "Minhas tarefas".
   return allTasks.filter(
     (t) =>
       t.assigned_to === userId ||
-      (Array.isArray(t.assignees) && t.assignees.includes(userId)),
+      (Array.isArray(t.assignees) && t.assignees.includes(userId)) ||
+      (Boolean(t.email_remetente || t.categoria) &&
+        !t.assigned_to &&
+        (!Array.isArray(t.assignees) || t.assignees.length === 0)),
   )
 }
 

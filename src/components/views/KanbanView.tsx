@@ -29,6 +29,7 @@ interface KanbanViewProps {
   }) => Promise<unknown>
   reorderMany?: (orderedIds: string[]) => Promise<unknown>
   createTask: (input: NewTaskInput) => Promise<Task>
+  updateTask?: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
   memberOf?: (id: string | null) => ProjectMember | null
 }
 
@@ -41,6 +42,7 @@ export default function KanbanView({
   reorderTask,
   reorderMany,
   createTask,
+  updateTask,
   memberOf,
 }: KanbanViewProps) {
   const [showSubtasksAsCards, setShowSubtasksAsCards] = useState(false)
@@ -290,6 +292,7 @@ export default function KanbanView({
                                     onToggleDone={handleToggleDone}
                                     onToggleSubtask={handleToggleSubtask}
                                     onCreateSubtask={handleCreateSubtask}
+                                    onUpdateTask={updateTask}
                                     compact={false}
                                     parentTaskTitle={parent?.title}
                                     memberOf={memberOf}

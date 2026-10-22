@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { PRIORITY_ICONS } from '@/utils/status'
 import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
+import PosVendaCardBlock from '@/components/tasks/PosVendaCardBlock'
 import { categoryColors } from '@/utils/categories'
 import { formatDateRange, todayIso } from '@/utils/format'
 import { userColor, userRowColor } from '@/utils/colors'
 import type { ProjectMember } from '@/lib/api/members'
-import type { Task } from '@/types/database'
+import type { StatusCorreios, Task } from '@/types/database'
 
 interface TaskCardProps {
   task: Task
@@ -14,6 +15,7 @@ interface TaskCardProps {
   onToggleSubtask?: (subtask: Task, done: boolean) => void
   onToggleDone?: (task: Task) => void
   onCreateSubtask?: (parentId: string, title: string) => void
+  onUpdateTask?: (args: { id: string; patch: Partial<Task> }) => Promise<unknown>
   compact?: boolean
   project?: { name: string; color: string } | null
   parentTaskTitle?: string | null
@@ -28,6 +30,7 @@ export default function TaskCard({
   onToggleSubtask,
   onToggleDone,
   onCreateSubtask,
+  onUpdateTask,
   compact = false,
   project = null,
   parentTaskTitle = null,
@@ -36,6 +39,12 @@ export default function TaskCard({
 }: TaskCardProps) {
   const [subtasksExpanded, setSubtasksExpanded] = useState(false)
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+
+  function handleUpdateStatusCorreios(status: StatusCorreios) {
+    if (onUpdateTask) {
+      void onUpdateTask({ id: task.id, patch: { status_correios: status } })
+    }
+  }
 
   const overdue =
     !!task.due_date &&
@@ -175,6 +184,13 @@ export default function TaskCard({
           )
         })}
       </div>
+
+      {/* Bloco Operacional de Pós-Venda / E-mail / Correios */}
+      <PosVendaCardBlock
+        task={task}
+        onUpdateStatus={onUpdateTask ? handleUpdateStatusCorreios : undefined}
+        compact={compact}
+      />
 
       {/* Details Row: Dates, Hours, Subtasks, Assignees */}
       {!compact && (

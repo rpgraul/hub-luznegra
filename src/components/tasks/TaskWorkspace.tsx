@@ -390,6 +390,7 @@ export default function TaskWorkspace({
             reorderTask={tasksApi.reorderTask}
             reorderMany={tasksApi.reorderMany}
             createTask={tasksApi.createTask}
+            updateTask={tasksApi.updateTask}
             memberOf={memberOf}
           />
         )

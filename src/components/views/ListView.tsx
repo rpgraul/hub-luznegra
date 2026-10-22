@@ -11,6 +11,8 @@ import DateInput from '@/components/ui/DateInput'
 import CategoryFilter from '@/components/tasks/CategoryFilter'
 import StatusSelect from '@/components/tasks/StatusSelect'
 import TaskCommentsBadge from '@/components/tasks/TaskCommentsBadge'
+import PosVendaCardBlock from '@/components/tasks/PosVendaCardBlock'
+import { isPosVendaTask } from '@/utils/posVenda'
 import { useTaskCommentCounts } from '@/hooks/useTaskCommentCounts'
 import { userColor } from '@/utils/colors'
 import { categoryColors } from '@/utils/categories'
@@ -21,7 +23,7 @@ import {
   TASK_PRIORITIES,
 } from '@/utils/status'
 import type { ProjectMember } from '@/lib/api/members'
-import type { Project, Task, TaskPriority, TaskStatus, Json } from '@/types/database'
+import type { Project, Task, TaskPriority, TaskStatus, StatusCorreios, Json } from '@/types/database'
 
 interface ListViewProps {
   tasks: Task[]
@@ -258,6 +260,7 @@ interface TaskRowProps {  task: Task
   onChangeStatus: (task: Task, status: TaskStatus) => void
   onCommitField: (taskId: string, field: EditableField, value: string | string[]) => void
   onOpen: () => void
+  onUpdateStatusCorreios?: (status: StatusCorreios) => void
   projectName?: string | null
   projectColor?: string | null
   manualMode?: boolean
@@ -277,6 +280,7 @@ function TaskRow({
   onChangeStatus,
   onCommitField,
   onOpen,
+  onUpdateStatusCorreios,
   projectName,
   projectColor,
   manualMode = false,
@@ -493,6 +497,15 @@ function TaskRow({
               </span>
             ))}
           </div>
+
+          {/* Bloco Operacional de Pós-Venda se for um chamado */}
+          {isPosVendaTask(task) && (
+            <PosVendaCardBlock
+              task={task}
+              compact
+              onUpdateStatus={onUpdateStatusCorreios}
+            />
+          )}
         </div>
       </td>
 
@@ -586,6 +599,7 @@ interface TasksTableProps {
   onChangeStatus: (task: Task, status: TaskStatus) => void
   onCommitField: (taskId: string, field: EditableField, value: string | string[]) => void
   onOpen: (task: Task) => void
+  onUpdateStatusCorreios?: (taskId: string, status: StatusCorreios) => void
   memberOf: (id: string | null) => ProjectMember | null
   countSubtasks: (task: Task) => number
   commentCounts: Map<string, number>
@@ -604,6 +618,7 @@ function TasksTable({
   onChangeStatus,
   onCommitField,
   onOpen,
+  onUpdateStatusCorreios,
   memberOf,
   countSubtasks,
   commentCounts,
@@ -726,6 +741,9 @@ function TasksTable({
                     onChangeStatus,
                     onCommitField,
                     onOpen: () => onOpen(task),
+                    onUpdateStatusCorreios: onUpdateStatusCorreios
+                      ? (s: StatusCorreios) => onUpdateStatusCorreios(task.id, s)
+                      : undefined,
                     projectName: project?.name,
                     projectColor: project?.color,
                     manualMode,
@@ -846,6 +864,13 @@ export default function ListView({
     void updateTask({ id: taskId, patch })
       .then(() => toast.success('Campo atualizado!'))
       .catch(() => toast.danger('Erro ao salvar alteração.'))
+  }
+
+  function handleUpdateStatusCorreios(taskId: string, status: StatusCorreios) {
+    if (!updateTask) return
+    void updateTask({ id: taskId, patch: { status_correios: status } })
+      .then(() => toast.success('Status dos Correios atualizado.'))
+      .catch(() => toast.danger('Erro ao atualizar status dos Correios.'))
   }
 
   // Recursive multi-level hierarchy builder
@@ -1145,6 +1170,7 @@ export default function ListView({
                         onChangeStatus={handleChangeStatus}
                         onCommitField={handleCommitField}
                         onOpen={onOpenTask}
+                        onUpdateStatusCorreios={handleUpdateStatusCorreios}
                         memberOf={memberOf}
                         countSubtasks={countSubtasks}
                         commentCounts={commentCounts}
@@ -1170,6 +1196,7 @@ export default function ListView({
               onChangeStatus={handleChangeStatus}
               onCommitField={handleCommitField}
               onOpen={onOpenTask}
+              onUpdateStatusCorreios={handleUpdateStatusCorreios}
               memberOf={memberOf}
               countSubtasks={countSubtasks}
               commentCounts={commentCounts}
