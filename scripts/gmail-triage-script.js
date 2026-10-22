@@ -878,12 +878,14 @@ function obterOuCriarLabel(nomeLabel) {
 function instalarGatilhoAutomatico() {
   removerGatilhos();
 
+  const intervalo = Number(CONFIG.INTERVALO_MINUTOS_GATILHO) || 15;
+
   ScriptApp.newTrigger("triagemEmailsPosVenda")
     .timeBased()
-    .everyMinutes(CONFIG.INTERVALO_MINUTOS_GATILHO || 15)
+    .everyMinutes(intervalo)
     .create();
 
-  Logger.log(`Gatilho automático configurado com sucesso! O script rodará a cada ${CONFIG.INTERVALO_MINUTOS_GATILHO} minutos.`);
+  Logger.log(`Gatilho automático configurado com sucesso! O script rodará a cada ${intervalo} minutos.`);
 }
 
 /**
