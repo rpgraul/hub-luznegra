@@ -37,6 +37,12 @@ export const POS_VENDA_CATEGORIA_META: Record<
     className:
       'border-sky-500/40 bg-sky-500/15 text-sky-600 dark:text-sky-400',
   },
+  desenvolvimento: {
+    label: 'Dev / Site',
+    icon: 'fa-code',
+    className:
+      'border-indigo-500/40 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
+  },
   outro: {
     label: 'Pós-Venda',
     icon: 'fa-headset',

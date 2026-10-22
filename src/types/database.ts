@@ -8,7 +8,7 @@ export type Json =
 
 export type TaskStatus = 'uncertain' | 'backlog' | 'todo' | 'in_progress' | 'review' | 'financing' | 'funded' | 'done'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
-export type PosVendaCategoria = 'extravio' | 'avaria' | 'atraso' | 'duvida' | 'outro'
+export type PosVendaCategoria = 'extravio' | 'avaria' | 'atraso' | 'duvida' | 'desenvolvimento' | 'outro'
 export type PosVendaUrgencia = 'baixa' | 'media' | 'alta'
 export type StatusCorreios = 'pendente' | 'chamado_aberto' | 'resolvido'
 export type UserRole = 'admin' | 'member' | 'collaborator'
