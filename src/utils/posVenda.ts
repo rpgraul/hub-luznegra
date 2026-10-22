@@ -43,6 +43,12 @@ export const POS_VENDA_CATEGORIA_META: Record<
     className:
       'border-indigo-500/40 bg-indigo-500/15 text-indigo-600 dark:text-indigo-400',
   },
+  proposta_jogo: {
+    label: 'Proposta de Jogo',
+    icon: 'fa-dice-d20',
+    className:
+      'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
+  },
   outro: {
     label: 'Pós-Venda',
     icon: 'fa-headset',
@@ -110,6 +116,8 @@ export const STATUS_CORREIOS_OPTIONS: Array<{
 
 export function isPosVendaTask(task: Task | null | undefined): boolean {
   if (!task) return false
+  // Propostas de jogos são projetos editoriais próprios e não chamados de SAC/pós-venda
+  if (task.categoria === 'proposta_jogo') return false
   return Boolean(
     task.categoria ||
       task.email_remetente ||

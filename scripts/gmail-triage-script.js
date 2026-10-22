@@ -37,8 +37,14 @@ const CONFIG = {
   // ID do Projeto fixo "Pós-Venda / Suporte" criado na migração 0028 do HUB.
   PROJETO_ID: "00000000-0000-4000-a000-000000000501",
 
+  // ID do Projeto fixo "Propostas de Jogos" criado na migração 0030 do HUB.
+  PROJETO_PROPOSTAS_ID: "00000000-0000-4000-a000-000000000502",
+
   // ID do membro @rpgraul no HUB (para atribuição automática de chamados técnicos/dev)
   RPGRAUL_USER_ID: "35a42dbe-5137-4899-9653-e0764b464571",
+
+  // ID do membro @diego (Diego Bassinello) para avaliação de propostas de jogos
+  DIEGO_USER_ID: "91e91f18-dafd-410c-b718-82b0e0c8ae9b",
 
   // Nome do marcador do Gmail para controle de idempotência
   LABEL_PROCESSADO: "Processado-IA",
@@ -159,6 +165,7 @@ function triagemEmailsPosVenda() {
             assunto: assunto,
             corpo: corpoTexto,
             dataMsg: dataMsg,
+            lastMessage: lastMessage,
             analise: analise
           });
           followUpsAtualizados++;
@@ -171,6 +178,7 @@ function triagemEmailsPosVenda() {
             assunto: assunto,
             corpo: corpoTexto,
             dataMsg: dataMsg,
+            lastMessage: lastMessage,
             analise: analise
           });
 
@@ -239,7 +247,10 @@ function checarPreFiltroLocal(remetenteRaw, remetenteEmail, assunto) {
     assuntoLower.includes("security") ||
     assuntoLower.includes("correios") ||
     assuntoLower.includes("catarse") ||
-    assuntoLower.includes("apoia.se");
+    assuntoLower.includes("apoia.se") ||
+    assuntoLower.includes("proposta") ||
+    assuntoLower.includes("obras recebidas") ||
+    assuntoLower.includes("publicar meu jogo");
 
   if (isInfraOuSeguranca) {
     return { ignorar: false };
@@ -391,15 +402,22 @@ REGRAS DE CLASSIFICAÇÃO:
 - DÚVIDA / SUPORTE AO CLIENTE: cliente/apoiador com dúvida sobre envio, endereço de entrega, recompensa do Catarse ou necessitando de suporte real da equipe.
   -> categoria: "duvida"
   -> urgencia: "media" ou "baixa"
+- PROPOSTA DE JOGO / SUBMISSÃO DE OBRA:
+  E-mails contendo propostas de jogos ou originais submetidos pelo formulário do site ("Nova Proposta de Jogo", "OBRAS RECEBIDAS", "Quero publicar meu jogo na Luz Negra", etc.).
+  -> categoria: "proposta_jogo"
+  -> urgencia: "media"
 
 EXTRAÇÃO DE DADOS:
-- categoria: 'extravio' | 'avaria' | 'atraso' | 'duvida' | 'desenvolvimento' | 'outro'
-- urgencia: 'alta' (segurança/vulnerabilidade técnica, extravio ou danos graves), 'media' (atraso/dúvida de entrega), 'baixa' (dúvida geral)
+- categoria: 'extravio' | 'avaria' | 'atraso' | 'duvida' | 'desenvolvimento' | 'proposta_jogo' | 'outro'
+- urgencia: 'alta' (segurança/vulnerabilidade técnica, extravio ou danos graves), 'media' (atraso/dúvida de entrega/propostas de jogos), 'baixa' (dúvida geral)
 - precisa_abrir_pi_correios: true APENAS se for extravio ou atraso crítico onde cabe abertura de Pedido de Informação (PI) nos Correios.
 - codigo_rastreio: código no padrão Correios (ex: BR123456789BR, AA123456789BR) ou transportadora se citado (ou null).
 - codigo_pedido: número do pedido, ID do apoio no Catarse/Apoia.se ou referência da compra se citado (ou null).
-- titulo_tarefa: Título descritivo, objetivo e claro para o card do gestor de tarefas.
-- resumo_ia: Síntese direta de 1 a 2 linhas explicando o problema central para o responsável.
+- nome_jogo: Título da obra ou jogo proposto (ex: "Casos Insólitos") se for proposta_jogo (ou null).
+- nome_autor: Nome do autor da obra se for proposta_jogo (ou null).
+- resumo_jogo: Síntese de 2 a 3 frases explicando o tema, gênero e mecânicas do jogo se for proposta_jogo (ou null).
+- titulo_tarefa: Título descritivo, objetivo e claro para o card do gestor de tarefas (se for proposta_jogo, formato: "Proposta: [Nome do Jogo] — [Nome do Autor]").
+- resumo_ia: Síntese direta de 1 a 2 linhas explicando o problema ou o cerne da proposta para o responsável.
 - motivo_decisao: Breve justificativa do porquê foi ignorado ou aprovado.
 
 Responda ESTRITAMENTE em formato JSON com o seguinte schema:
@@ -407,8 +425,11 @@ Responda ESTRITAMENTE em formato JSON com o seguinte schema:
   "ignorar": boolean,
   "motivo_decisao": string,
   "titulo_tarefa": string,
-  "categoria": "extravio" | "avaria" | "atraso" | "duvida" | "desenvolvimento" | "outro",
+  "categoria": "extravio" | "avaria" | "atraso" | "duvida" | "desenvolvimento" | "proposta_jogo" | "outro",
   "urgencia": "baixa" | "media" | "alta",
+  "nome_jogo": string | null,
+  "nome_autor": string | null,
+  "resumo_jogo": string | null,
   "codigo_rastreio": string | null,
   "codigo_pedido": string | null,
   "precisa_abrir_pi_correios": boolean,
@@ -639,7 +660,56 @@ function montarPayloadTarefa(params) {
   const dataRecebimento = params.dataMsg instanceof Date ? params.dataMsg : new Date();
   const startDateIso = Utilities.formatDate(dataRecebimento, timeZone, "yyyy-MM-dd");
 
-  // 2. Determinar prioridade nativa
+  // CASO ESPECIAL: PROPOSTA DE JOGO / SUBMISSÃO DE OBRA
+  const isProposta =
+    analise.categoria === "proposta_jogo" ||
+    (params.assunto && params.assunto.toLowerCase().includes("proposta de jogo")) ||
+    (params.assunto && params.assunto.toLowerCase().includes("quero publicar meu jogo")) ||
+    (params.assunto && params.assunto.toLowerCase().includes("obras recebidas"));
+
+  if (isProposta) {
+    const dadosProposta = extrairDadosPropostaJogo(params);
+
+    // Prazo de 30 dias corridos para avaliação editorial
+    const dataPrazo = new Date(dataRecebimento.getTime());
+    dataPrazo.setDate(dataPrazo.getDate() + 30);
+    const dueDateIso = Utilities.formatDate(dataPrazo, timeZone, "yyyy-MM-dd");
+
+    let titulo = analise.titulo_tarefa;
+    if (dadosProposta.nomeJogo && dadosProposta.nomeAutor) {
+      titulo = `Proposta: ${dadosProposta.nomeJogo} — ${dadosProposta.nomeAutor}`;
+    } else if (dadosProposta.nomeJogo) {
+      titulo = `Proposta: ${dadosProposta.nomeJogo}`;
+    }
+
+    const lexicalDesc = construirDescricaoPropostaJogo(dadosProposta);
+
+    return {
+      title: titulo || `Proposta de Jogo: ${params.assunto.slice(0, 80)}`,
+      project_id: CONFIG.PROJETO_PROPOSTAS_ID || "00000000-0000-4000-a000-000000000502",
+      status: "todo",
+      priority: "medium",
+      assigned_to: CONFIG.DIEGO_USER_ID || "91e91f18-dafd-410c-b718-82b0e0c8ae9b",
+      assignees: [CONFIG.DIEGO_USER_ID || "91e91f18-dafd-410c-b718-82b0e0c8ae9b"],
+      start_date: startDateIso,
+      due_date: dueDateIso,
+      email_remetente: params.remetente,
+      assunto_email: params.assunto,
+      categoria: "proposta_jogo",
+      codigo_rastreio: null,
+      codigo_pedido: null,
+      urgencia: "media",
+      precisa_abrir_pi_correios: false,
+      status_correios: null,
+      resumo_ia: dadosProposta.resumo,
+      gmail_thread_id: params.threadId,
+      tags: ["proposta", "editorial"],
+      categories: ["Propostas de Jogos"],
+      description: lexicalDesc
+    };
+  }
+
+  // 2. Determinar prioridade nativa (Fluxo Geral / Pós-Venda / Dev)
   let priority = "medium";
   if (analise.urgencia === "alta") {
     priority = (analise.precisa_abrir_pi_correios || analise.categoria === "desenvolvimento") ? "urgent" : "high";
@@ -799,6 +869,212 @@ function construirDescricaoLexical(dados) {
         detail: 0,
         mode: "normal",
         style: "",
+        version: 1
+      }
+    ],
+    direction: "ltr"
+  });
+
+  return {
+    root: {
+      type: "root",
+      format: "",
+      indent: 0,
+      version: 1,
+      children: paragrafos,
+      direction: "ltr"
+    }
+  };
+}
+
+/**
+ * Extrai os dados específicos de uma proposta de jogo a partir do e-mail.
+ */
+function extrairDadosPropostaJogo(params) {
+  const analise = params.analise || {};
+  let textoCompleto = params.corpo || "";
+  let htmlCompleto = "";
+
+  if (params.lastMessage) {
+    try {
+      textoCompleto = (params.lastMessage.getPlainBody() || "") + "\n" + (params.lastMessage.getRawContent() || "");
+      htmlCompleto = params.lastMessage.getBody() || "";
+    } catch (e) {
+      // fallback
+    }
+  }
+
+  // 1. Nome do Autor
+  let nomeAutor = analise.nome_autor || "";
+  const matchNome = textoCompleto.match(/Nome:\s*([^\n\r]+)/i);
+  if (matchNome && matchNome[1]) {
+    nomeAutor = matchNome[1].trim();
+  }
+
+  // 2. E-mail do Autor
+  let emailAutor = "";
+  const matchEmail = textoCompleto.match(/E-mail:\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+  if (matchEmail && matchEmail[1]) {
+    emailAutor = matchEmail[1].trim();
+  }
+
+  // 3. WhatsApp do Autor
+  let whatsappAutor = "";
+  const matchWpp = textoCompleto.match(/WhatsApp:\s*([^\n\r•<]+)/i);
+  if (matchWpp && matchWpp[1]) {
+    whatsappAutor = matchWpp[1].trim();
+  }
+
+  // 4. Nome do Jogo
+  let nomeJogo = analise.nome_jogo || "";
+  if (!nomeJogo) {
+    const matchAssunto = params.assunto.match(/(?:proposta de jogo|publicar meu jogo na luz negra)\s*[-—:]\s*([^—\n\r]+)/i);
+    if (matchAssunto && matchAssunto[1]) {
+      nomeJogo = matchAssunto[1].trim();
+    }
+  }
+
+  // 5. Arquivo PDF e Link
+  let nomePdf = "";
+  let linkPdf = "";
+  const matchPdf = textoCompleto.match(/([A-Za-z0-9_-]+\.pdf)\s*(?:<([^>]+)>)?/i);
+  if (matchPdf) {
+    nomePdf = matchPdf[1].trim();
+    if (matchPdf[2]) linkPdf = matchPdf[2].trim();
+  }
+
+  // 6. Link para Visualizar Obra no Painel WordPress
+  let linkWordPress = "";
+  const combined = textoCompleto + " " + htmlCompleto;
+  const matchWpDirect = combined.match(/(https?:\/\/luznegra\.com\.br\/wp-admin\/admin\.php\?page=ln-obras-recebidas[^\s"'>]*)/i);
+  if (matchWpDirect && matchWpDirect[1]) {
+    linkWordPress = matchWpDirect[1].replace(/&amp;/g, "&").trim();
+  } else {
+    const matchId = combined.match(/page=ln-obras-recebidas.*?id=(\d+)/i) ||
+                    combined.match(/action=view.*?id=(\d+)/i) ||
+                    combined.match(/Visualizar Obra no Painel WordPress[^\n\r<]*<([^>]+)>/i);
+    if (matchId && matchId[1]) {
+      if (matchId[1].startsWith("http")) {
+        linkWordPress = matchId[1].trim();
+      } else {
+        linkWordPress = `https://luznegra.com.br/wp-admin/admin.php?page=ln-obras-recebidas&action=view&id=${matchId[1]}`;
+      }
+    }
+  }
+
+  if (!linkWordPress) {
+    linkWordPress = "https://luznegra.com.br/wp-admin/admin.php?page=ln-obras-recebidas";
+  }
+
+  // 7. Resumo do Jogo
+  const resumo = analise.resumo_jogo || analise.resumo_ia || "Autor enviou proposta de jogo para avaliação editorial da Luz Negra.";
+
+  return {
+    nomeAutor,
+    emailAutor,
+    whatsappAutor,
+    nomeJogo,
+    nomePdf,
+    linkPdf,
+    linkWordPress,
+    resumo
+  };
+}
+
+/**
+ * Constrói a descrição limpa e compacta da proposta de jogo (sem despejar o questionário).
+ */
+function construirDescricaoPropostaJogo(dados) {
+  const paragrafos = [];
+
+  // Parágrafo 1: Resumo do Jogo em destaque verde
+  paragrafos.push({
+    type: "paragraph",
+    format: "",
+    indent: 0,
+    version: 1,
+    children: [
+      {
+        type: "text",
+        text: `RESUMO DO JOGO: ${dados.resumo}`,
+        format: 1,
+        detail: 0,
+        mode: "normal",
+        style: "color: #059669;",
+        version: 1
+      }
+    ],
+    direction: "ltr"
+  });
+
+  // Parágrafo 2: Dados do Autor
+  const infoAutor = [
+    dados.nomeAutor ? `Autor: ${dados.nomeAutor}` : null,
+    dados.emailAutor ? `E-mail: ${dados.emailAutor}` : null,
+    dados.whatsappAutor ? `WhatsApp: ${dados.whatsappAutor}` : null
+  ].filter(Boolean).join(" | ");
+
+  if (infoAutor) {
+    paragrafos.push({
+      type: "paragraph",
+      format: "",
+      indent: 0,
+      version: 1,
+      children: [
+        {
+          type: "text",
+          text: infoAutor,
+          format: 0,
+          detail: 0,
+          mode: "normal",
+          style: "",
+          version: 1
+        }
+      ],
+      direction: "ltr"
+    });
+  }
+
+  // Parágrafo 3: Arquivo Enviado
+  if (dados.nomePdf || dados.linkPdf) {
+    const textoPdf = dados.nomePdf
+      ? (dados.linkPdf ? `Arquivo enviado: ${dados.nomePdf} (${dados.linkPdf})` : `Arquivo enviado: ${dados.nomePdf}`)
+      : `Arquivo enviado: ${dados.linkPdf}`;
+
+    paragrafos.push({
+      type: "paragraph",
+      format: "",
+      indent: 0,
+      version: 1,
+      children: [
+        {
+          type: "text",
+          text: textoPdf,
+          format: 0,
+          detail: 0,
+          mode: "normal",
+          style: "",
+          version: 1
+        }
+      ],
+      direction: "ltr"
+    });
+  }
+
+  // Parágrafo 4: Link Direto para o Painel WordPress
+  paragrafos.push({
+    type: "paragraph",
+    format: "",
+    indent: 0,
+    version: 1,
+    children: [
+      {
+        type: "text",
+        text: `Visualizar Obra no Painel WordPress → ${dados.linkWordPress}`,
+        format: 1,
+        detail: 0,
+        mode: "normal",
+        style: "color: #2563eb;",
         version: 1
       }
     ],
