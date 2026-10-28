@@ -39,6 +39,7 @@ export interface AdminUser {
   full_name: string | null
   avatar_url?: string | null
   role: UserRoleName
+  is_active?: boolean
   created_at: string
   last_sign_in_at: string | null
   banned_until: string | null
@@ -115,6 +116,14 @@ export async function deactivateUser(userId: string): Promise<{ error: string | 
 export async function reactivateUser(userId: string): Promise<{ error: string | null }> {
   const res = await invokeAdmin<{ id: string }>({
     action: 'reactivate',
+    user_id: userId,
+  })
+  return { error: res.error ?? null }
+}
+
+export async function deleteUser(userId: string): Promise<{ error: string | null }> {
+  const res = await invokeAdmin<{ id: string }>({
+    action: 'delete',
     user_id: userId,
   })
   return { error: res.error ?? null }

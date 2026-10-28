@@ -23,6 +23,7 @@ export type Profile = {
   role: UserRole
   ferias_inicio: string | null
   ferias_fim: string | null
+  is_active: boolean
   created_at: string
 }
 
@@ -202,6 +203,7 @@ export interface Database {
           role?: UserRole
           ferias_inicio?: string | null
           ferias_fim?: string | null
+          is_active?: boolean
           created_at?: string
         }
         Update: {
@@ -212,6 +214,7 @@ export interface Database {
           role?: UserRole
           ferias_inicio?: string | null
           ferias_fim?: string | null
+          is_active?: boolean
           created_at?: string
         }
         Relationships: []

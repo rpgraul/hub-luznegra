@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabaseClient'
 import type { UserRole } from '@/types/database'
 import {
   deactivateUser,
+  deleteUser,
   listUsers,
   reactivateUser,
   sendPasswordResetEmail,
@@ -39,6 +40,8 @@ export default function UserManagement() {
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [toDeactivate, setToDeactivate] = useState<AdminUser | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [toDelete, setToDelete] = useState<AdminUser | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [isSendingEmail, setIsSendingEmail] = useState(false)
   const [recoveryModal, setRecoveryModal] = useState<{
     user: AdminUser
@@ -142,6 +145,10 @@ export default function UserManagement() {
   }
 
   async function handleDeactivate(u: AdminUser) {
+    if (u.id === user?.id) {
+      toast.danger('Você não pode desativar sua própria conta.')
+      return
+    }
     setDeactivating(true)
     const { error: deactivateError } = await deactivateUser(u.id)
     setDeactivating(false)
@@ -153,6 +160,25 @@ export default function UserManagement() {
 
     toast.success(`Usuário ${u.username} desativado.`)
     setToDeactivate(null)
+    void refresh()
+  }
+
+  async function handleDelete(u: AdminUser) {
+    if (u.id === user?.id) {
+      toast.danger('Você não pode excluir sua própria conta.')
+      return
+    }
+    setDeleting(true)
+    const { error: deleteError } = await deleteUser(u.id)
+    setDeleting(false)
+
+    if (deleteError) {
+      toast.danger(deleteError)
+      return
+    }
+
+    toast.success(`Usuário @${u.username} excluído permanentemente.`)
+    setToDelete(null)
     void refresh()
   }
 
@@ -449,24 +475,38 @@ export default function UserManagement() {
                           <i className="fa-solid fa-pen text-[10px]" />
                           <span>Editar</span>
                         </button>
-                        {banned ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleReactivate(u)}
-                            className="flex items-center gap-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs"
-                          >
-                            <i className="fa-solid fa-rotate-left text-[10px]" />
-                            <span>Reativar</span>
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setToDeactivate(u)}
-                            className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 cursor-pointer shadow-2xs"
-                          >
-                            <i className="fa-solid fa-user-slash text-[10px]" />
-                            <span>Desativar</span>
-                          </button>
+                        {u.id !== user?.id && (
+                          <>
+                            {banned ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleReactivate(u)}
+                                className="flex items-center gap-1 rounded-md border border-border/80 bg-background px-2.5 py-1 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs"
+                              >
+                                <i className="fa-solid fa-rotate-left text-[10px]" />
+                                <span>Reativar</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setToDeactivate(u)}
+                                className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:bg-rose-500/20 cursor-pointer shadow-2xs"
+                              >
+                                <i className="fa-solid fa-user-slash text-[10px]" />
+                                <span>Desativar</span>
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setToDelete(u)}
+                              title="Excluir usuário permanentemente"
+                              className="flex items-center gap-1 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive transition hover:bg-destructive/20 cursor-pointer shadow-2xs"
+                            >
+                              <i className="fa-solid fa-trash-can text-[10px]" />
+                              <span>Excluir</span>
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -543,6 +583,65 @@ export default function UserManagement() {
                   <>
                     <i className="fa-solid fa-user-slash text-xs" />
                     <span>Confirmar Desativação</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação de Exclusão Permanente */}
+      {toDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-destructive/40 bg-card shadow-2xl transition-all p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <i className="fa-solid fa-trash-can text-base" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Excluir Usuário</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Esta ação é permanente e irreversível
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-xs text-foreground/80 leading-relaxed">
+              Tem certeza de que deseja excluir permanentemente o usuário{' '}
+              <strong className="text-foreground">
+                {toDelete.full_name ?? toDelete.username} (@{toDelete.username})
+              </strong>
+              ? Ele será completamente removido do sistema e desvinculado de todas as tarefas e projetos.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t border-border">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setToDelete(null)}
+                className="rounded-lg border border-border/80 bg-background px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer shadow-2xs disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => toDelete && void handleDelete(toDelete)}
+                className="flex items-center gap-1.5 rounded-lg bg-destructive px-4 py-2 text-xs font-semibold text-destructive-foreground shadow-xs transition hover:bg-destructive/90 disabled:opacity-60 cursor-pointer"
+              >
+                {deleting ? (
+                  <>
+                    <i className="fa-solid fa-circle-notch fa-spin text-xs" />
+                    <span>Excluindo...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" />
+                    <span>Confirmar Exclusão</span>
                   </>
                 )}
               </button>

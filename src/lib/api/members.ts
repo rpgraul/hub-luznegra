@@ -12,10 +12,11 @@ export async function listProjectMembers(
   projectId: string | null,
 ): Promise<ProjectMember[]> {
   try {
-    // 1. Tenta carregar diretamente da tabela profiles (muito mais rápido, ~10ms)
+    // 1. Tenta carregar diretamente da tabela profiles filtrando apenas usuários ativos
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, username, full_name, avatar_url, role')
+      .select('id, username, full_name, avatar_url, role, is_active')
+      .neq('is_active', false)
       .order('full_name', { nullsFirst: true })
       .order('username')
 

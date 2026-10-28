@@ -46,7 +46,8 @@ Deno.serve(async (req) => {
     // Retorna todos os perfis ativos ordenados por nome / username
     const { data: allProfiles, error: profilesError } = await admin
       .from('profiles')
-      .select('id, username, full_name, avatar_url, role')
+      .select('id, username, full_name, avatar_url, role, is_active')
+      .neq('is_active', false)
       .order('full_name', { nullsFirst: true })
       .order('username')
 
@@ -54,7 +55,7 @@ Deno.serve(async (req) => {
       return json({ error: profilesError.message }, 500)
     }
 
-    const activeProfiles = (allProfiles ?? []).filter((p) => activeUserIds.has(p.id))
+    const activeProfiles = (allProfiles ?? []).filter((p) => activeUserIds.has(p.id) && p.is_active !== false)
 
     return json({ data: activeProfiles })
   } catch (err) {
