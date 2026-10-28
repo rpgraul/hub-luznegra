@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
   const options = handleOptions(req)
   if (options) return options
 
+  try {
     const authHeader = req.headers.get('Authorization')
     if (!(await isAdmin(authHeader))) {
       return json({ error: 'Apenas administradores podem gerenciar contas.' }, 403)

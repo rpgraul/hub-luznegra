@@ -96,7 +96,26 @@ export default function UserManagementDrawer({
     }
   }, [open, queryClient])
 
-  if (!open || user?.role !== 'admin') return null
+  const collaboratorsCount = users.filter((u) => u.role === 'collaborator').length
+  const membersCount = users.filter((u) => u.role === 'member').length
+  const adminsCount = users.filter((u) => u.role === 'admin').length
+
+  const filteredUsers = useMemo(() => {
+    let list = users
+    if (roleFilter !== 'all') {
+      list = list.filter((u) => u.role === roleFilter)
+    }
+    const q = searchQuery.trim().toLowerCase()
+    if (q) {
+      list = list.filter((u) => {
+        const name = (u.full_name ?? '').toLowerCase()
+        const username = u.username.toLowerCase()
+        const email = u.email.toLowerCase()
+        return name.includes(q) || username.includes(q) || email.includes(q)
+      })
+    }
+    return list
+  }, [users, roleFilter, searchQuery])
 
   async function handleRefresh() {
     await Promise.all([
@@ -187,26 +206,7 @@ export default function UserManagementDrawer({
     setCreateOpen(true)
   }
 
-  const collaboratorsCount = users.filter((u) => u.role === 'collaborator').length
-  const membersCount = users.filter((u) => u.role === 'member').length
-  const adminsCount = users.filter((u) => u.role === 'admin').length
-
-  const filteredUsers = useMemo(() => {
-    let list = users
-    if (roleFilter !== 'all') {
-      list = list.filter((u) => u.role === roleFilter)
-    }
-    const q = searchQuery.trim().toLowerCase()
-    if (q) {
-      list = list.filter((u) => {
-        const name = (u.full_name ?? '').toLowerCase()
-        const username = u.username.toLowerCase()
-        const email = u.email.toLowerCase()
-        return name.includes(q) || username.includes(q) || email.includes(q)
-      })
-    }
-    return list
-  }, [users, roleFilter, searchQuery])
+  if (!open || user?.role !== 'admin') return null
 
   return (
     <>
