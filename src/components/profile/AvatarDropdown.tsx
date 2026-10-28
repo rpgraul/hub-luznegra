@@ -55,15 +55,28 @@ export default function AvatarDropdown() {
             </Dropdown.Item>
           )}
           {user?.role === 'admin' && (
-            <Dropdown.Item
-              key="usuarios"
-              onAction={() => {
-                window.dispatchEvent(new CustomEvent('hub:open-users-drawer'))
-              }}
-            >
-              <i className="fa-solid fa-users mr-2" />
-              Gerenciar Usuários
-            </Dropdown.Item>
+            <>
+              <Dropdown.Item
+                key="colaboradores"
+                onAction={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('hub:open-users-drawer', { detail: { role: 'collaborator' } })
+                  )
+                }}
+              >
+                <i className="fa-solid fa-user-pen mr-2 text-amber-500" />
+                Colaboradores
+              </Dropdown.Item>
+              <Dropdown.Item
+                key="usuarios"
+                onAction={() => {
+                  window.dispatchEvent(new CustomEvent('hub:open-users-drawer'))
+                }}
+              >
+                <i className="fa-solid fa-users mr-2" />
+                Gerenciar Usuários
+              </Dropdown.Item>
+            </>
           )}
           <Dropdown.Item key="sair" onAction={() => void signOut()}>
             <i className="fa-solid fa-right-from-bracket mr-2" />

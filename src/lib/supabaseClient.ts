@@ -50,6 +50,7 @@ export interface CreateUserInput {
   username: string
   full_name?: string
   role?: UserRoleName
+  avatar_url?: string | null
 }
 
 export interface UpdateUserInput {
@@ -59,6 +60,7 @@ export interface UpdateUserInput {
   username?: string
   full_name?: string
   role?: UserRoleName
+  avatar_url?: string | null
 }
 
 interface AdminFunctionResponse<T> {
@@ -84,9 +86,9 @@ async function invokeAdmin<T>(
   return (data ?? {}) as AdminFunctionResponse<T>
 }
 
-export async function createUser(input: CreateUserInput): Promise<{ error: string | null }> {
+export async function createUser(input: CreateUserInput): Promise<{ id: string | null; error: string | null }> {
   const res = await invokeAdmin<{ id: string }>({ action: 'create', ...input })
-  return { error: res.error ?? null }
+  return { id: res.data?.id ?? null, error: res.error ?? null }
 }
 
 export async function listUsers(): Promise<AdminUser[]> {
@@ -211,6 +213,28 @@ export async function uploadAvatar(file: File): Promise<{ url: string | null; er
   if (!user) return { url: null, error: 'Sessão expirada.' }
 
   const path = `${user.id}/avatar`
+  const { error: uploadError } = await supabase.storage
+    .from('avatars')
+    .upload(path, file, { upsert: true })
+  if (uploadError) return { url: null, error: uploadError.message }
+
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+  const publicUrlWithCacheBust = `${data.publicUrl}?t=${Date.now()}`
+  return { url: publicUrlWithCacheBust, error: null }
+}
+
+export async function uploadAvatarForUser(
+  file: File,
+  targetUserId: string,
+): Promise<{ url: string | null; error: string | null }> {
+  if (!file.type.startsWith('image/')) {
+    return { url: null, error: 'O arquivo deve ser uma imagem.' }
+  }
+  if (file.size > AVATAR_MAX_SIZE) {
+    return { url: null, error: 'A imagem deve ter no máximo 2MB.' }
+  }
+
+  const path = `${targetUserId}/avatar`
   const { error: uploadError } = await supabase.storage
     .from('avatars')
     .upload(path, file, { upsert: true })

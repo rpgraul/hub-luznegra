@@ -13,6 +13,7 @@ interface AdminUserPayload {
   username?: string
   full_name?: string
   role?: 'admin' | 'member' | 'collaborator'
+  avatar_url?: string | null
   user_id?: string
   redirect_to?: string
 }
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
 
         const { data: profiles, error: profilesError } = await admin
           .from('profiles')
-          .select('id, username, full_name, role')
+          .select('id, username, full_name, avatar_url, role')
         if (profilesError) return json({ error: profilesError.message }, 500)
 
         const profilesById = new Map(
@@ -104,7 +105,7 @@ Deno.serve(async (req) => {
       }
 
       case 'create': {
-        const { email, password, username, full_name, role } = body
+        const { email, password, username, full_name, role, avatar_url } = body
         if (!email || !password || !username) {
           return json({ error: 'E-mail, senha e username são obrigatórios.' }, 400)
         }
@@ -139,6 +140,7 @@ Deno.serve(async (req) => {
           username,
           full_name: full_name ?? null,
           role: role ?? 'member',
+          avatar_url: avatar_url ?? null,
         })
 
         if (profileError) {
@@ -155,7 +157,7 @@ Deno.serve(async (req) => {
       }
 
       case 'update': {
-        const { user_id, email, password, username, full_name, role } = body
+        const { user_id, email, password, username, full_name, role, avatar_url } = body
         if (!user_id) return json({ error: 'user_id é obrigatório.' }, 400)
 
         const authUpdate: Parameters<typeof admin.auth.admin.updateUserById>[1] = {}
@@ -176,6 +178,7 @@ Deno.serve(async (req) => {
         if (username !== undefined) profilePatch.username = username
         if (full_name !== undefined) profilePatch.full_name = full_name
         if (role !== undefined) profilePatch.role = role
+        if (avatar_url !== undefined) profilePatch.avatar_url = avatar_url
 
         if (Object.keys(profilePatch).length > 0) {
           const { error: profileError } = await admin

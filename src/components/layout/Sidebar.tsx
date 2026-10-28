@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { Button } from '@heroui/react'
 import type { Project, Task } from '@/types/database'
 import { useAuth } from '@/hooks/useAuth'
+import { useProjectMembers } from '@/hooks/useProjectMembers'
 
 interface SidebarProps {
   projects: Project[]
@@ -42,6 +43,9 @@ export default function Sidebar({
   const navigate = useNavigate()
   const { user } = useAuth()
   const isCollaborator = user?.role === 'collaborator'
+  const isAdmin = user?.role === 'admin'
+  const { members } = useProjectMembers(null)
+  const collaboratorCount = members.filter((m) => m.role === 'collaborator').length
   const [collapsed, setCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -176,7 +180,7 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={() => onSelectTab?.('vendors')}
-                title="Fornecedores / Colaboradores"
+                title="Fornecedores"
                 className={`flex size-8 items-center justify-center rounded-lg text-xs transition ${
                   activeTab === 'vendors'
                     ? 'bg-primary text-primary-foreground shadow-sm'
@@ -185,6 +189,21 @@ export default function Sidebar({
               >
                 <i className="fa-solid fa-user-group text-xs" />
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent('hub:open-users-drawer', { detail: { role: 'collaborator' } })
+                    )
+                  }}
+                  title={`Colaboradores (${collaboratorCount})`}
+                  className="flex size-8 items-center justify-center rounded-lg text-xs text-amber-500 hover:bg-muted hover:text-amber-400 transition cursor-pointer"
+                >
+                  <i className="fa-solid fa-user-pen text-xs" />
+                </button>
+              )}
             </>
           )}
 
@@ -271,28 +290,30 @@ export default function Sidebar({
 
       {/* Main Navigation Items */}
       <div className="px-2 py-0.5 space-y-1 text-xs">
-        <button
-          type="button"
-          onClick={() => onShowAllChange(!showAllTasks)}
-          title={
-            !showAllTasks
-              ? 'Exibindo apenas tarefas atribuídas a você. Clique para ver todas as tarefas.'
-              : 'Exibindo todas as tarefas do projeto. Clique para filtrar apenas as suas.'
-          }
-          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition text-muted-foreground hover:bg-muted hover:text-foreground"
-        >
-          <span className="flex items-center gap-2">
-            <i
-              className={`fa-solid ${
-                !showAllTasks ? 'fa-user text-muted-foreground' : 'fa-users text-muted-foreground'
-              } text-[11px]`}
-            />
-            <span className="text-xs">
-              Tarefas: <span className="font-semibold text-foreground">{!showAllTasks ? 'Minhas' : 'Todas'}</span>
+        {!isCollaborator && (
+          <button
+            type="button"
+            onClick={() => onShowAllChange(!showAllTasks)}
+            title={
+              !showAllTasks
+                ? 'Exibindo apenas tarefas atribuídas a você. Clique para ver todas as tarefas.'
+                : 'Exibindo todas as tarefas do projeto. Clique para filtrar apenas as suas.'
+            }
+            className="flex w-full items-center justify-between rounded-md px-2 py-1.5 font-medium transition text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <span className="flex items-center gap-2">
+              <i
+                className={`fa-solid ${
+                  !showAllTasks ? 'fa-user text-muted-foreground' : 'fa-users text-muted-foreground'
+                } text-[11px]`}
+              />
+              <span className="text-xs">
+                Tarefas: <span className="font-semibold text-foreground">{!showAllTasks ? 'Minhas' : 'Todas'}</span>
+              </span>
             </span>
-          </span>
-          <i className="fa-solid fa-arrow-right-arrow-left text-[10px] text-muted-foreground/50 transition-transform group-hover:text-muted-foreground" />
-        </button>
+            <i className="fa-solid fa-arrow-right-arrow-left text-[10px] text-muted-foreground/50 transition-transform group-hover:text-muted-foreground" />
+          </button>
+        )}
 
         {onHideDoneChange && (
           <button
@@ -517,6 +538,26 @@ export default function Sidebar({
                 <span>Fornecedores</span>
               </span>
             </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('hub:open-users-drawer', { detail: { role: 'collaborator' } })
+                  )
+                }}
+                className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-xs font-medium transition cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <span className="flex items-center gap-2">
+                  <i className="fa-solid fa-user-pen text-xs text-amber-500" />
+                  <span>Colaboradores</span>
+                </span>
+                <span className="text-[10px] rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold px-1.5 py-0.2">
+                  {collaboratorCount > 0 ? `${collaboratorCount}` : 'Equipe'}
+                </span>
+              </button>
+            )}
           </>
         )}
       </div>

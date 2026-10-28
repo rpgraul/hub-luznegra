@@ -1,6 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, useRef, type FormEvent } from 'react'
 import { toast } from '@heroui/react'
-import { updateUser, type AdminUser, type UserRoleName } from '@/lib/supabaseClient'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  updateUser,
+  uploadAvatarForUser,
+  type AdminUser,
+  type UserRoleName,
+} from '@/lib/supabaseClient'
 import { userColor } from '@/utils/colors'
 
 const USERNAME_REGEX = /^[a-z0-9_.]{3,}$/
@@ -18,13 +24,18 @@ export default function EditUserModal({
   onOpenChange,
   onUpdated,
 }: EditUserModalProps) {
+  const queryClient = useQueryClient()
   const [username, setUsername] = useState(user.username)
   const [email, setEmail] = useState(user.email)
   const [fullName, setFullName] = useState(user.full_name ?? '')
   const [role, setRole] = useState<UserRoleName>(user.role)
   const [password, setPassword] = useState('')
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url ?? null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -33,11 +44,42 @@ export default function EditUserModal({
       setFullName(user.full_name ?? '')
       setRole(user.role)
       setPassword('')
+      setAvatarFile(null)
+      setAvatarPreview(user.avatar_url ?? null)
       setError(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }, [open, user])
 
   if (!open) return null
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = e.target.files?.[0]
+    if (!selected) return
+
+    if (!selected.type.startsWith('image/')) {
+      toast.danger('O arquivo selecionado deve ser uma imagem (PNG, JPG, WEBP ou GIF).')
+      return
+    }
+
+    if (selected.size > 2 * 1024 * 1024) {
+      toast.danger('A imagem selecionada deve ter no máximo 2MB.')
+      return
+    }
+
+    setAvatarFile(selected)
+    setAvatarPreview(URL.createObjectURL(selected))
+  }
+
+  function handleRemoveAvatar() {
+    setAvatarFile(null)
+    setAvatarPreview(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -58,6 +100,22 @@ export default function EditUserModal({
 
     setSubmitting(true)
 
+    let finalAvatarUrl: string | null | undefined = undefined
+
+    // Se houve seleção de novo arquivo de avatar
+    if (avatarFile) {
+      const { url, error: uploadErr } = await uploadAvatarForUser(avatarFile, user.id)
+      if (uploadErr) {
+        toast.danger(`Erro ao enviar foto: ${uploadErr}`)
+        setSubmitting(false)
+        return
+      }
+      finalAvatarUrl = url
+    } else if (avatarPreview === null && user.avatar_url !== null) {
+      // Usuário clicou em remover avatar
+      finalAvatarUrl = null
+    }
+
     const { error: updateError } = await updateUser({
       user_id: user.id,
       username: username.trim().toLowerCase(),
@@ -65,6 +123,7 @@ export default function EditUserModal({
       full_name: fullName.trim() || undefined,
       role,
       password: password || undefined,
+      avatar_url: finalAvatarUrl,
     })
 
     setSubmitting(false)
@@ -74,13 +133,18 @@ export default function EditUserModal({
       return
     }
 
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['admin', 'users'], type: 'all' }),
+      queryClient.refetchQueries({ queryKey: ['project-members'], type: 'all' }),
+    ])
+
     toast.success('Usuário atualizado com sucesso!')
     onOpenChange(false)
     onUpdated()
   }
 
   const previewColor = userColor(user.id)
-  const previewInitial = (username.trim() || 'U').charAt(0).toUpperCase()
+  const previewInitial = (fullName.trim() || username.trim() || 'U').charAt(0).toUpperCase()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
@@ -105,6 +169,7 @@ export default function EditUserModal({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
+            aria-label="Fechar"
             className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground cursor-pointer"
           >
             <i className="fa-solid fa-xmark text-sm" />
@@ -113,6 +178,66 @@ export default function EditUserModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {/* Avatar Upload (Subir Imagem / Thumb) */}
+          <div className="p-3.5 rounded-xl bg-muted/40 border border-border/60">
+            <label className="text-xs font-bold text-foreground block mb-2">
+              Foto de Perfil / Thumbnail
+            </label>
+            <div className="flex items-center gap-3.5">
+              <div className="relative shrink-0">
+                {avatarPreview ? (
+                  <img
+                    src={avatarPreview}
+                    alt="Preview"
+                    className="size-13 rounded-full object-cover border-2 border-primary/40 shadow-xs"
+                  />
+                ) : (
+                  <div
+                    className="flex size-13 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white shadow-xs"
+                    style={{ backgroundColor: previewColor }}
+                  >
+                    {previewInitial}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-foreground transition hover:bg-muted shadow-2xs cursor-pointer"
+                  >
+                    <i className="fa-solid fa-arrow-up-from-bracket text-[11px]" />
+                    <span>{avatarPreview ? 'Trocar foto' : 'Subir imagem'}</span>
+                  </button>
+
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      title="Remover foto"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-2 py-1.5 text-xs font-medium text-rose-500 transition hover:bg-rose-500/10 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-trash-can text-[11px]" />
+                      <span>Remover</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  PNG, JPG, WEBP ou GIF (máx. 2MB).
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Username */}
           <div>
             <label className="text-xs font-bold text-foreground">
@@ -165,7 +290,7 @@ export default function EditUserModal({
               className="mt-1 w-full rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none shadow-2xs cursor-pointer"
             >
               <option value="member">Membro (Equipe interna - acesso a projetos, docs e fornecedores)</option>
-              <option value="collaborator">Colaborador (Autor, Ilustrador, Redator - apenas projetos designados)</option>
+              <option value="collaborator">Colaborador (Autor, Ilustrador, Redator - apenas tarefas designadas)</option>
               <option value="admin">Administrador (Acesso total e gestão de usuários)</option>
             </select>
           </div>

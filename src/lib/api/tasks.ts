@@ -30,12 +30,16 @@ export type TaskPatch = Partial<
 
 /**
  * Busca tarefas de todos os projetos.
- * `showAll=false` filtra apenas as tarefas do próprio usuário
- * (switch "Minhas tarefas" do dashboard).
+ * Colaboradores: visualizam SEMPRE apenas as tarefas em que estão marcados
+ * (ou filhas de tarefas em que estão marcados).
+ * Membros/Admins:
+ * `showAll=true`: exibe todas as tarefas.
+ * `showAll=false`: filtra tarefas do próprio usuário (incluindo subtarefas de tarefas atribuídas a ele).
  */
 export async function fetchTasks(
   showAll: boolean,
   userId: string,
+  userRole?: string,
 ): Promise<Task[]> {
   const { data, error } = await supabase
     .from('tasks')
@@ -49,17 +53,43 @@ export async function fetchTasks(
   }
 
   const allTasks = (data as Task[]) ?? []
+  const isCollaborator = userRole === 'collaborator'
+
+  // Mapa rápido por ID para busca de ancestrais
+  const tasksById = new Map<string, Task>(allTasks.map((t) => [t.id, t]))
+
+  function isAssignedOrChildOfAssigned(task: Task): boolean {
+    let curr: Task | undefined = task
+    let guard = 0
+    while (curr && guard < 20) {
+      if (
+        curr.assigned_to === userId ||
+        (Array.isArray(curr.assignees) && curr.assignees.includes(userId))
+      ) {
+        return true
+      }
+      if (!curr.parent_id) break
+      curr = tasksById.get(curr.parent_id)
+      guard++
+    }
+    return false
+  }
+
+  // Colaborador SEMPRE vê apenas o que está marcado ou filhas de tarefas marcadas
+  if (isCollaborator) {
+    return allTasks.filter(isAssignedOrChildOfAssigned)
+  }
+
   if (showAll) {
     return allTasks
   }
 
-  // Filtra com segurança em memória para garantir compatibilidade.
+  // Filtra em memória para modo "Minhas tarefas" de membros/admins.
   // Chamados de pós-venda recém-triados ainda sem responsável também ficam visíveis
   // para que a equipe veja os novos tickets imediatamente mesmo no modo "Minhas tarefas".
   return allTasks.filter(
     (t) =>
-      t.assigned_to === userId ||
-      (Array.isArray(t.assignees) && t.assignees.includes(userId)) ||
+      isAssignedOrChildOfAssigned(t) ||
       (Boolean(t.email_remetente || t.categoria) &&
         !t.assigned_to &&
         (!Array.isArray(t.assignees) || t.assignees.length === 0)),

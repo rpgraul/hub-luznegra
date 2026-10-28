@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@heroui/react'
 import { useAuth } from '@/hooks/useAuth'
 import { userColor } from '@/utils/colors'
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import { supabase } from '@/lib/supabaseClient'
+import type { UserRole } from '@/types/database'
 import {
   deactivateUser,
   listUsers,
@@ -16,11 +19,23 @@ import {
 import CreateUserModal from '@/components/admin/CreateUserModal'
 import EditUserModal from '@/components/admin/EditUserModal'
 
+type RoleFilter = 'all' | 'collaborator' | 'member' | 'admin'
+
 export default function UserManagement() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
 
+  const paramRole = searchParams.get('role') as RoleFilter | null
+  const initialRole: RoleFilter =
+    paramRole && ['all', 'collaborator', 'member', 'admin'].includes(paramRole)
+      ? paramRole
+      : 'all'
+
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>(initialRole)
+  const [search, setSearch] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [roleToCreate, setRoleToCreate] = useState<UserRole>('member')
   const [editUser, setEditUser] = useState<AdminUser | null>(null)
   const [toDeactivate, setToDeactivate] = useState<AdminUser | null>(null)
   const [deactivating, setDeactivating] = useState(false)
@@ -40,6 +55,59 @@ export default function UserManagement() {
     queryFn: listUsers,
   })
 
+  // Sincroniza se o param role mudar na URL
+  useEffect(() => {
+    if (paramRole && ['all', 'collaborator', 'member', 'admin'].includes(paramRole)) {
+      setRoleFilter(paramRole)
+    }
+  }, [paramRole])
+
+  // Realtime: atualiza instantaneamente a lista de usuários quando qualquer profile for inserido/alterado
+  useEffect(() => {
+    const channelId = `admin-users-page-${Math.random().toString(36).slice(2, 9)}`
+    const channel = supabase
+      .channel(channelId)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        () => {
+          void queryClient.refetchQueries({ queryKey: ['admin', 'users'], type: 'all' })
+          void queryClient.refetchQueries({ queryKey: ['project-members'], type: 'all' })
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [queryClient])
+
+  // Contagens por papel
+  const counts = useMemo(() => {
+    return {
+      all: users.length,
+      collaborator: users.filter((u) => u.role === 'collaborator').length,
+      member: users.filter((u) => u.role === 'member' || !u.role).length,
+      admin: users.filter((u) => u.role === 'admin').length,
+    }
+  }, [users])
+
+  // Lista filtrada por papel e termo de busca
+  const filteredUsers = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return users.filter((u) => {
+      if (roleFilter === 'collaborator' && u.role !== 'collaborator') return false
+      if (roleFilter === 'member' && u.role !== 'member' && u.role) return false
+      if (roleFilter === 'admin' && u.role !== 'admin') return false
+
+      if (!q) return true
+      const name = (u.full_name ?? '').toLowerCase()
+      const uname = u.username.toLowerCase()
+      const email = u.email.toLowerCase()
+      return name.includes(q) || uname.includes(q) || email.includes(q)
+    })
+  }, [users, roleFilter, search])
+
   if (user?.role !== 'admin') {
     return (
       <DashboardLayout>
@@ -51,8 +119,26 @@ export default function UserManagement() {
     )
   }
 
-  function refresh() {
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
+  async function refresh() {
+    await Promise.all([
+      queryClient.refetchQueries({ queryKey: ['admin', 'users'], type: 'all' }),
+      queryClient.refetchQueries({ queryKey: ['project-members'], type: 'all' }),
+    ])
+  }
+
+  function handleSelectRoleFilter(filter: RoleFilter) {
+    setRoleFilter(filter)
+    if (filter === 'all') {
+      searchParams.delete('role')
+    } else {
+      searchParams.set('role', filter)
+    }
+    setSearchParams(searchParams, { replace: true })
+  }
+
+  function handleOpenCreate(defaultRole: UserRole = 'member') {
+    setRoleToCreate(defaultRole)
+    setCreateOpen(true)
   }
 
   async function handleDeactivate(u: AdminUser) {
@@ -67,7 +153,7 @@ export default function UserManagement() {
 
     toast.success(`Usuário ${u.username} desativado.`)
     setToDeactivate(null)
-    refresh()
+    void refresh()
   }
 
   async function handleSendResetPassword(u: AdminUser) {
@@ -105,27 +191,140 @@ export default function UserManagement() {
     }
 
     toast.success(`Usuário ${u.username} reativado.`)
-    refresh()
+    void refresh()
   }
 
   return (
     <DashboardLayout>
       <main className="p-6">
-      <div className="mb-4 flex items-center justify-between">
+      {/* Header com Ações Rápidas */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold">Gerenciar Usuários</h1>
+          <h1 className="text-xl font-semibold text-foreground">Gerenciar Usuários & Colaboradores</h1>
           <p className="text-sm text-muted-foreground">
-            {users.length} usuário(s) cadastrado(s)
+            {users.length} usuário(s) cadastrado(s) • Atualização em tempo real
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 cursor-pointer"
-        >
-          <i className="fa-solid fa-user-plus text-xs" />
-          <span>Novo Usuário</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            title="Atualizar lista agora"
+            className="flex size-9 items-center justify-center rounded-lg border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground transition cursor-pointer shadow-2xs"
+          >
+            <i className="fa-solid fa-arrows-rotate text-xs" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpenCreate('collaborator')}
+            className="flex items-center gap-2 rounded-lg bg-amber-500/15 border border-amber-500/30 px-3.5 py-2 text-sm font-semibold text-amber-600 dark:text-amber-400 shadow-xs transition hover:bg-amber-500/25 cursor-pointer"
+          >
+            <i className="fa-solid fa-user-pen text-xs" />
+            <span>Novo Colaborador</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleOpenCreate('member')}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-xs transition hover:bg-primary/90 cursor-pointer"
+          >
+            <i className="fa-solid fa-user-plus text-xs" />
+            <span>Novo Usuário</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Barra de Filtros e Busca */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* Abas / Pills por Papel */}
+        <div className="inline-flex rounded-lg border border-border/80 bg-muted/30 p-1">
+          <button
+            type="button"
+            onClick={() => handleSelectRoleFilter('all')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              roleFilter === 'all'
+                ? 'bg-background text-foreground shadow-2xs font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span>Todos</span>
+            <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground">
+              {counts.all}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectRoleFilter('collaborator')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              roleFilter === 'collaborator'
+                ? 'bg-amber-500 text-white shadow-2xs font-bold'
+                : 'text-amber-600 dark:text-amber-400 hover:bg-amber-500/10'
+            }`}
+          >
+            <i className="fa-solid fa-user-pen text-[11px]" />
+            <span>Colaboradores</span>
+            <span
+              className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+                roleFilter === 'collaborator'
+                  ? 'bg-amber-700/60 text-white'
+                  : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold'
+              }`}
+            >
+              {counts.collaborator}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectRoleFilter('member')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              roleFilter === 'member'
+                ? 'bg-background text-foreground shadow-2xs font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span>Membros</span>
+            <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground">
+              {counts.member}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSelectRoleFilter('admin')}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition cursor-pointer ${
+              roleFilter === 'admin'
+                ? 'bg-background text-foreground shadow-2xs font-bold'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <span>Admins</span>
+            <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground">
+              {counts.admin}
+            </span>
+          </button>
+        </div>
+
+        {/* Input de Busca */}
+        <div className="relative min-w-64">
+          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Buscar por nome, username ou e-mail..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-border/80 bg-background py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <i className="fa-solid fa-xmark text-xs" />
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -153,26 +352,38 @@ export default function UserManagement() {
                   Carregando usuários...
                 </td>
               </tr>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <tr>
                 <td className="p-6 text-center text-sm text-muted-foreground" colSpan={5}>
-                  Nenhum usuário encontrado.
+                  {search
+                    ? 'Nenhum usuário corresponde à busca.'
+                    : roleFilter === 'collaborator'
+                      ? 'Nenhum colaborador cadastrado ainda. Clique em "Novo Colaborador" para adicionar.'
+                      : 'Nenhum usuário encontrado.'}
                 </td>
               </tr>
             ) : (
-              users.map((u) => {
+              filteredUsers.map((u) => {
                 const banned = u.banned_until !== null
                 const name = u.full_name ?? u.username
                 return (
                   <tr key={u.id} className="transition hover:bg-muted/40">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2.5">
-                        <span
-                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white shadow-2xs"
+                        <div
+                          className="flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full text-xs font-bold text-white shadow-2xs"
                           style={{ backgroundColor: userColor(u.id) }}
                         >
-                          {u.username.charAt(0).toUpperCase()}
-                        </span>
+                          {u.avatar_url ? (
+                            <img
+                              src={u.avatar_url}
+                              alt={name}
+                              className="size-full object-cover"
+                            />
+                          ) : (
+                            u.username.charAt(0).toUpperCase()
+                          )}
+                        </div>
                         <div>
                           <div className="font-semibold text-foreground text-xs">{name}</div>
                           <div className="text-[11px] text-muted-foreground">@{u.username}</div>
@@ -186,7 +397,8 @@ export default function UserManagement() {
                           Admin
                         </span>
                       ) : u.role === 'collaborator' ? (
-                        <span className="rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-600">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                          <i className="fa-solid fa-user-pen text-[9px]" />
                           Colaborador
                         </span>
                       ) : (
@@ -268,8 +480,9 @@ export default function UserManagement() {
 
       <CreateUserModal
         open={createOpen}
+        initialRole={roleToCreate}
         onOpenChange={setCreateOpen}
-        onCreated={refresh}
+        onCreated={() => void refresh()}
       />
 
       {editUser && (
