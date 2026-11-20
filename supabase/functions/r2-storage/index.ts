@@ -28,7 +28,10 @@ interface UploadPayload {
 /** Whitelist de pastas (nada de '../' ou barras exóticas vindo do cliente). */
 function safeFolder(folder: string | undefined): string {
   if (!folder) return 'documents'
-  const clean = folder.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40)
+  const clean = folder
+    .replace(/[^a-zA-Z0-9._-]/g, '')
+    .replace(/\.{2,}/g, '')
+    .slice(0, 40)
   return clean || 'documents'
 }
 
@@ -71,8 +74,12 @@ Deno.serve(async (req) => {
         bytes[i] = binaryString.charCodeAt(i)
       }
 
-      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.{2,}/g, '_')
       const objectKey = `${safeFolder(payload.folder)}/${Date.now()}_${safeName}`
+
+      if (objectKey.includes('..')) {
+        return json({ error: 'Caminho de arquivo inválido.' }, 400)
+      }
 
       if (hasR2Config) {
         const s3 = new S3Client({
@@ -133,6 +140,9 @@ Deno.serve(async (req) => {
       const { fileKey } = payload
       if (!fileKey) {
         return json({ error: 'Chave de arquivo não informada.' }, 400)
+      }
+      if (fileKey.includes('..')) {
+        return json({ error: 'Caminho de arquivo inválido.' }, 400)
       }
 
       if (hasR2Config) {
