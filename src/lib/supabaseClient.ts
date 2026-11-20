@@ -222,6 +222,9 @@ export async function uploadAvatar(file: File): Promise<{ url: string | null; er
   if (!user) return { url: null, error: 'Sessão expirada.' }
 
   const path = `${user.id}/avatar`
+  if (path.includes('..')) {
+    return { url: null, error: 'Caminho de arquivo inválido.' }
+  }
   const { error: uploadError } = await supabase.storage
     .from('avatars')
     .upload(path, file, { upsert: true })
@@ -244,6 +247,9 @@ export async function uploadAvatarForUser(
   }
 
   const path = `${targetUserId}/avatar`
+  if (path.includes('..')) {
+    return { url: null, error: 'Caminho de arquivo inválido.' }
+  }
   const { error: uploadError } = await supabase.storage
     .from('avatars')
     .upload(path, file, { upsert: true })
